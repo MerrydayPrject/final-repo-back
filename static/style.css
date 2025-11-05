@@ -449,4 +449,13 @@ footer a:hover {
     }
 }
 
+/* 모델 비교 카드 스타일 (index.html용) */
+.test-page-card .test-page-icon {
+    transition: transform 0.3s ease;
+}
+
+.test-page-card:hover .test-page-icon {
+    transform: scale(1.1);
+}
+
 

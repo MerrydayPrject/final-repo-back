@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>모델 비교 테스트</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/model-comparison.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>⚖️ 모델 비교 테스트</h1>
+                    <p>여러 모델의 합성 기능을 동시에 비교합니다</p>
+                </div>
+                <a href="/" class="btn-home">🏠 홈으로</a>
+            </div>
+        </header>
+
+        <main>
+            <!-- 모델 선택 섹션 -->
+            <section class="model-selection-section">
+                <h2>모델 선택</h2>
+                <div class="models-button-grid" id="models-button-grid">
+                    <div class="loading">모델 목록을 불러오는 중...</div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 모델별 테스트 모달 (동적으로 생성됨) -->
+        <div id="model-modals-container">
+            <!-- 모달들이 여기에 동적으로 생성됨 -->
+        </div>
+
+        <!-- 모델 추가 모달 -->
+        <div class="model-modal" id="modal-add-model">
+            <div class="model-modal-content">
+                <div class="model-modal-header">
+                    <div class="model-modal-title">
+                        <div class="model-modal-icon">➕</div>
+                        <div>
+                            <h2>새 모델 추가</h2>
+                            <p>models_config.json에 새 모델 정보를 추가합니다</p>
+                        </div>
+                    </div>
+                    <button class="model-modal-close" onclick="closeAddModelModal()">&times;</button>
+                </div>
+                <div class="model-modal-body">
+                    <div class="add-model-form">
+                        <div class="form-group">
+                            <label>모델 ID *</label>
+                            <input type="text" id="add-model-id" placeholder="예: new-model-compose" required>
+                            <small>영문자, 숫자, 하이픈만 사용 가능</small>
+                        </div>
+                        <div class="form-group">
+                            <label>모델 이름 *</label>
+                            <input type="text" id="add-model-name" placeholder="예: 새로운 이미지 합성" required>
+                        </div>
+                        <div class="form-group">
+                            <label>설명 *</label>
+                            <textarea id="add-model-description" placeholder="모델에 대한 설명을 입력하세요" rows="3" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>API 엔드포인트 *</label>
+                            <input type="text" id="add-model-endpoint" placeholder="예: /api/new-compose" required>
+                        </div>
+                        <div class="form-group">
+                            <label>HTTP 메서드 *</label>
+                            <select id="add-model-method" required>
+                                <option value="POST">POST</option>
+                                <option value="GET">GET</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>입력 타입 *</label>
+                            <select id="add-model-input-type" required>
+                                <option value="dual_image">이중 이미지 (사람 + 드레스)</option>
+                                <option value="single_image">단일 이미지</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>카테고리 *</label>
+                            <select id="add-model-category" required>
+                                <option value="composition">합성</option>
+                                <option value="segmentation">세그멘테이션</option>
+                            </select>
+                        </div>
+                        <div class="form-actions">
+                            <button class="model-cancel-btn" onclick="closeAddModelModal()">취소</button>
+                            <button class="model-submit-btn" onclick="submitAddModel()">추가</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/model-comparison.js"></script>
+</body>
+</html>
+

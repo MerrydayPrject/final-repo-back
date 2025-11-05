@@ -1630,6 +1630,112 @@ async def dress_manage_page(request: Request):
     """
     return templates.TemplateResponse("dress_manage.html", {"request": request})
 
+@app.get("/model-comparison", response_class=HTMLResponse, tags=["Web Interface"])
+async def model_comparison_page(request: Request):
+    """
+    모델 비교 테스트 페이지
+    
+    여러 모델의 합성 기능을 동시에 비교할 수 있는 페이지
+    """
+    return templates.TemplateResponse("model-comparison.html", {"request": request})
+
+@app.get("/api/models", tags=["모델 관리"])
+async def get_models():
+    """
+    모델 목록 조회
+    
+    models_config.json 파일에서 모델 정보를 읽어서 반환합니다.
+    
+    Returns:
+        JSONResponse: 모델 목록
+    """
+    try:
+        config_file = Path("models_config.json")
+        if not config_file.exists():
+            return JSONResponse({
+                "success": False,
+                "error": "Config file not found",
+                "message": "models_config.json 파일을 찾을 수 없습니다."
+            }, status_code=404)
+        
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        
+        return JSONResponse({
+            "success": True,
+            "models": config.get("models", []),
+            "total": len(config.get("models", []))
+        })
+    except json.JSONDecodeError as e:
+        return JSONResponse({
+            "success": False,
+            "error": "Invalid JSON",
+            "message": f"models_config.json 파일 형식이 올바르지 않습니다: {str(e)}"
+        }, status_code=500)
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"모델 목록을 불러오는 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+@app.post("/api/models", tags=["모델 관리"])
+async def add_model(model_data: dict):
+    """
+    새 모델 추가
+    
+    models_config.json 파일에 새 모델 정보를 추가합니다.
+    
+    Args:
+        model_data: 모델 정보 (id, name, description, endpoint, method, input_type, inputs, category)
+    
+    Returns:
+        JSONResponse: 추가 결과
+    """
+    try:
+        config_file = Path("models_config.json")
+        
+        # 기존 설정 파일 읽기
+        if config_file.exists():
+            with open(config_file, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        else:
+            config = {"models": []}
+        
+        # 중복 체크
+        existing_ids = [m.get("id") for m in config.get("models", [])]
+        if model_data.get("id") in existing_ids:
+            return JSONResponse({
+                "success": False,
+                "error": "Duplicate ID",
+                "message": "이미 존재하는 모델 ID입니다."
+            }, status_code=400)
+        
+        # 새 모델 추가
+        config.setdefault("models", []).append(model_data)
+        
+        # 파일에 저장
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        
+        return JSONResponse({
+            "success": True,
+            "message": "모델이 성공적으로 추가되었습니다.",
+            "model": model_data
+        })
+    except json.JSONDecodeError as e:
+        return JSONResponse({
+            "success": False,
+            "error": "Invalid JSON",
+            "message": f"models_config.json 파일 형식이 올바르지 않습니다: {str(e)}"
+        }, status_code=500)
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"모델 추가 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
