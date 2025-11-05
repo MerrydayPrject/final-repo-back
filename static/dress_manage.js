@@ -1,6 +1,10 @@
+// 전역 변수
+let currentPage = 1;
+const itemsPerPage = 10;
+
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', () => {
-    loadDresses();
+    loadDresses(currentPage);
     setupEventListeners();
 });
 
@@ -29,7 +33,8 @@ function setupEventListeners() {
     // 새로고침 버튼
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
-            loadDresses();
+            currentPage = 1;
+            loadDresses(currentPage);
         });
     }
 
@@ -111,19 +116,21 @@ function detectStyleFromFilename(filename) {
 }
 
 // 드레스 목록 로드
-async function loadDresses() {
+async function loadDresses(page) {
     const tbody = document.getElementById('dresses-tbody');
     const totalCount = document.getElementById('total-count');
 
-    tbody.innerHTML = '<tr><td colspan="4" class="loading">데이터를 불러오는 중...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="loading">데이터를 불러오는 중...</td></tr>';
 
     try {
-        const response = await fetch('/api/admin/dresses');
+        const response = await fetch(`/api/admin/dresses?page=${page}&limit=${itemsPerPage}`);
         const data = await response.json();
 
         if (data.success) {
             renderDresses(data.data);
-            totalCount.textContent = `총 ${data.total}개`;
+            renderPagination(data.pagination);
+            totalCount.textContent = `총 ${data.pagination.total}개`;
+            currentPage = page;
         } else {
             tbody.innerHTML = `<tr><td colspan="5" class="loading" style="color: #ef4444;">${data.message || '드레스 목록을 불러오는 중 오류가 발생했습니다.'}</td></tr>`;
         }
@@ -242,7 +249,8 @@ async function handleAddDress() {
             clearForm();
             // 목록 새로고침
             setTimeout(() => {
-                loadDresses();
+                currentPage = 1;
+                loadDresses(currentPage);
             }, 500);
         } else {
             const errorMessage = data.message || '드레스 추가 중 오류가 발생했습니다.';
@@ -318,7 +326,7 @@ async function handleDeleteDress(dressId, imageName) {
             // 성공 메시지 표시
             alert(data.message || '드레스가 성공적으로 삭제되었습니다.');
             // 목록 새로고침
-            loadDresses();
+            loadDresses(currentPage);
         } else {
             alert(data.message || '드레스 삭제 중 오류가 발생했습니다.');
         }
@@ -385,7 +393,8 @@ async function handleImportData(e) {
             
             // 목록 새로고침
             setTimeout(() => {
-                loadDresses();
+                currentPage = 1;
+                loadDresses(currentPage);
             }, 500);
         } else {
             alert(`❌ 가져오기 실패\n\n${data.message || '데이터 가져오기 중 오류가 발생했습니다.'}`);
@@ -440,6 +449,59 @@ async function handleExportData() {
         console.error('내보내기 오류:', error);
         alert('❌ 내보내기 실패\n\n데이터 내보내기 중 오류가 발생했습니다.');
     }
+}
+
+// 페이지네이션 렌더링
+function renderPagination(pagination) {
+    const paginationDiv = document.getElementById('pagination');
+    
+    if (pagination.total_pages === 0) {
+        paginationDiv.innerHTML = '';
+        return;
+    }
+    
+    // 페이지네이션 버튼 생성 함수
+    const createPageButton = (pageNum, text, disabled = false, active = false) => {
+        if (disabled) {
+            return `<button disabled>${text}</button>`;
+        }
+        const activeClass = active ? ' class="active"' : '';
+        return `<button onclick="loadDresses(${pageNum})"${activeClass}>${text}</button>`;
+    };
+    
+    let html = createPageButton(1, '처음', pagination.page === 1);
+    
+    // 이전 페이지
+    if (pagination.page > 1) {
+        html += createPageButton(pagination.page - 1, '이전');
+    }
+    
+    // 페이지 번호들
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.total_pages, pagination.page + 2);
+    
+    if (startPage > 1) {
+        html += '<button disabled>...</button>';
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += createPageButton(i, i.toString(), false, i === pagination.page);
+    }
+    
+    if (endPage < pagination.total_pages) {
+        html += '<button disabled>...</button>';
+    }
+    
+    // 다음 페이지
+    if (pagination.page < pagination.total_pages) {
+        html += createPageButton(pagination.page + 1, '다음');
+    }
+    
+    html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
+    
+    html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
+    
+    paginationDiv.innerHTML = html;
 }
 
 // HTML 이스케이프

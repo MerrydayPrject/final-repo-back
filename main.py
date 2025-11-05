@@ -1459,11 +1459,21 @@ async def proxy_s3_image(file_name: str):
 # ===================== 드레스 관리 API =====================
 
 @app.get("/api/admin/dresses", tags=["드레스 관리"])
-async def get_dresses():
+async def get_dresses(
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수")
+):
     """
-    드레스 목록 조회
+    드레스 목록 조회 (페이징 지원)
     
-    데이터베이스에 저장된 모든 드레스 정보를 반환합니다.
+    데이터베이스에 저장된 드레스 정보를 페이지별로 반환합니다.
+    
+    Args:
+        page: 페이지 번호 (기본값: 1)
+        limit: 페이지당 항목 수 (기본값: 20, 최대: 100)
+    
+    Returns:
+        JSONResponse: 드레스 목록 및 페이지네이션 정보
     """
     try:
         connection = get_db_connection()
@@ -1476,17 +1486,34 @@ async def get_dresses():
         
         try:
             with connection.cursor() as cursor:
+                # 전체 건수 조회
+                cursor.execute("SELECT COUNT(*) as total FROM dresses")
+                total = cursor.fetchone()['total']
+                
+                # 총 페이지 수 계산
+                total_pages = (total + limit - 1) // limit if total > 0 else 0
+                
+                # 오프셋 계산
+                offset = (page - 1) * limit
+                
+                # 페이징된 데이터 조회
                 cursor.execute("""
                     SELECT idx as id, file_name as image_name, style, url
                     FROM dresses
                     ORDER BY idx DESC
-                """)
+                    LIMIT %s OFFSET %s
+                """, (limit, offset))
                 dresses = cursor.fetchall()
                 
                 return JSONResponse({
                     "success": True,
                     "data": dresses,
-                    "total": len(dresses),
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total,
+                        "total_pages": total_pages
+                    },
                     "message": f"{len(dresses)}개의 드레스를 찾았습니다."
                 })
         finally:
