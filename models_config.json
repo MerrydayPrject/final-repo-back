@@ -11,7 +11,8 @@
         {"name": "person_image", "label": "사람 이미지", "required": true},
         {"name": "dress_image", "label": "드레스 이미지", "required": true}
       ],
-      "category": "composition"
+      "category": "composition",
+      "prompt": "IMPORTANT: You must preserve the person's identity completely.\n\nTask: Apply ONLY the dress from the first image onto the person from the second image.\n\nSTRICT REQUIREMENTS:\n1. PRESERVE EXACTLY: The person's face, facial features, skin tone, hair, and body proportions\n2. PRESERVE EXACTLY: The person's pose, stance, and body position\n3. PRESERVE EXACTLY: The background and lighting from the person's image\n4. CHANGE ONLY: Replace the person's clothing with the dress from the first image\n5. The dress should fit naturally on the person's body shape\n6. Maintain realistic shadows and fabric draping on the dress\n7. Keep the person's hands, arms, legs exactly as they are in the original\n\nDO NOT change the person's appearance, face, body type, or any physical features.\nONLY apply the dress design, color, and style onto the existing person."
     }
   ]
 }

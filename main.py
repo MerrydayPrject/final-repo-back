@@ -128,6 +128,27 @@ def init_database():
             
             connection.commit()
             print("DB 테이블 생성 완료: dresses")
+            
+            # result_logs 테이블 생성
+            create_result_logs_table = """
+            CREATE TABLE IF NOT EXISTS result_logs (
+                idx INT AUTO_INCREMENT PRIMARY KEY,
+                person_url TEXT NOT NULL COMMENT '인물 이미지 (Input 1)',
+                dress_url TEXT COMMENT '의상 이미지 (Input 2)',
+                result_url TEXT NOT NULL COMMENT '결과 이미지',
+                model VARCHAR(255) NOT NULL COMMENT '사용된 AI 모델명',
+                prompt TEXT NOT NULL COMMENT '사용된 AI 명령어',
+                success BOOLEAN NOT NULL COMMENT '실행 성공 (TRUE/FALSE)',
+                run_time DOUBLE NOT NULL COMMENT '실행 시간 (초)',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_model (model),
+                INDEX idx_success (success),
+                INDEX idx_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """
+            cursor.execute(create_result_logs_table)
+            connection.commit()
+            print("DB 테이블 생성 완료: result_logs")
     except Exception as e:
         print(f"테이블 생성 오류: {e}")
     finally:
@@ -634,7 +655,9 @@ async def remove_background(file: UploadFile = File(..., description="배경을 
 @app.post("/api/compose-dress", tags=["Gemini 이미지 합성"])
 async def compose_dress(
     person_image: UploadFile = File(..., description="사람 이미지 파일"),
-    dress_image: UploadFile = File(..., description="드레스 이미지 파일")
+    dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+    model_name: Optional[str] = Form(None, description="모델명"),
+    prompt: Optional[str] = Form(None, description="AI 명령어 (프롬프트)")
 ):
     """
     Gemini API를 사용한 사람과 드레스 이미지 합성
@@ -645,6 +668,8 @@ async def compose_dress(
     Args:
         person_image: 사람 이미지 파일
         dress_image: 드레스 이미지 파일
+        model_name: 사용된 모델명 (선택사항, 기본값: "gemini-compose")
+        prompt: AI 명령어 (선택사항, 기본 프롬프트 사용)
     
     Returns:
         JSONResponse: 합성된 이미지 (base64)
@@ -652,42 +677,11 @@ async def compose_dress(
     person_image_path = None
     dress_image_path = None
     result_image_path = None
+    start_time = time.time()
+    model_id = model_name or "gemini-compose"
     
-    try:
-        # .env에서 API 키 가져오기
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            return JSONResponse({
-                "success": False,
-                "error": "API key not found",
-                "message": ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
-            }, status_code=500)
-        
-        # 이미지 읽기
-        person_contents = await person_image.read()
-        dress_contents = await dress_image.read()
-        
-        person_img = Image.open(io.BytesIO(person_contents))
-        dress_img = Image.open(io.BytesIO(dress_contents))
-        
-        # 입력 이미지들을 파일 시스템에 저장
-        person_image_path = save_uploaded_image(person_img, "person")
-        dress_image_path = save_uploaded_image(dress_img, "dress")
-        
-        # 원본 이미지들을 base64로 변환
-        person_buffered = io.BytesIO()
-        person_img.save(person_buffered, format="PNG")
-        person_base64 = base64.b64encode(person_buffered.getvalue()).decode()
-        
-        dress_buffered = io.BytesIO()
-        dress_img.save(dress_buffered, format="PNG")
-        dress_base64 = base64.b64encode(dress_buffered.getvalue()).decode()
-        
-        # Gemini Client 생성 (공식 문서와 동일한 방식)
-        client = genai.Client(api_key=api_key)
-        
-        # 프롬프트 생성 (얼굴과 체형 유지 강조)
-        text_input = """IMPORTANT: You must preserve the person's identity completely.
+    # 기본 프롬프트
+    default_prompt = """IMPORTANT: You must preserve the person's identity completely.
 
 Task: Apply ONLY the dress from the first image onto the person from the second image.
 
@@ -702,6 +696,51 @@ STRICT REQUIREMENTS:
 
 DO NOT change the person's appearance, face, body type, or any physical features.
 ONLY apply the dress design, color, and style onto the existing person."""
+    
+    text_input = prompt or default_prompt
+    used_prompt = prompt or default_prompt
+    success = False
+    person_url = ""
+    dress_url = ""
+    result_url = ""
+    
+    try:
+        # .env에서 API 키 가져오기
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            error_msg = ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
+            return JSONResponse({
+                "success": False,
+                "error": "API key not found",
+                "message": error_msg
+            }, status_code=500)
+        
+        # 이미지 읽기
+        person_contents = await person_image.read()
+        dress_contents = await dress_image.read()
+        
+        person_img = Image.open(io.BytesIO(person_contents))
+        dress_img = Image.open(io.BytesIO(dress_contents))
+        
+        # 입력 이미지들을 파일 시스템에 저장
+        person_image_path = save_uploaded_image(person_img, "person")
+        dress_image_path = save_uploaded_image(dress_img, "dress")
+        
+        # S3에 입력 이미지 업로드
+        person_buffered = io.BytesIO()
+        person_img.save(person_buffered, format="PNG")
+        person_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+        
+        dress_buffered = io.BytesIO()
+        dress_img.save(dress_buffered, format="PNG")
+        dress_url = upload_log_to_s3(dress_buffered.getvalue(), model_id, "dress") or ""
+        
+        # 원본 이미지들을 base64로 변환
+        person_base64 = base64.b64encode(person_buffered.getvalue()).decode()
+        dress_base64 = base64.b64encode(dress_buffered.getvalue()).decode()
+        
+        # Gemini Client 생성 (공식 문서와 동일한 방식)
+        client = genai.Client(api_key=api_key)
         
         # Gemini API 호출 (공식 문서 방식: dress, model, text 순서)
         response = client.models.generate_content(
@@ -711,10 +750,24 @@ ONLY apply the dress design, color, and style onto the existing person."""
         
         # 응답 확인
         if not response.candidates or len(response.candidates) == 0:
+            error_msg = "Gemini API가 응답을 생성하지 못했습니다. 이미지가 안전 정책에 위배되거나 모델이 이미지를 생성할 수 없습니다."
+            run_time = time.time() - start_time
+            
+            # 실패 로그 저장
+            save_test_log(
+                person_url=person_url or "",
+                dress_url=dress_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
             return JSONResponse({
                 "success": False,
-                "error": error_message,
-                "message": "Gemini API가 응답을 생성하지 못했습니다. 이미지가 안전 정책에 위배되거나 모델이 이미지를 생성할 수 없습니다."
+                "error": "No response",
+                "message": error_msg
             }, status_code=500)
         
         # 응답에서 이미지 추출 (예시 코드와 동일한 방식)
@@ -738,6 +791,25 @@ ONLY apply the dress design, color, and style onto the existing person."""
             result_img = Image.open(io.BytesIO(image_parts[0]))
             result_image_path = save_uploaded_image(result_img, "result")
             
+            # S3에 결과 이미지 업로드
+            result_buffered = io.BytesIO()
+            result_img.save(result_buffered, format="PNG")
+            result_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
+            
+            success = True
+            run_time = time.time() - start_time
+            
+            # 성공 로그 저장
+            save_test_log(
+                person_url=person_url or "",
+                dress_url=dress_url or None,
+                result_url=result_url or "",
+                model=model_id,
+                prompt=used_prompt,
+                success=True,
+                run_time=run_time
+            )
+            
             return JSONResponse({
                 "success": True,
                 "person_image": f"data:image/png;base64,{person_base64}",
@@ -747,6 +819,19 @@ ONLY apply the dress design, color, and style onto the existing person."""
                 "gemini_response": result_text
             })
         else:
+            run_time = time.time() - start_time
+            
+            # 실패 로그 저장
+            save_test_log(
+                person_url=person_url or "",
+                dress_url=dress_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
             return JSONResponse({
                 "success": False,
                 "error": "No image generated",
@@ -757,6 +842,21 @@ ONLY apply the dress design, color, and style onto the existing person."""
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
+        run_time = time.time() - start_time
+        
+        # 오류 로그 저장
+        try:
+            save_test_log(
+                person_url=person_url or "",
+                dress_url=dress_url or None,
+                result_url=result_url or "",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+        except:
+            pass  # 로그 저장 실패해도 계속 진행
         
         return JSONResponse({
             "success": False,
@@ -776,7 +876,7 @@ async def gemini_test_page(request: Request):
 
 # ===================== S3 업로드 함수 =====================
 
-def upload_to_s3(file_content: bytes, file_name: str, content_type: str = "image/png") -> Optional[str]:
+def upload_to_s3(file_content: bytes, file_name: str, content_type: str = "image/png", folder: str = "dresses") -> Optional[str]:
     """
     S3에 파일 업로드
     
@@ -784,6 +884,7 @@ def upload_to_s3(file_content: bytes, file_name: str, content_type: str = "image
         file_content: 파일 내용 (bytes)
         file_name: 파일명
         content_type: MIME 타입
+        folder: S3 폴더 경로 (기본값: "dresses")
     
     Returns:
         S3 URL 또는 None (실패 시)
@@ -806,7 +907,7 @@ def upload_to_s3(file_content: bytes, file_name: str, content_type: str = "image
         )
         
         # S3에 업로드
-        s3_key = f"dresses/{file_name}"
+        s3_key = f"{folder}/{file_name}"
         s3_client.put_object(
             Bucket=bucket_name,
             Key=s3_key,
@@ -824,6 +925,115 @@ def upload_to_s3(file_content: bytes, file_name: str, content_type: str = "image
     except Exception as e:
         print(f"S3 업로드 중 예상치 못한 오류: {e}")
         return None
+
+def upload_log_to_s3(file_content: bytes, model_id: str, image_type: str, content_type: str = "image/png") -> Optional[str]:
+    """
+    S3 logs 폴더에 테스트 이미지 업로드 (별도 S3 계정/버킷 사용)
+    
+    Args:
+        file_content: 파일 내용 (bytes)
+        model_id: 모델 ID
+        image_type: 이미지 타입 (person, dress, result)
+        content_type: MIME 타입
+    
+    Returns:
+        S3 URL 또는 None (실패 시)
+    """
+    try:
+        # 별도 S3 계정 환경변수 사용
+        aws_access_key = os.getenv("LOGS_AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("LOGS_AWS_SECRET_ACCESS_KEY")
+        bucket_name = os.getenv("LOGS_AWS_S3_BUCKET_NAME")
+        region = os.getenv("LOGS_AWS_REGION", "ap-northeast-2")
+        
+        if not all([aws_access_key, aws_secret_key, bucket_name]):
+            print("로그용 S3 설정이 완료되지 않았습니다. (LOGS_AWS_*)")
+            return None
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name=region
+        )
+        
+        # 타임스탬프 기반 파일명 생성
+        timestamp = int(time.time() * 1000)
+        file_name = f"{timestamp}_{model_id}_{image_type}.png"
+        s3_key = f"logs/{file_name}"
+        
+        # S3에 업로드
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=s3_key,
+            Body=file_content,
+            ContentType=content_type
+        )
+        
+        # S3 URL 생성
+        s3_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{s3_key}"
+        return s3_url
+        
+    except ClientError as e:
+        print(f"로그용 S3 업로드 오류: {e}")
+        return None
+    except Exception as e:
+        print(f"로그용 S3 업로드 중 예상치 못한 오류: {e}")
+        return None
+
+def save_test_log(
+    person_url: str,
+    result_url: str,
+    model: str,
+    prompt: str,
+    success: bool,
+    run_time: float,
+    dress_url: Optional[str] = None
+) -> bool:
+    """
+    테스트 기록을 MySQL에 저장
+    
+    Args:
+        person_url: 인물 이미지 S3 URL
+        result_url: 결과 이미지 S3 URL
+        model: 사용된 AI 모델명
+        prompt: 사용된 AI 명령어
+        success: 실행 성공 여부
+        run_time: 실행 시간 (초)
+        dress_url: 의상 이미지 S3 URL (선택사항)
+    
+    Returns:
+        저장 성공 여부 (True/False)
+    """
+    connection = get_db_connection()
+    if not connection:
+        print("DB 연결 실패 - 테스트 로그 저장 건너뜀")
+        return False
+    
+    try:
+        with connection.cursor() as cursor:
+            insert_query = """
+            INSERT INTO result_logs (person_url, dress_url, result_url, model, prompt, success, run_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(insert_query, (
+                person_url,
+                dress_url,
+                result_url,
+                model,
+                prompt,
+                success,
+                run_time
+            ))
+            connection.commit()
+            print(f"테스트 로그 저장 완료: {model}")
+            return True
+    except Exception as e:
+        print(f"테스트 로그 저장 오류: {e}")
+        connection.rollback()
+        return False
+    finally:
+        connection.close()
 
 def delete_from_s3(file_name: str) -> bool:
     """

@@ -41,6 +41,21 @@ AWS_REGION=ap-northeast-2
 - `AWS_S3_BUCKET_NAME`: S3 버킷 이름
 - `AWS_REGION`: AWS 리전 (기본값: ap-northeast-2)
 
+## AWS S3 설정 (모델 테스트 로그 이미지 저장용)
+
+```env
+LOGS_AWS_ACCESS_KEY_ID=your_logs_aws_access_key_id
+LOGS_AWS_SECRET_ACCESS_KEY=your_logs_aws_secret_access_key
+LOGS_AWS_S3_BUCKET_NAME=your_logs_bucket_name
+LOGS_AWS_REGION=ap-northeast-2
+```
+
+- `LOGS_AWS_ACCESS_KEY_ID`: 로그용 AWS 액세스 키 ID (별도 계정)
+- `LOGS_AWS_SECRET_ACCESS_KEY`: 로그용 AWS 시크릿 액세스 키 (별도 계정)
+- `LOGS_AWS_S3_BUCKET_NAME`: 로그 이미지 저장용 S3 버킷 이름
+- `LOGS_AWS_REGION`: AWS 리전 (기본값: ap-northeast-2)
+- 모델 비교 테스트에서 생성된 이미지(person, dress, result)만 저장하는 별도 버킷입니다.
+
 ## 전체 예시
 
 `.env` 파일 전체 내용 예시:
@@ -61,6 +76,12 @@ AWS_ACCESS_KEY_ID=your_aws_access_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
 AWS_S3_BUCKET_NAME=your_bucket_name
 AWS_REGION=ap-northeast-2
+
+# AWS S3 설정 (모델 테스트 로그 이미지 저장용 - 별도 계정)
+LOGS_AWS_ACCESS_KEY_ID=your_logs_aws_access_key_id
+LOGS_AWS_SECRET_ACCESS_KEY=your_logs_aws_secret_access_key
+LOGS_AWS_S3_BUCKET_NAME=your_logs_bucket_name
+LOGS_AWS_REGION=ap-northeast-2
 ```
 
 ## 주의사항

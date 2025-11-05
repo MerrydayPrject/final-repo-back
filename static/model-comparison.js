@@ -393,6 +393,15 @@ async function runModelTest(modelId) {
             formData.append(model.inputs[0].name, modelModals[modelId]['single']);
         }
         
+        // 모델명과 prompt 추가 (로그 저장용)
+        formData.append('model_name', model.id);
+        
+        // prompt는 models_config.json에서 가져오거나 기본값 사용
+        const prompt = model.prompt || '';
+        if (prompt) {
+            formData.append('prompt', prompt);
+        }
+        
         // 파라미터 추가
         let url = model.endpoint;
         if (model.parameters) {
