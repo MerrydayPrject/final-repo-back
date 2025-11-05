@@ -39,6 +39,32 @@ body {
     font-size: 1.1em;
 }
 
+/* 네비게이션 버튼 */
+.btn-home,
+.btn-back,
+.btn-add-page {
+    display: inline-block;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95em;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+    margin-left: 10px;
+}
+
+.btn-home:hover,
+.btn-back:hover,
+.btn-add-page:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+    text-decoration: none;
+    color: white;
+}
+
 /* 추가 섹션 */
 .add-section {
     background: white;
@@ -153,16 +179,45 @@ body {
     transform: translateY(-2px);
 }
 
-.btn-refresh {
+.btn-refresh,
+.btn-export,
+.btn-import {
     background: #6366f1;
     color: white;
     padding: 8px 16px;
     font-size: 0.9em;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
 }
 
-.btn-refresh:hover {
+.btn-refresh:hover,
+.btn-export:hover,
+.btn-import:hover {
     background: #4f46e5;
     transform: translateY(-2px);
+}
+
+.btn-export {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.btn-export:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+}
+
+.btn-import {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.btn-import:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #6b46c1 100%);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
 }
 
 .message-bar {
@@ -319,6 +374,32 @@ body {
     justify-content: center;
     color: #9ca3af;
     font-size: 0.85em;
+}
+
+.action-cell {
+    text-align: center;
+}
+
+.btn-delete {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #ef4444;
+    color: white;
+}
+
+.btn-delete:hover {
+    background: #dc2626;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3);
+}
+
+.btn-delete:active {
+    transform: translateY(0);
 }
 
 /* 반응형 디자인 */

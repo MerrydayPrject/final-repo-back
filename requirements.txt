@@ -12,4 +12,5 @@ python-dotenv>=1.0.0
 pymysql>=1.1.0
 sqlalchemy>=2.0.23
 cryptography>=41.0.0
-
+boto3>=1.34.0
+google-genai>=0.2.0  # Gemini API 사용 시 필요 (선택 사항)

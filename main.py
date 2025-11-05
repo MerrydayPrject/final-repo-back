@@ -1,6 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, Request, Query, Form
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+import csv
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from transformers import SegformerImageProcessor, AutoModelForSemanticSegmentation
@@ -20,6 +21,9 @@ import time
 import pymysql
 from datetime import datetime
 from dotenv import load_dotenv
+import json
+import boto3
+from botocore.exceptions import ClientError
 
 # .env 파일 로드
 load_dotenv()
@@ -99,82 +103,33 @@ def init_database():
     
     try:
         with connection.cursor() as cursor:
-            # composition_logs 테이블 생성
-            create_table_query = """
-            CREATE TABLE IF NOT EXISTS composition_logs (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                model_name VARCHAR(100) NOT NULL,
-                api_name VARCHAR(50) NOT NULL,
-                prompt TEXT NOT NULL,
-                person_image_path VARCHAR(255) NOT NULL,
-                dress_image_path VARCHAR(255) NOT NULL,
-                result_image_path VARCHAR(255),
-                success BOOLEAN NOT NULL,
-                processing_time FLOAT,
-                error_message TEXT,
-                INDEX idx_created_at (created_at),
-                INDEX idx_success (success)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-            """
-            cursor.execute(create_table_query)
-            connection.commit()
-            print("DB 테이블 생성 완료: composition_logs")
-            
-            # dress_info 테이블 생성
-            create_dress_info_table = """
-            CREATE TABLE IF NOT EXISTS dress_info (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                image_name VARCHAR(255) NOT NULL,
-                style VARCHAR(100) NOT NULL,
-                INDEX idx_image_name (image_name),
+            # dresses 테이블 생성
+            create_dresses_table = """
+            CREATE TABLE IF NOT EXISTS dresses (
+                idx INT AUTO_INCREMENT PRIMARY KEY,
+                dress_name VARCHAR(255) NOT NULL UNIQUE,
+                file_name VARCHAR(255) NOT NULL,
+                style VARCHAR(255) NOT NULL,
+                url TEXT NOT NULL,
+                INDEX idx_file_name (file_name),
                 INDEX idx_style (style)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             """
-            cursor.execute(create_dress_info_table)
+            cursor.execute(create_dresses_table)
+            
+            # 기존 테이블에 UNIQUE 제약 조건 추가 (테이블이 이미 존재하는 경우)
+            try:
+                cursor.execute("ALTER TABLE dresses ADD UNIQUE KEY uk_dress_name (dress_name)")
+                print("UNIQUE 제약 조건 추가 완료: dress_name")
+            except Exception as e:
+                # 이미 제약 조건이 존재하거나 테이블이 없는 경우는 무시
+                if "Duplicate key name" not in str(e) and "Unknown column" not in str(e):
+                    print(f"UNIQUE 제약 조건 추가 시도: {e}")
+            
             connection.commit()
-            print("DB 테이블 생성 완료: dress_info")
+            print("DB 테이블 생성 완료: dresses")
     except Exception as e:
         print(f"테이블 생성 오류: {e}")
-    finally:
-        connection.close()
-
-def save_composition_log(
-    model_name: str,
-    api_name: str,
-    prompt: str,
-    person_image_path: str,
-    dress_image_path: str,
-    result_image_path: Optional[str],
-    success: bool,
-    processing_time: float,
-    error_message: Optional[str] = None
-) -> Optional[int]:
-    """합성 로그를 DB에 저장"""
-    connection = get_db_connection()
-    if not connection:
-        print("DB 연결 실패 - 로그 저장 건너뜀")
-        return None
-    
-    try:
-        with connection.cursor() as cursor:
-            insert_query = """
-            INSERT INTO composition_logs 
-            (model_name, api_name, prompt, person_image_path, dress_image_path, 
-             result_image_path, success, processing_time, error_message)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            cursor.execute(insert_query, (
-                model_name, api_name, prompt, person_image_path, dress_image_path,
-                result_image_path, success, processing_time, error_message
-            ))
-            connection.commit()
-            log_id = cursor.lastrowid
-            print(f"DB 로그 저장 완료: ID={log_id}")
-            return log_id
-    except Exception as e:
-        print(f"로그 저장 오류: {e}")
-        return None
     finally:
         connection.close()
 
@@ -186,40 +141,61 @@ def save_uploaded_image(image: Image.Image, prefix: str) -> str:
     image.save(filepath)
     return str(filepath)
 
+def load_category_rules() -> List[dict]:
+    """카테고리 규칙 JSON 파일 로드"""
+    rules_file = Path("category_rules.json")
+    if not rules_file.exists():
+        # 기본 규칙으로 파일 생성
+        default_rules = [
+            {"prefix": "A", "style": "A라인"},
+            {"prefix": "Mini", "style": "미니드레스"},
+            {"prefix": "B", "style": "벨라인"},
+            {"prefix": "P", "style": "프린세스"}
+        ]
+        with open(rules_file, "w", encoding="utf-8") as f:
+            json.dump(default_rules, f, ensure_ascii=False, indent=2)
+        return default_rules
+    
+    try:
+        with open(rules_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"카테고리 규칙 로드 오류: {e}")
+        return []
+
+def save_category_rules(rules: List[dict]) -> bool:
+    """카테고리 규칙 JSON 파일 저장"""
+    try:
+        rules_file = Path("category_rules.json")
+        with open(rules_file, "w", encoding="utf-8") as f:
+            json.dump(rules, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"카테고리 규칙 저장 오류: {e}")
+        return False
+
 def detect_style_from_filename(filename: str) -> Optional[str]:
     """
-    이미지 파일명에서 스타일을 감지
+    이미지 파일명에서 스타일을 감지 (JSON 규칙 기반)
     
     Args:
         filename: 이미지 파일명 (예: "Adress1.jpg", "Mini_dress.png")
     
     Returns:
         감지된 스타일 문자열 또는 None (감지 실패 시)
-        - "A라인": "A"로 시작
-        - "미니드레스": "Mini" 포함 (대소문자 구분 없음)
-        - "벨라인": "B"로 시작
-        - "프린세스": "P"로 시작
-        - None: 위 조건에 해당하지 않으면 삽입 불가
     """
+    rules = load_category_rules()
     filename_upper = filename.upper()
     
-    # 1. "A"로 시작하는지 확인
-    if filename_upper.startswith("A"):
-        return "A라인"
+    # 규칙을 우선순위대로 확인 (긴 prefix 우선)
+    sorted_rules = sorted(rules, key=lambda x: len(x["prefix"]), reverse=True)
     
-    # 2. "Mini" 포함 여부 확인 (대소문자 구분 없음)
-    if "MINI" in filename_upper:
-        return "미니드레스"
+    for rule in sorted_rules:
+        prefix_upper = rule["prefix"].upper()
+        # prefix로 시작하거나 포함하는지 확인
+        if filename_upper.startswith(prefix_upper) or prefix_upper in filename_upper:
+            return rule["style"]
     
-    # 3. "B"로 시작하는지 확인
-    if filename_upper.startswith("B"):
-        return "벨라인"
-    
-    # 4. "P"로 시작하는지 확인
-    if filename_upper.startswith("P"):
-        return "프린세스"
-    
-    # 5. 위 조건에 해당하지 않으면 None 반환 (삽입 불가)
     return None
 
 # Pydantic 모델
@@ -262,9 +238,18 @@ async def home(request: Request):
     """
     메인 웹 인터페이스
     
-    웨딩드레스 누끼 서비스의 메인 페이지를 반환합니다.
+    테스트 페이지 선택 페이지를 반환합니다.
     """
     return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/nukki", response_class=HTMLResponse, tags=["Web Interface"])
+async def nukki_service(request: Request):
+    """
+    웨딩드레스 누끼 서비스
+    
+    웨딩드레스를 입은 인물 이미지에서 드레스만 추출하는 서비스 페이지를 반환합니다.
+    """
+    return templates.TemplateResponse("nukki.html", {"request": request})
 
 @app.get("/labels", tags=["정보"])
 async def get_labels():
@@ -664,22 +649,17 @@ async def compose_dress(
     Returns:
         JSONResponse: 합성된 이미지 (base64)
     """
-    # 처리 시작 시간
-    start_time = time.time()
     person_image_path = None
     dress_image_path = None
     result_image_path = None
-    success = False
-    error_message = None
     
     try:
         # .env에서 API 키 가져오기
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            error_message = "API key not found"
             return JSONResponse({
                 "success": False,
-                "error": error_message,
+                "error": "API key not found",
                 "message": ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
             }, status_code=500)
         
@@ -731,20 +711,6 @@ ONLY apply the dress design, color, and style onto the existing person."""
         
         # 응답 확인
         if not response.candidates or len(response.candidates) == 0:
-            error_message = "No response from Gemini"
-            processing_time = time.time() - start_time
-            # DB 로그 저장
-            save_composition_log(
-                model_name="gemini-2.5-flash-image",
-                api_name="Gemini API",
-                prompt=text_input,
-                person_image_path=person_image_path or "",
-                dress_image_path=dress_image_path or "",
-                result_image_path=None,
-                success=False,
-                processing_time=processing_time,
-                error_message=error_message
-            )
             return JSONResponse({
                 "success": False,
                 "error": error_message,
@@ -771,21 +737,6 @@ ONLY apply the dress design, color, and style onto the existing person."""
             # 결과 이미지를 파일 시스템에 저장
             result_img = Image.open(io.BytesIO(image_parts[0]))
             result_image_path = save_uploaded_image(result_img, "result")
-            success = True
-            processing_time = time.time() - start_time
-            
-            # DB 로그 저장
-            save_composition_log(
-                model_name="gemini-2.5-flash-image",
-                api_name="Gemini API",
-                prompt=text_input,
-                person_image_path=person_image_path or "",
-                dress_image_path=dress_image_path or "",
-                result_image_path=result_image_path,
-                success=True,
-                processing_time=processing_time,
-                error_message=None
-            )
             
             return JSONResponse({
                 "success": True,
@@ -796,20 +747,6 @@ ONLY apply the dress design, color, and style onto the existing person."""
                 "gemini_response": result_text
             })
         else:
-            error_message = f"No image generated. Response: {result_text}"
-            processing_time = time.time() - start_time
-            # DB 로그 저장
-            save_composition_log(
-                model_name="gemini-2.5-flash-image",
-                api_name="Gemini API",
-                prompt=text_input,
-                person_image_path=person_image_path or "",
-                dress_image_path=dress_image_path or "",
-                result_image_path=None,
-                success=False,
-                processing_time=processing_time,
-                error_message=error_message
-            )
             return JSONResponse({
                 "success": False,
                 "error": "No image generated",
@@ -820,27 +757,12 @@ ONLY apply the dress design, color, and style onto the existing person."""
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
-        error_message = str(e)
-        processing_time = time.time() - start_time
-        
-        # DB 로그 저장 (에러 발생 시에도)
-        save_composition_log(
-            model_name="gemini-2.5-flash-image",
-            api_name="Gemini API",
-            prompt="N/A",
-            person_image_path=person_image_path or "",
-            dress_image_path=dress_image_path or "",
-            result_image_path=None,
-            success=False,
-            processing_time=processing_time,
-            error_message=error_message
-        )
         
         return JSONResponse({
             "success": False,
-            "error": error_message,
+            "error": str(e),
             "error_detail": error_detail,
-            "message": f"이미지 합성 중 오류 발생: {error_message}"
+            "message": f"이미지 합성 중 오류 발생: {str(e)}"
         }, status_code=500)
 
 @app.get("/gemini-test", response_class=HTMLResponse, tags=["Web Interface"])
@@ -852,285 +774,243 @@ async def gemini_test_page(request: Request):
     """
     return templates.TemplateResponse("gemini_test.html", {"request": request})
 
-# ===================== 관리자 API =====================
+# ===================== S3 업로드 함수 =====================
 
-@app.get("/api/admin/logs", tags=["관리자"])
-async def get_composition_logs(
-    page: int = Query(1, ge=1, description="페이지 번호"),
-    limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수")
-):
+def upload_to_s3(file_content: bytes, file_name: str, content_type: str = "image/png") -> Optional[str]:
     """
-    로그 목록 조회
+    S3에 파일 업로드
     
     Args:
-        page: 페이지 번호 (1부터 시작)
-        limit: 페이지당 항목 수
+        file_content: 파일 내용 (bytes)
+        file_name: 파일명
+        content_type: MIME 타입
     
     Returns:
-        JSONResponse: 로그 목록, 총 개수, 페이지 정보
+        S3 URL 또는 None (실패 시)
     """
-    connection = get_db_connection()
-    if not connection:
-        return JSONResponse({
-            "success": False,
-            "error": "Database connection failed",
-            "message": "데이터베이스 연결에 실패했습니다."
-        }, status_code=500)
-    
     try:
-        with connection.cursor() as cursor:
-            # 전체 개수 조회
-            cursor.execute("SELECT COUNT(*) as total FROM composition_logs")
-            total = cursor.fetchone()["total"]
-            
-            # 페이지네이션 적용하여 로그 조회
-            offset = (page - 1) * limit
-            cursor.execute("""
-                SELECT id, created_at, model_name, api_name, success, processing_time
-                FROM composition_logs
-                ORDER BY created_at DESC
-                LIMIT %s OFFSET %s
-            """, (limit, offset))
-            logs = cursor.fetchall()
-            
-            return JSONResponse({
-                "success": True,
-                "data": logs,
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total,
-                    "total_pages": (total + limit - 1) // limit
-                }
-            })
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+        region = os.getenv("AWS_REGION", "ap-northeast-2")
+        
+        if not all([aws_access_key, aws_secret_key, bucket_name]):
+            print("AWS S3 설정이 완료되지 않았습니다.")
+            return None
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name=region
+        )
+        
+        # S3에 업로드
+        s3_key = f"dresses/{file_name}"
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=s3_key,
+            Body=file_content,
+            ContentType=content_type
+        )
+        
+        # S3 URL 생성
+        s3_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{s3_key}"
+        return s3_url
+        
+    except ClientError as e:
+        print(f"S3 업로드 오류: {e}")
+        return None
     except Exception as e:
-        return JSONResponse({
-            "success": False,
-            "error": str(e),
-            "message": f"로그 조회 중 오류 발생: {str(e)}"
-        }, status_code=500)
-    finally:
-        connection.close()
+        print(f"S3 업로드 중 예상치 못한 오류: {e}")
+        return None
 
-@app.get("/api/admin/logs/{log_id}", tags=["관리자"])
-async def get_composition_log(log_id: int):
+def delete_from_s3(file_name: str) -> bool:
     """
-    특정 로그 상세 조회
+    S3에서 파일 삭제
     
     Args:
-        log_id: 로그 ID
+        file_name: 삭제할 파일명
     
     Returns:
-        JSONResponse: 로그의 모든 정보
+        삭제 성공 여부 (True/False)
     """
-    connection = get_db_connection()
-    if not connection:
-        return JSONResponse({
-            "success": False,
-            "error": "Database connection failed",
-            "message": "데이터베이스 연결에 실패했습니다."
-        }, status_code=500)
-    
     try:
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT * FROM composition_logs WHERE id = %s
-            """, (log_id,))
-            log = cursor.fetchone()
-            
-            if not log:
-                return JSONResponse({
-                    "success": False,
-                    "error": "Not found",
-                    "message": f"ID {log_id}의 로그를 찾을 수 없습니다."
-                }, status_code=404)
-            
-            return JSONResponse({
-                "success": True,
-                "data": log
-            })
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+        region = os.getenv("AWS_REGION", "ap-northeast-2")
+        
+        if not all([aws_access_key, aws_secret_key, bucket_name]):
+            print("AWS S3 설정이 완료되지 않았습니다.")
+            return False
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name=region
+        )
+        
+        # S3 키 생성 (업로드 시와 동일한 형식)
+        s3_key = f"dresses/{file_name}"
+        
+        # S3에서 삭제
+        s3_client.delete_object(
+            Bucket=bucket_name,
+            Key=s3_key
+        )
+        
+        print(f"S3에서 이미지 삭제 완료: {s3_key}")
+        return True
+        
+    except ClientError as e:
+        print(f"S3 삭제 오류: {e}")
+        return False
     except Exception as e:
-        return JSONResponse({
-            "success": False,
-            "error": str(e),
-            "message": f"로그 조회 중 오류 발생: {str(e)}"
-        }, status_code=500)
-    finally:
-        connection.close()
+        print(f"S3 삭제 중 예상치 못한 오류: {e}")
+        return False
 
-@app.get("/api/admin/stats", tags=["관리자"])
-async def get_statistics():
-    """
-    통계 정보 조회
-    
-    Returns:
-        JSONResponse: 통계 정보
-    """
-    connection = get_db_connection()
-    if not connection:
-        return JSONResponse({
-            "success": False,
-            "error": "Database connection failed",
-            "message": "데이터베이스 연결에 실패했습니다."
-        }, status_code=500)
-    
-    try:
-        with connection.cursor() as cursor:
-            # 전체 합성 횟수
-            cursor.execute("SELECT COUNT(*) as total FROM composition_logs")
-            total = cursor.fetchone()["total"]
-            
-            # 성공/실패 건수
-            cursor.execute("SELECT success, COUNT(*) as count FROM composition_logs GROUP BY success")
-            success_stats = {row["success"]: row["count"] for row in cursor.fetchall()}
-            success_count = success_stats.get(True, 0)
-            fail_count = success_stats.get(False, 0)
-            
-            # 평균 처리 시간
-            cursor.execute("SELECT AVG(processing_time) as avg_time FROM composition_logs WHERE processing_time IS NOT NULL")
-            avg_time = cursor.fetchone()["avg_time"]
-            
-            # 오늘 합성 횟수
-            cursor.execute("""
-                SELECT COUNT(*) as today_count FROM composition_logs 
-                WHERE DATE(created_at) = CURDATE()
-            """)
-            today_count = cursor.fetchone()["today_count"]
-            
-            # 이번 주 합성 횟수
-            cursor.execute("""
-                SELECT COUNT(*) as week_count FROM composition_logs 
-                WHERE YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1)
-            """)
-            week_count = cursor.fetchone()["week_count"]
-            
-            # 이번 달 합성 횟수
-            cursor.execute("""
-                SELECT COUNT(*) as month_count FROM composition_logs 
-                WHERE YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())
-            """)
-            month_count = cursor.fetchone()["month_count"]
-            
-            return JSONResponse({
-                "success": True,
-                "data": {
-                    "total": total,
-                    "success": success_count,
-                    "failed": fail_count,
-                    "success_rate": round((success_count / total * 100) if total > 0 else 0, 2),
-                    "average_processing_time": round(float(avg_time) if avg_time else 0, 3),
-                    "today": today_count,
-                    "this_week": week_count,
-                    "this_month": month_count
-                }
-            })
-    except Exception as e:
-        return JSONResponse({
-            "success": False,
-            "error": str(e),
-            "message": f"통계 조회 중 오류 발생: {str(e)}"
-        }, status_code=500)
-    finally:
-        connection.close()
+# ===================== 카테고리 규칙 API =====================
 
-# ===================== 드레스 관리 API =====================
-
-@app.get("/api/admin/dresses/scan", tags=["드레스 관리"])
-async def scan_dress_images():
+@app.get("/api/admin/category-rules", tags=["카테고리 규칙"])
+async def get_category_rules():
     """
-    이미지 폴더를 스캔하여 드레스 이미지 목록 조회
-    
-    Returns:
-        JSONResponse: 스캔된 이미지 목록, 감지된 스타일, DB 존재 여부
+    카테고리 규칙 목록 조회
     """
     try:
-        # 프론트엔드의 Image 폴더 경로 (상대 경로)
-        image_folder = Path("../mini-repo-front/public/Image")
-        
-        if not image_folder.exists():
-            return JSONResponse({
-                "success": False,
-                "error": "Image folder not found",
-                "message": f"이미지 폴더를 찾을 수 없습니다: {image_folder.absolute()}"
-            }, status_code=404)
-        
-        # 이미지 파일 확장자
-        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
-        
-        # DB에 존재하는 이미지 목록 조회
-        connection = get_db_connection()
-        existing_images = set()
-        if connection:
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT image_name FROM dress_info")
-                    existing_images = {row["image_name"] for row in cursor.fetchall()}
-            except Exception as e:
-                print(f"DB 조회 오류: {e}")
-            finally:
-                connection.close()
-        
-        # 이미지 파일 스캔
-        scanned_images = []
-        for file_path in image_folder.iterdir():
-            if file_path.is_file() and file_path.suffix.lower() in image_extensions:
-                filename = file_path.name
-                style = detect_style_from_filename(filename)
-                exists_in_db = filename in existing_images
-                
-                scanned_images.append({
-                    "image_name": filename,
-                    "style": style,
-                    "style_detected": style is not None,
-                    "exists_in_db": exists_in_db,
-                    "image_url": f"/Image/{filename}"
-                })
-        
-        # 스타일이 감지된 것부터 정렬
-        scanned_images.sort(key=lambda x: (x["style_detected"], x["image_name"]), reverse=True)
-        
+        rules = load_category_rules()
         return JSONResponse({
             "success": True,
-            "data": scanned_images,
-            "total": len(scanned_images),
-            "detected": sum(1 for img in scanned_images if img["style_detected"]),
-            "undetected": sum(1 for img in scanned_images if not img["style_detected"])
+            "data": rules,
+            "total": len(rules)
         })
-        
     except Exception as e:
-        import traceback
         return JSONResponse({
             "success": False,
             "error": str(e),
-            "message": f"이미지 스캔 중 오류 발생: {str(e)}"
+            "message": f"규칙 조회 중 오류 발생: {str(e)}"
         }, status_code=500)
 
-@app.post("/api/admin/dresses/bulk-insert", tags=["드레스 관리"])
-async def bulk_insert_dresses(request: Request):
+@app.post("/api/admin/category-rules", tags=["카테고리 규칙"])
+async def add_category_rule(request: Request):
     """
-    여러 드레스 이미지를 일괄 삽입
-    
-    Request Body:
-        {
-            "images": [
-                {"image_name": "Adress1.jpg", "style": "A라인"},
-                ...
-            ]
-        }
-    
-    Returns:
-        JSONResponse: 삽입 결과
+    새 카테고리 규칙 추가
     """
     try:
         body = await request.json()
-        images = body.get("images", [])
+        prefix = body.get("prefix")
+        style = body.get("style")
         
-        if not images:
+        if not prefix or not style:
             return JSONResponse({
                 "success": False,
-                "error": "No images provided",
-                "message": "삽입할 이미지가 없습니다."
+                "error": "Missing required fields",
+                "message": "prefix와 style은 필수 입력 항목입니다."
             }, status_code=400)
+        
+        rules = load_category_rules()
+        
+        # 중복 체크
+        if any(rule["prefix"].upper() == prefix.upper() for rule in rules):
+            return JSONResponse({
+                "success": False,
+                "error": "Duplicate prefix",
+                "message": f"접두사 '{prefix}'가 이미 존재합니다."
+            }, status_code=400)
+        
+        # 새 규칙 추가
+        rules.append({"prefix": prefix, "style": style})
+        
+        if save_category_rules(rules):
+            return JSONResponse({
+                "success": True,
+                "data": {"prefix": prefix, "style": style},
+                "message": "카테고리 규칙이 추가되었습니다."
+            })
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": "Save failed",
+                "message": "규칙 저장에 실패했습니다."
+            }, status_code=500)
+            
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"규칙 추가 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+@app.delete("/api/admin/category-rules", tags=["카테고리 규칙"])
+async def delete_category_rule(request: Request):
+    """
+    카테고리 규칙 삭제
+    """
+    try:
+        body = await request.json()
+        prefix = body.get("prefix")
+        
+        if not prefix:
+            return JSONResponse({
+                "success": False,
+                "error": "Missing prefix",
+                "message": "삭제할 접두사를 입력해주세요."
+            }, status_code=400)
+        
+        rules = load_category_rules()
+        
+        # 규칙 찾아서 삭제
+        filtered_rules = [r for r in rules if r["prefix"].upper() != prefix.upper()]
+        
+        if len(filtered_rules) == len(rules):
+            return JSONResponse({
+                "success": False,
+                "error": "Rule not found",
+                "message": f"접두사 '{prefix}'에 해당하는 규칙을 찾을 수 없습니다."
+            }, status_code=404)
+        
+        if save_category_rules(filtered_rules):
+            return JSONResponse({
+                "success": True,
+                "message": f"접두사 '{prefix}' 규칙이 삭제되었습니다."
+            })
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": "Save failed",
+                "message": "규칙 저장에 실패했습니다."
+            }, status_code=500)
+            
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"규칙 삭제 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+# ===================== 드레스 업로드 API =====================
+
+@app.post("/api/admin/dresses/upload", tags=["드레스 관리"])
+async def upload_dresses(
+    files: List[UploadFile] = File(...),
+    styles: str = Form(...)
+):
+    """
+    여러 드레스 이미지를 업로드하고 S3에 저장
+    
+    Args:
+        files: 업로드할 이미지 파일 리스트
+        styles: 각 파일별 스타일 정보 (JSON 문자열, 예: '[{"file":"image1.png","style":"A라인"},...]')
+    """
+    try:
+        # styles JSON 파싱
+        styles_data = json.loads(styles)
+        styles_dict = {item["file"]: item["style"] for item in styles_data}
+        
+        results = []
+        success_count = 0
+        fail_count = 0
         
         connection = get_db_connection()
         if not connection:
@@ -1140,117 +1020,188 @@ async def bulk_insert_dresses(request: Request):
                 "message": "데이터베이스 연결에 실패했습니다."
             }, status_code=500)
         
-        inserted_count = 0
-        skipped_count = 0
-        error_count = 0
-        errors = []
-        
         try:
-            with connection.cursor() as cursor:
-                for image_data in images:
-                    image_name = image_data.get("image_name")
-                    style = image_data.get("style")
+            for file in files:
+                try:
+                    # 파일 내용 읽기
+                    file_content = await file.read()
+                    file_name = file.filename
                     
-                    # 스타일이 없는 경우 건너뛰기
-                    if not style or not image_name:
-                        skipped_count += 1
+                    # 파일명 처리
+                    file_stem = Path(file_name).stem  # 확장자 제외
+                    file_ext = Path(file_name).suffix  # 확장자
+                    
+                    # 스타일 가져오기 (수동 선택 또는 자동 감지)
+                    style = styles_dict.get(file_name)
+                    if not style:
+                        # 자동 감지 시도
+                        style = detect_style_from_filename(file_name)
+                        if not style:
+                            results.append({
+                                "file_name": file_name,
+                                "success": False,
+                                "error": "스타일을 감지할 수 없습니다."
+                            })
+                            fail_count += 1
+                            continue
+                    
+                    # S3 업로드
+                    content_type = file.content_type or "image/png"
+                    s3_url = upload_to_s3(file_content, file_name, content_type)
+                    
+                    if not s3_url:
+                        results.append({
+                            "file_name": file_name,
+                            "success": False,
+                            "error": "S3 업로드 실패"
+                        })
+                        fail_count += 1
                         continue
                     
-                    try:
-                        # 중복 체크
-                        cursor.execute("SELECT id FROM dress_info WHERE image_name = %s", (image_name,))
+                    # DB 저장
+                    with connection.cursor() as cursor:
+                        # dress_name 중복 체크
+                        cursor.execute("SELECT idx FROM dresses WHERE dress_name = %s", (file_stem,))
                         if cursor.fetchone():
-                            skipped_count += 1
+                            results.append({
+                                "file_name": file_name,
+                                "success": False,
+                                "error": f"드레스명 '{file_stem}'이 이미 존재합니다. 같은 이름의 드레스는 추가할 수 없습니다."
+                            })
+                            fail_count += 1
+                            continue
+                        
+                        # file_name 중복 체크
+                        cursor.execute("SELECT idx FROM dresses WHERE file_name = %s", (file_name,))
+                        if cursor.fetchone():
+                            results.append({
+                                "file_name": file_name,
+                                "success": False,
+                                "error": "이미 존재하는 파일명입니다."
+                            })
+                            fail_count += 1
                             continue
                         
                         # 삽입
-                        cursor.execute(
-                            "INSERT INTO dress_info (image_name, style) VALUES (%s, %s)",
-                            (image_name, style)
-                        )
-                        inserted_count += 1
-                    except Exception as e:
-                        error_count += 1
-                        errors.append({
-                            "image_name": image_name,
-                            "error": str(e)
+                        try:
+                            cursor.execute(
+                                "INSERT INTO dresses (dress_name, file_name, style, url) VALUES (%s, %s, %s, %s)",
+                                (file_stem, file_name, style, s3_url)
+                            )
+                            connection.commit()
+                        except pymysql.IntegrityError as e:
+                            # UNIQUE 제약 조건 위반 처리
+                            if "dress_name" in str(e).lower() or "Duplicate entry" in str(e):
+                                results.append({
+                                    "file_name": file_name,
+                                    "success": False,
+                                    "error": f"드레스명 '{file_stem}'이 이미 존재합니다. 같은 이름의 드레스는 추가할 수 없습니다."
+                                })
+                                fail_count += 1
+                                continue
+                            raise
+                        
+                        results.append({
+                            "file_name": file_name,
+                            "dress_name": file_stem,
+                            "style": style,
+                            "url": s3_url,
+                            "success": True
                         })
-                
-                connection.commit()
+                        success_count += 1
+                        
+                except Exception as e:
+                    results.append({
+                        "file_name": file.filename if hasattr(file, 'filename') else "unknown",
+                        "success": False,
+                        "error": str(e)
+                    })
+                    fail_count += 1
+            
+            return JSONResponse({
+                "success": True,
+                "results": results,
+                "summary": {
+                    "total": len(files),
+                    "success": success_count,
+                    "failed": fail_count
+                },
+                "message": f"{success_count}개 이미지 업로드 완료, {fail_count}개 실패"
+            })
+            
         except Exception as e:
             connection.rollback()
             return JSONResponse({
                 "success": False,
                 "error": str(e),
-                "message": f"삽입 중 오류 발생: {str(e)}"
+                "message": f"업로드 중 오류 발생: {str(e)}"
             }, status_code=500)
         finally:
             connection.close()
-        
+            
+    except json.JSONDecodeError:
         return JSONResponse({
-            "success": True,
-            "inserted": inserted_count,
-            "skipped": skipped_count,
-            "errors": error_count,
-            "error_details": errors,
-            "message": f"{inserted_count}개 이미지 삽입 완료, {skipped_count}개 건너뜀, {error_count}개 오류"
-        })
-        
+            "success": False,
+            "error": "Invalid JSON",
+            "message": "styles 파라미터가 올바른 JSON 형식이 아닙니다."
+        }, status_code=400)
     except Exception as e:
         return JSONResponse({
             "success": False,
             "error": str(e),
-            "message": f"일괄 삽입 중 오류 발생: {str(e)}"
+            "message": f"업로드 중 오류 발생: {str(e)}"
         }, status_code=500)
+
+# ===================== 드레스 관리 API =====================
 
 @app.get("/api/admin/dresses", tags=["드레스 관리"])
 async def get_dresses():
     """
-    DB에 저장된 드레스 목록 조회
+    드레스 목록 조회
     
-    Returns:
-        JSONResponse: 드레스 목록
+    데이터베이스에 저장된 모든 드레스 정보를 반환합니다.
     """
-    connection = get_db_connection()
-    if not connection:
-        return JSONResponse({
-            "success": False,
-            "error": "Database connection failed",
-            "message": "데이터베이스 연결에 실패했습니다."
-        }, status_code=500)
-    
     try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT id, image_name, style FROM dress_info ORDER BY id DESC")
-            dresses = cursor.fetchall()
-            
+        connection = get_db_connection()
+        if not connection:
             return JSONResponse({
-                "success": True,
-                "data": dresses,
-                "total": len(dresses)
-            })
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT idx as id, file_name as image_name, style, url
+                    FROM dresses
+                    ORDER BY idx DESC
+                """)
+                dresses = cursor.fetchall()
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": dresses,
+                    "total": len(dresses),
+                    "message": f"{len(dresses)}개의 드레스를 찾았습니다."
+                })
+        finally:
+            connection.close()
+            
     except Exception as e:
         return JSONResponse({
             "success": False,
             "error": str(e),
             "message": f"드레스 목록 조회 중 오류 발생: {str(e)}"
         }, status_code=500)
-    finally:
-        connection.close()
 
 @app.post("/api/admin/dresses", tags=["드레스 관리"])
 async def add_dress(request: Request):
     """
-    드레스 정보 단일 추가
+    드레스 추가 (이미지명만 입력)
     
-    Request Body:
-        {
-            "image_name": "Adress1.jpg",
-            "style": "A라인"
-        }
-    
-    Returns:
-        JSONResponse: 삽입 결과
+    이미지명과 스타일을 받아서 데이터베이스에 추가합니다.
+    이미지는 images 폴더에 이미 존재한다고 가정합니다.
     """
     try:
         body = await request.json()
@@ -1264,21 +1215,13 @@ async def add_dress(request: Request):
                 "message": "image_name과 style은 필수 입력 항목입니다."
             }, status_code=400)
         
-        # 파일명으로부터 스타일 감지하여 검증
+        # 파일명에서 스타일 자동 감지 (검증용)
         detected_style = detect_style_from_filename(image_name)
-        if not detected_style:
-            return JSONResponse({
-                "success": False,
-                "error": "Invalid image name",
-                "message": f"이미지 파일명 '{image_name}'에서 스타일을 감지할 수 없습니다. 파일명은 A, Mini, B, P로 시작해야 합니다."
-            }, status_code=400)
-        
-        # 감지된 스타일과 제공된 스타일이 일치하는지 확인
-        if detected_style != style:
+        if detected_style and detected_style != style:
             return JSONResponse({
                 "success": False,
                 "error": "Style mismatch",
-                "message": f"파일명에서 감지된 스타일({detected_style})과 제공된 스타일({style})이 일치하지 않습니다."
+                "message": f"파일명에서 감지된 스타일({detected_style})과 입력한 스타일({style})이 일치하지 않습니다."
             }, status_code=400)
         
         connection = get_db_connection()
@@ -1291,47 +1234,375 @@ async def add_dress(request: Request):
         
         try:
             with connection.cursor() as cursor:
-                # 중복 체크
-                cursor.execute("SELECT id FROM dress_info WHERE image_name = %s", (image_name,))
+                # dress_name 추출 (확장자 제외)
+                dress_name = Path(image_name).stem
+                
+                # dress_name 중복 체크
+                cursor.execute("SELECT idx FROM dresses WHERE dress_name = %s", (dress_name,))
                 if cursor.fetchone():
                     return JSONResponse({
                         "success": False,
-                        "error": "Duplicate image name",
+                        "error": "Duplicate dress name",
+                        "message": f"드레스명 '{dress_name}'이 이미 존재합니다. 같은 이름의 드레스는 추가할 수 없습니다."
+                    }, status_code=400)
+                
+                # file_name 중복 체크
+                cursor.execute("SELECT idx FROM dresses WHERE file_name = %s", (image_name,))
+                if cursor.fetchone():
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Duplicate file name",
                         "message": f"이미지명 '{image_name}'이 이미 존재합니다."
                     }, status_code=400)
                 
+                # 이미지 파일 존재 확인
+                image_path = Path("images") / image_name
+                if not image_path.exists():
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Image file not found",
+                        "message": f"이미지 파일 '{image_name}'을 찾을 수 없습니다."
+                    }, status_code=404)
+                
+                # URL 생성 (로컬 이미지 경로)
+                image_url = f"/images/{image_name}"
+                
                 # 삽입
-                cursor.execute(
-                    "INSERT INTO dress_info (image_name, style) VALUES (%s, %s)",
-                    (image_name, style)
-                )
-                connection.commit()
-                dress_id = cursor.lastrowid
+                try:
+                    cursor.execute(
+                        "INSERT INTO dresses (dress_name, file_name, style, url) VALUES (%s, %s, %s, %s)",
+                        (dress_name, image_name, style, image_url)
+                    )
+                    connection.commit()
+                except pymysql.IntegrityError as e:
+                    # UNIQUE 제약 조건 위반 처리
+                    if "dress_name" in str(e).lower() or "Duplicate entry" in str(e):
+                        return JSONResponse({
+                            "success": False,
+                            "error": "Duplicate dress name",
+                            "message": f"드레스명 '{dress_name}'이 이미 존재합니다. 같은 이름의 드레스는 추가할 수 없습니다."
+                        }, status_code=400)
+                    raise
                 
                 return JSONResponse({
                     "success": True,
+                    "message": f"드레스 '{image_name}'가 성공적으로 추가되었습니다.",
                     "data": {
-                        "id": dress_id,
                         "image_name": image_name,
-                        "style": style
-                    },
-                    "message": "드레스 정보가 성공적으로 추가되었습니다."
+                        "style": style,
+                        "dress_name": dress_name
+                    }
                 })
-        except Exception as e:
-            connection.rollback()
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-                "message": f"드레스 추가 중 오류 발생: {str(e)}"
-            }, status_code=500)
         finally:
             connection.close()
-        
+            
     except Exception as e:
         return JSONResponse({
             "success": False,
             "error": str(e),
             "message": f"드레스 추가 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+@app.delete("/api/admin/dresses/{dress_id}", tags=["드레스 관리"])
+async def delete_dress(dress_id: int):
+    """
+    드레스 삭제
+    
+    S3의 이미지와 데이터베이스의 레코드를 모두 삭제합니다.
+    """
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 드레스 정보 조회
+                cursor.execute("SELECT file_name, url FROM dresses WHERE idx = %s", (dress_id,))
+                dress = cursor.fetchone()
+                
+                if not dress:
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Dress not found",
+                        "message": f"드레스 ID {dress_id}를 찾을 수 없습니다."
+                    }, status_code=404)
+                
+                file_name = dress['file_name']
+                url = dress['url']
+                
+                # S3에서 이미지 삭제 시도 (실패해도 계속 진행)
+                s3_deleted = False
+                if url and url.startswith('https://'):
+                    # S3 URL인 경우 삭제 시도
+                    s3_deleted = delete_from_s3(file_name)
+                else:
+                    # 로컬 파일인 경우 삭제 시도
+                    local_image_path = Path("images") / file_name
+                    if local_image_path.exists():
+                        try:
+                            local_image_path.unlink()
+                            s3_deleted = True
+                            print(f"로컬 이미지 삭제 완료: {file_name}")
+                        except Exception as e:
+                            print(f"로컬 이미지 삭제 오류: {e}")
+                
+                # 데이터베이스에서 삭제
+                cursor.execute("DELETE FROM dresses WHERE idx = %s", (dress_id,))
+                connection.commit()
+                
+                return JSONResponse({
+                    "success": True,
+                    "message": f"드레스 '{file_name}'가 성공적으로 삭제되었습니다.",
+                    "data": {
+                        "dress_id": dress_id,
+                        "file_name": file_name,
+                        "image_deleted": s3_deleted
+                    }
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"드레스 삭제 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+@app.get("/api/admin/dresses/export", tags=["드레스 관리"])
+async def export_dresses(format: str = Query("json", description="내보내기 형식 (json, csv)")):
+    """
+    드레스 테이블 정보 내보내기
+    
+    Args:
+        format: 내보내기 형식 (json 또는 csv)
+    
+    Returns:
+        CSV 또는 JSON 형식의 파일 다운로드
+    """
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT idx as id, dress_name, file_name, style, url
+                    FROM dresses
+                    ORDER BY idx DESC
+                """)
+                dresses = cursor.fetchall()
+                
+                if format.lower() == "csv":
+                    # CSV 형식으로 내보내기
+                    output = io.StringIO()
+                    writer = csv.DictWriter(output, fieldnames=["id", "dress_name", "file_name", "style", "url"])
+                    writer.writeheader()
+                    writer.writerows(dresses)
+                    
+                    csv_content = output.getvalue()
+                    
+                    return Response(
+                        content=csv_content,
+                        media_type="text/csv; charset=utf-8",
+                        headers={
+                            "Content-Disposition": f"attachment; filename=dresses_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                        }
+                    )
+                else:
+                    # JSON 형식으로 내보내기
+                    json_content = json.dumps(dresses, ensure_ascii=False, indent=2)
+                    
+                    return Response(
+                        content=json_content,
+                        media_type="application/json; charset=utf-8",
+                        headers={
+                            "Content-Disposition": f"attachment; filename=dresses_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                        }
+                    )
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"데이터 내보내기 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+@app.post("/api/admin/dresses/import", tags=["드레스 관리"])
+async def import_dresses(file: UploadFile = File(...)):
+    """
+    드레스 테이블 정보 가져오기
+    
+    Args:
+        file: 업로드할 JSON 또는 CSV 파일
+    
+    Returns:
+        가져오기 결과 (성공/실패 개수)
+    """
+    try:
+        # 파일 내용 읽기
+        file_content = await file.read()
+        file_name = file.filename.lower()
+        
+        # 파일 확장자 확인
+        if file_name.endswith('.json'):
+            # JSON 파싱
+            try:
+                data = json.loads(file_content.decode('utf-8'))
+            except json.JSONDecodeError as e:
+                return JSONResponse({
+                    "success": False,
+                    "error": "Invalid JSON",
+                    "message": f"JSON 파싱 오류: {str(e)}"
+                }, status_code=400)
+        elif file_name.endswith('.csv'):
+            # CSV 파싱
+            try:
+                csv_content = file_content.decode('utf-8')
+                csv_reader = csv.DictReader(io.StringIO(csv_content))
+                data = list(csv_reader)
+            except Exception as e:
+                return JSONResponse({
+                    "success": False,
+                    "error": "Invalid CSV",
+                    "message": f"CSV 파싱 오류: {str(e)}"
+                }, status_code=400)
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": "Unsupported file type",
+                "message": "지원하는 파일 형식은 JSON 또는 CSV입니다."
+            }, status_code=400)
+        
+        if not data:
+            return JSONResponse({
+                "success": False,
+                "error": "Empty file",
+                "message": "파일이 비어있습니다."
+            }, status_code=400)
+        
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        success_count = 0
+        fail_count = 0
+        results = []
+        
+        try:
+            with connection.cursor() as cursor:
+                for row in data:
+                    try:
+                        # 데이터 추출 (id는 무시, 자동 증가)
+                        dress_name = row.get('dress_name') or row.get('dressName')
+                        file_name = row.get('file_name') or row.get('fileName')
+                        style = row.get('style')
+                        url = row.get('url')
+                        
+                        # 필수 필드 확인
+                        if not all([dress_name, file_name, style]):
+                            results.append({
+                                "row": row,
+                                "success": False,
+                                "error": "필수 필드가 누락되었습니다 (dress_name, file_name, style 필요)"
+                            })
+                            fail_count += 1
+                            continue
+                        
+                        # dress_name 중복 체크
+                        cursor.execute("SELECT idx FROM dresses WHERE dress_name = %s", (dress_name,))
+                        if cursor.fetchone():
+                            results.append({
+                                "row": row,
+                                "success": False,
+                                "error": f"드레스명 '{dress_name}'이 이미 존재합니다."
+                            })
+                            fail_count += 1
+                            continue
+                        
+                        # file_name 중복 체크
+                        cursor.execute("SELECT idx FROM dresses WHERE file_name = %s", (file_name,))
+                        if cursor.fetchone():
+                            results.append({
+                                "row": row,
+                                "success": False,
+                                "error": f"파일명 '{file_name}'이 이미 존재합니다."
+                            })
+                            fail_count += 1
+                            continue
+                        
+                        # URL이 없으면 기본값 생성
+                        if not url:
+                            url = f"/images/{file_name}"
+                        
+                        # 삽입
+                        try:
+                            cursor.execute(
+                                "INSERT INTO dresses (dress_name, file_name, style, url) VALUES (%s, %s, %s, %s)",
+                                (dress_name, file_name, style, url)
+                            )
+                            connection.commit()
+                            
+                            results.append({
+                                "row": row,
+                                "success": True,
+                                "dress_name": dress_name
+                            })
+                            success_count += 1
+                        except pymysql.IntegrityError as e:
+                            # UNIQUE 제약 조건 위반 처리
+                            if "dress_name" in str(e).lower() or "Duplicate entry" in str(e):
+                                results.append({
+                                    "row": row,
+                                    "success": False,
+                                    "error": f"드레스명 '{dress_name}'이 이미 존재합니다."
+                                })
+                                fail_count += 1
+                                continue
+                            raise
+                    except Exception as e:
+                        results.append({
+                            "row": row,
+                            "success": False,
+                            "error": str(e)
+                        })
+                        fail_count += 1
+                        continue
+            
+            return JSONResponse({
+                "success": True,
+                "summary": {
+                    "total": len(data),
+                    "success": success_count,
+                    "failed": fail_count
+                },
+                "results": results,
+                "message": f"{success_count}개 항목 추가 완료, {fail_count}개 실패"
+            })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"데이터 가져오기 중 오류 발생: {str(e)}"
         }, status_code=500)
 
 @app.get("/admin/dress-insert", response_class=HTMLResponse, tags=["관리자"])

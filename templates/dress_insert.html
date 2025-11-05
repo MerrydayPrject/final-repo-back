@@ -1,1 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>드레스 이미지 삽입 관리자 페이지</title>
+    <link rel="stylesheet" href="/static/dress_insert.css">
+</head>
+<body>
+    <div class="insert-container">
+        <header class="insert-header">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h1 style="margin: 0;">➕ 드레스 이미지 삽입</h1>
+                <div>
+                    <a href="/" class="btn-home">🏠 홈으로</a>
+                    <a href="/admin/dress-manage" class="btn-back">👗 드레스 관리</a>
+                </div>
+            </div>
+            <p class="subtitle">드레스 이미지를 드래그 & 드롭하여 업로드하고 데이터베이스에 추가합니다</p>
+        </header>
 
+        <!-- 카테고리 규칙 관리 섹션 -->
+        <section class="rules-section">
+            <div class="section-header">
+                <h2>📝 카테고리 규칙 관리</h2>
+                <button class="btn-refresh-rules" id="refresh-rules-btn">🔄 새로고침</button>
+            </div>
+            <div class="rules-container">
+                <div class="rules-list" id="rules-list">
+                    <div class="loading-placeholder">규칙을 불러오는 중...</div>
+                </div>
+                <div class="add-rule-form">
+                    <h3>새 규칙 추가</h3>
+                    <div class="form-group">
+                        <label for="rule-prefix">접두사:</label>
+                        <input type="text" id="rule-prefix" class="form-input" placeholder="예: A, Mini, B, P">
+                        <small class="form-hint">이미지명 앞에 오는 문자 (예: A로 시작하면 A라인)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="rule-style">스타일:</label>
+                        <input type="text" id="rule-style" class="form-input" placeholder="예: A라인, 미니드레스">
+                        <small class="form-hint">감지된 스타일 이름</small>
+                    </div>
+                    <button class="btn-add-rule" id="add-rule-btn">➕ 규칙 추가</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 드래그 & 드롭 영역 -->
+        <section class="upload-section">
+            <div class="upload-area" id="upload-area">
+                <div class="upload-icon">📤</div>
+                <p class="upload-text">이미지를 드래그하거나 클릭하여 업로드하세요</p>
+                <p class="upload-hint">여러 이미지를 한 번에 업로드할 수 있습니다</p>
+                <input type="file" id="file-input" accept="image/*" multiple hidden>
+                <button class="upload-button" id="upload-button">이미지 선택</button>
+            </div>
+            <div class="info-bar" id="info-bar"></div>
+        </section>
+
+        <!-- 이미지 미리보기 및 스타일 선택 섹션 -->
+        <section class="images-section" id="images-section" style="display: none;">
+            <div class="section-header">
+                <h2>📋 업로드된 이미지</h2>
+                <div class="selection-info">
+                    <span id="selected-count">선택됨: 0개</span>
+                    <label class="select-all-label">
+                        <input type="checkbox" id="select-all"> 전체 선택
+                    </label>
+                </div>
+            </div>
+            <div class="images-grid" id="images-grid">
+                <!-- 동적으로 생성됨 -->
+            </div>
+            <div class="upload-actions">
+                <button class="btn-upload-all" id="upload-all-btn" disabled>📤 선택된 이미지 업로드</button>
+                <button class="btn-clear-all" id="clear-all-btn">🗑️ 모두 지우기</button>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/dress_insert.js"></script>
+</body>
+</html>

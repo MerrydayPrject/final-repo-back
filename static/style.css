@@ -290,6 +290,119 @@ footer a:hover {
     text-decoration: underline;
 }
 
+/* Admin Navigation */
+.admin-navigation {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.admin-navigation h3 {
+    color: #667eea;
+    margin-bottom: 15px;
+    font-size: 1.2em;
+}
+
+.admin-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.admin-btn {
+    display: inline-block;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.admin-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+    text-decoration: none;
+}
+
+/* Test Pages Section */
+.test-pages-section {
+    padding: 40px 30px;
+}
+
+.test-pages-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.test-page-card {
+    display: block;
+    background: white;
+    border-radius: 16px;
+    padding: 40px 30px;
+    text-align: center;
+    text-decoration: none;
+    color: #333;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border: 2px solid transparent;
+}
+
+.test-page-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+    border-color: #667eea;
+    text-decoration: none;
+    color: #333;
+}
+
+.test-page-icon {
+    font-size: 4em;
+    margin-bottom: 20px;
+}
+
+.test-page-card h2 {
+    color: #667eea;
+    font-size: 1.5em;
+    margin-bottom: 15px;
+    font-weight: 700;
+}
+
+.test-page-card p {
+    color: #666;
+    font-size: 1em;
+    line-height: 1.6;
+}
+
+/* Home Button */
+.btn-home {
+    display: inline-block;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95em;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.btn-home:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+    text-decoration: none;
+    color: white;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     header h1 {
@@ -316,6 +429,23 @@ footer a:hover {
     .reset-button {
         width: 100%;
         justify-content: center;
+    }
+
+    .test-pages-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .test-page-card {
+        padding: 30px 20px;
+    }
+
+    .test-page-icon {
+        font-size: 3em;
+    }
+
+    .test-page-card h2 {
+        font-size: 1.3em;
     }
 }
 

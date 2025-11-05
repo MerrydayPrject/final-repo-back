@@ -11,19 +11,43 @@ function setupEventListeners() {
     const clearFormBtn = document.getElementById('clear-form-btn');
     const refreshBtn = document.getElementById('refresh-btn');
 
-    // 이미지명 입력 시 스타일 자동 감지
-    imageNameInput.addEventListener('input', handleImageNameChange);
+    // 이미지명 입력 시 스타일 자동 감지 (요소가 존재하는 경우에만)
+    if (imageNameInput) {
+        imageNameInput.addEventListener('input', handleImageNameChange);
+    }
 
-    // 드레스 추가 버튼
-    addDressBtn.addEventListener('click', handleAddDress);
+    // 드레스 추가 버튼 (요소가 존재하는 경우에만)
+    if (addDressBtn) {
+        addDressBtn.addEventListener('click', handleAddDress);
+    }
 
-    // 폼 초기화 버튼
-    clearFormBtn.addEventListener('click', clearForm);
+    // 폼 초기화 버튼 (요소가 존재하는 경우에만)
+    if (clearFormBtn) {
+        clearFormBtn.addEventListener('click', clearForm);
+    }
 
     // 새로고침 버튼
-    refreshBtn.addEventListener('click', () => {
-        loadDresses();
-    });
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            loadDresses();
+        });
+    }
+
+    // DB 정보 내보내기 버튼
+    const exportBtn = document.getElementById('export-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', handleExportData);
+    }
+
+    // DB 정보 가져오기 버튼
+    const importBtn = document.getElementById('import-btn');
+    const importFileInput = document.getElementById('import-file-input');
+    if (importBtn && importFileInput) {
+        importBtn.addEventListener('click', () => {
+            importFileInput.click();
+        });
+        importFileInput.addEventListener('change', handleImportData);
+    }
 }
 
 // 이미지명 입력 시 스타일 감지
@@ -31,6 +55,10 @@ function handleImageNameChange(e) {
     const imageName = e.target.value.trim();
     const styleDisplay = document.getElementById('style-display');
     const addDressBtn = document.getElementById('add-dress-btn');
+
+    if (!styleDisplay || !addDressBtn) {
+        return;
+    }
 
     if (!imageName) {
         styleDisplay.value = '';
@@ -97,11 +125,11 @@ async function loadDresses() {
             renderDresses(data.data);
             totalCount.textContent = `총 ${data.total}개`;
         } else {
-            tbody.innerHTML = `<tr><td colspan="4" class="loading" style="color: #ef4444;">${data.message || '드레스 목록을 불러오는 중 오류가 발생했습니다.'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="loading" style="color: #ef4444;">${data.message || '드레스 목록을 불러오는 중 오류가 발생했습니다.'}</td></tr>`;
         }
     } catch (error) {
         console.error('드레스 목록 로드 오류:', error);
-        tbody.innerHTML = '<tr><td colspan="4" class="loading" style="color: #ef4444;">드레스 목록을 불러오는 중 오류가 발생했습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="loading" style="color: #ef4444;">드레스 목록을 불러오는 중 오류가 발생했습니다.</td></tr>';
     }
 }
 
@@ -110,7 +138,7 @@ function renderDresses(dresses) {
     const tbody = document.getElementById('dresses-tbody');
 
     if (dresses.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="loading">등록된 드레스가 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="loading">등록된 드레스가 없습니다.</td></tr>';
         return;
     }
 
@@ -132,6 +160,15 @@ function renderDresses(dresses) {
                         loading="lazy"
                     >
                 </td>
+                <td class="action-cell">
+                    <button 
+                        class="btn-delete" 
+                        onclick="handleDeleteDress(${dress.id}, '${dress.image_name.replace(/'/g, "\\'")}')"
+                        title="삭제"
+                    >
+                        🗑️ 삭제
+                    </button>
+                </td>
             </tr>
         `;
     }).join('');
@@ -152,6 +189,10 @@ async function handleAddDress() {
     const styleDisplay = document.getElementById('style-display');
     const addDressBtn = document.getElementById('add-dress-btn');
     const messageBar = document.getElementById('add-message');
+
+    if (!imageNameInput || !styleDisplay || !addDressBtn) {
+        return;
+    }
 
     const imageName = imageNameInput.value.trim();
     const style = styleDisplay.value;
@@ -194,11 +235,15 @@ async function handleAddDress() {
                 loadDresses();
             }, 500);
         } else {
-            showMessage(data.message || '드레스 추가 중 오류가 발생했습니다.', 'error');
+            const errorMessage = data.message || '드레스 추가 중 오류가 발생했습니다.';
+            alert(`❌ 드레스 추가 실패\n\n${errorMessage}`);
+            showMessage(errorMessage, 'error');
         }
     } catch (error) {
         console.error('드레스 추가 오류:', error);
-        showMessage('드레스 추가 중 오류가 발생했습니다.', 'error');
+        const errorMessage = '드레스 추가 중 오류가 발생했습니다.';
+        alert(`❌ 드레스 추가 실패\n\n${errorMessage}`);
+        showMessage(errorMessage, 'error');
     } finally {
         addDressBtn.disabled = false;
         addDressBtn.textContent = '추가';
@@ -212,6 +257,10 @@ function clearForm() {
     const addDressBtn = document.getElementById('add-dress-btn');
     const messageBar = document.getElementById('add-message');
 
+    if (!imageNameInput || !styleDisplay || !addDressBtn) {
+        return;
+    }
+
     imageNameInput.value = '';
     styleDisplay.value = '';
     styleDisplay.classList.remove('valid', 'invalid');
@@ -222,6 +271,10 @@ function clearForm() {
 // 메시지 표시
 function showMessage(message, type) {
     const messageBar = document.getElementById('add-message');
+    if (!messageBar) {
+        console.log(`[${type}] ${message}`);
+        return;
+    }
     messageBar.textContent = message;
     messageBar.className = `message-bar ${type} show`;
 }
@@ -229,7 +282,154 @@ function showMessage(message, type) {
 // 메시지 숨기기
 function hideMessage() {
     const messageBar = document.getElementById('add-message');
+    if (!messageBar) {
+        return;
+    }
     messageBar.classList.remove('show');
+}
+
+// 드레스 삭제
+async function handleDeleteDress(dressId, imageName) {
+    if (!confirm(`정말로 드레스 '${imageName}'을(를) 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, S3의 이미지와 데이터베이스의 레코드가 모두 삭제됩니다.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/admin/dresses/${dressId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // 성공 메시지 표시
+            alert(data.message || '드레스가 성공적으로 삭제되었습니다.');
+            // 목록 새로고침
+            loadDresses();
+        } else {
+            alert(data.message || '드레스 삭제 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('드레스 삭제 오류:', error);
+        alert('드레스 삭제 중 오류가 발생했습니다.');
+    }
+}
+
+// DB 정보 가져오기
+async function handleImportData(e) {
+    const file = e.target.files[0];
+    if (!file) {
+        return;
+    }
+    
+    // 파일 형식 확인
+    const fileName = file.name.toLowerCase();
+    if (!fileName.endsWith('.json') && !fileName.endsWith('.csv')) {
+        alert('❌ 파일 형식 오류\n\n지원하는 파일 형식은 JSON 또는 CSV입니다.');
+        e.target.value = '';
+        return;
+    }
+    
+    if (!confirm(`파일 "${file.name}"을(를) 가져오시겠습니까?\n\n중복된 항목은 자동으로 건너뜁니다.`)) {
+        e.target.value = '';
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('/api/admin/dresses/import', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const summary = data.summary;
+            const failedResults = data.results.filter(r => !r.success);
+            
+            let message = `✅ 가져오기 완료\n\n`;
+            message += `총: ${summary.total}개\n`;
+            message += `성공: ${summary.success}개\n`;
+            message += `실패: ${summary.failed}개`;
+            
+            if (failedResults.length > 0) {
+                const errorMessages = failedResults.slice(0, 5).map(r => {
+                    const dressName = r.row.dress_name || r.row.dressName || '알 수 없음';
+                    return `• ${dressName}: ${r.error || '가져오기 실패'}`;
+                }).join('\n');
+                
+                if (failedResults.length > 5) {
+                    message += `\n\n실패한 항목 (최대 5개):\n${errorMessages}\n...`;
+                } else {
+                    message += `\n\n실패한 항목:\n${errorMessages}`;
+                }
+            }
+            
+            alert(message);
+            
+            // 목록 새로고침
+            setTimeout(() => {
+                loadDresses();
+            }, 500);
+        } else {
+            alert(`❌ 가져오기 실패\n\n${data.message || '데이터 가져오기 중 오류가 발생했습니다.'}`);
+        }
+    } catch (error) {
+        console.error('가져오기 오류:', error);
+        alert('❌ 가져오기 실패\n\n데이터 가져오기 중 오류가 발생했습니다.');
+    } finally {
+        e.target.value = '';
+    }
+}
+
+// DB 정보 내보내기
+async function handleExportData() {
+    // 형식 선택
+    const format = confirm('JSON 형식으로 내보내시겠습니까?\n\n확인: JSON\n취소: CSV') ? 'json' : 'csv';
+    
+    try {
+        const response = await fetch(`/api/admin/dresses/export?format=${format}`);
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: '내보내기 실패' }));
+            alert(`❌ 내보내기 실패\n\n${errorData.message || '데이터 내보내기 중 오류가 발생했습니다.'}`);
+            return;
+        }
+        
+        // 파일 다운로드
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // Content-Disposition 헤더에서 파일명 추출
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = `dresses_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${format}`;
+        
+        if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            if (filenameMatch && filenameMatch[1]) {
+                filename = filenameMatch[1].replace(/['"]/g, '');
+            }
+        }
+        
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        alert(`✅ 내보내기 완료\n\n파일명: ${filename}`);
+    } catch (error) {
+        console.error('내보내기 오류:', error);
+        alert('❌ 내보내기 실패\n\n데이터 내보내기 중 오류가 발생했습니다.');
+    }
 }
 
 // HTML 이스케이프
