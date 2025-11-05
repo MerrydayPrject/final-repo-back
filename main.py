@@ -24,6 +24,8 @@ from dotenv import load_dotenv
 import json
 import boto3
 from botocore.exceptions import ClientError
+import requests
+from urllib.parse import urlparse, unquote
 
 # .env 파일 로드
 load_dotenv()
@@ -1821,6 +1823,397 @@ async def dress_insert_page(request: Request):
     드레스 이미지 삽입 관리자 페이지
     """
     return templates.TemplateResponse("dress_insert.html", {"request": request})
+
+# ===================== 관리자 로그 API =====================
+
+@app.get("/api/admin/stats", tags=["관리자"])
+async def get_admin_stats():
+    """
+    관리자 통계 정보 조회
+    
+    result_logs 테이블에서 통계 정보를 조회합니다.
+    
+    Returns:
+        JSONResponse: 전체, 성공, 실패, 성공률, 평균 처리 시간, 오늘 건수
+    """
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 전체 건수
+                cursor.execute("SELECT COUNT(*) as total FROM result_logs")
+                total = cursor.fetchone()['total']
+                
+                # 성공 건수
+                cursor.execute("SELECT COUNT(*) as success FROM result_logs WHERE success = TRUE")
+                success = cursor.fetchone()['success']
+                
+                # 실패 건수
+                cursor.execute("SELECT COUNT(*) as failed FROM result_logs WHERE success = FALSE")
+                failed = cursor.fetchone()['failed']
+                
+                # 평균 처리 시간
+                cursor.execute("SELECT AVG(run_time) as avg_time FROM result_logs")
+                avg_time_result = cursor.fetchone()
+                avg_time = avg_time_result['avg_time'] if avg_time_result['avg_time'] else 0.0
+                
+                # 오늘 건수 (created_at 필드가 있으면 사용, 없으면 전체 건수로 대체)
+                today = 0
+                try:
+                    cursor.execute("""
+                        SELECT COUNT(*) as today 
+                        FROM result_logs 
+                        WHERE DATE(created_at) = CURDATE()
+                    """)
+                    today = cursor.fetchone()['today']
+                except Exception as e:
+                    # created_at 필드가 없으면 오늘 건수를 0으로 설정
+                    print(f"created_at 필드 없음, 오늘 건수 조회 건너뜀: {e}")
+                    today = 0
+                
+                # 성공률 계산
+                success_rate = round((success / total * 100), 2) if total > 0 else 0.0
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": {
+                        "total": total,
+                        "success": success,
+                        "failed": failed,
+                        "success_rate": success_rate,
+                        "average_processing_time": round(avg_time, 2),
+                        "today": today
+                    }
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"통계 조회 오류: {error_detail}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "error_detail": error_detail,
+            "message": f"통계 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+@app.get("/api/admin/logs", tags=["관리자"])
+async def get_admin_logs(
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수"),
+    model: Optional[str] = Query(None, description="모델명으로 검색")
+):
+    """
+    관리자 로그 목록 조회
+    
+    result_logs 테이블에서 로그 목록을 조회합니다.
+    
+    Args:
+        page: 페이지 번호 (기본값: 1)
+        limit: 페이지당 항목 수 (기본값: 20, 최대: 100)
+        model: 모델명으로 검색 (선택사항)
+    
+    Returns:
+        JSONResponse: 로그 목록 및 페이지네이션 정보
+    """
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 검색 조건에 따른 WHERE 절 생성
+                where_clause = ""
+                params = []
+                
+                if model:
+                    where_clause = "WHERE model LIKE %s"
+                    params.append(f"%{model}%")
+                
+                # 전체 건수 조회
+                count_query = f"SELECT COUNT(*) as total FROM result_logs {where_clause}"
+                cursor.execute(count_query, params)
+                total = cursor.fetchone()['total']
+                
+                # 총 페이지 수 계산
+                total_pages = (total + limit - 1) // limit if total > 0 else 0
+                
+                # 오프셋 계산
+                offset = (page - 1) * limit
+                
+                # 로그 목록 조회
+                query = f"""
+                    SELECT 
+                        idx as id,
+                        model,
+                        run_time,
+                        result_url
+                    FROM result_logs
+                    {where_clause}
+                    ORDER BY idx DESC
+                    LIMIT %s OFFSET %s
+                """
+                query_params = params + [limit, offset]
+                cursor.execute(query, query_params)
+                
+                logs = cursor.fetchall()
+                
+                # 데이터 형식 변환
+                for log in logs:
+                    log['processing_time'] = log['run_time']
+                    log['model_name'] = log['model']
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": logs,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total,
+                        "total_pages": total_pages
+                    }
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"로그 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+@app.get("/api/admin/logs/{log_id}", tags=["관리자"])
+async def get_admin_log_detail(log_id: int):
+    """
+    관리자 로그 상세 정보 조회
+    
+    특정 로그의 상세 정보를 조회합니다.
+    
+    Args:
+        log_id: 로그 ID (idx)
+    
+    Returns:
+        JSONResponse: 로그 상세 정보 (result_url 포함)
+    """
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # created_at 필드 포함해서 쿼리 시도 (없으면 제외)
+                try:
+                    cursor.execute("""
+                        SELECT 
+                            idx as id,
+                            person_url,
+                            dress_url,
+                            result_url,
+                            model,
+                            prompt,
+                            success,
+                            run_time,
+                            COALESCE(DATE_FORMAT(created_at, '%%Y-%%m-%%d %%H:%%i:%%s'), '') as created_at
+                        FROM result_logs
+                        WHERE idx = %s
+                    """, (log_id,))
+                except Exception as e:
+                    # created_at 필드가 없으면 다시 쿼리 (없이)
+                    print(f"created_at 필드 포함 쿼리 실패, 재시도: {e}")
+                    cursor.execute("""
+                        SELECT 
+                            idx as id,
+                            person_url,
+                            dress_url,
+                            result_url,
+                            model,
+                            prompt,
+                            success,
+                            run_time
+                        FROM result_logs
+                        WHERE idx = %s
+                    """, (log_id,))
+                
+                log = cursor.fetchone()
+                
+                if not log:
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Log not found",
+                        "message": f"로그 ID {log_id}를 찾을 수 없습니다."
+                    }, status_code=404)
+                
+                # 데이터 형식 변환 및 안전 처리
+                # None 값을 빈 문자열로 변환
+                result_data = {
+                    'id': log.get('id') or 0,
+                    'person_url': log.get('person_url') or '',
+                    'dress_url': log.get('dress_url') or '',
+                    'result_url': log.get('result_url') or '',
+                    'model': log.get('model') or '',
+                    'model_name': log.get('model') or '',
+                    'prompt': log.get('prompt') or '',
+                    'success': log.get('success', False),
+                    'run_time': log.get('run_time') or 0.0,
+                    'processing_time': log.get('run_time') or 0.0,
+                    'created_at': log.get('created_at') or ''
+                }
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": result_data
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"로그 상세 조회 오류: {error_detail}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "error_detail": error_detail,
+            "message": f"로그 상세 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+@app.get("/api/admin/s3-image-proxy", tags=["관리자"])
+async def get_s3_image_proxy(url: str = Query(..., description="S3 이미지 URL")):
+    """
+    S3 이미지 프록시 엔드포인트
+    
+    CORS 문제를 우회하기 위해 백엔드에서 S3 이미지를 다운로드하여 제공합니다.
+    
+    Args:
+        url: S3 이미지 URL
+    
+    Returns:
+        Response: 이미지 바이너리 데이터
+    """
+    try:
+        # URL 디코딩
+        decoded_url = unquote(url)
+        
+        # S3 URL 검증
+        if not decoded_url.startswith('https://') or 's3' not in decoded_url.lower():
+            return JSONResponse({
+                "success": False,
+                "error": "Invalid URL",
+                "message": "유효하지 않은 S3 URL입니다."
+            }, status_code=400)
+        
+        # S3에서 이미지 다운로드
+        # S3 버킷이 공개되어 있지 않으면 AWS 자격 증명 사용
+        aws_access_key = os.getenv("LOGS_AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("LOGS_AWS_SECRET_ACCESS_KEY")
+        
+        if aws_access_key and aws_secret_key:
+            # boto3를 사용하여 S3에서 직접 다운로드
+            try:
+                bucket_name = os.getenv("LOGS_AWS_S3_BUCKET_NAME")
+                region = os.getenv("LOGS_AWS_REGION", "ap-northeast-2")
+                
+                # URL에서 S3 키 추출
+                # 예: https://bucket.s3.region.amazonaws.com/logs/file.png
+                parsed_url = urlparse(decoded_url)
+                
+                # S3 URL 형식 확인
+                # 형식 1: https://bucket.s3.region.amazonaws.com/path
+                # 형식 2: https://s3.region.amazonaws.com/bucket/path
+                if bucket_name in parsed_url.netloc:
+                    # 형식 1: bucket.s3.region.amazonaws.com
+                    s3_key = parsed_url.path.lstrip('/')
+                elif parsed_url.netloc.startswith('s3.'):
+                    # 형식 2: s3.region.amazonaws.com/bucket/path
+                    path_parts = parsed_url.path.lstrip('/').split('/', 1)
+                    if path_parts[0] == bucket_name and len(path_parts) > 1:
+                        s3_key = path_parts[1]
+                    else:
+                        s3_key = parsed_url.path.lstrip('/')
+                else:
+                    # 기본: 경로에서 버킷명 제거
+                    s3_key = parsed_url.path.lstrip('/')
+                    if s3_key.startswith(bucket_name + '/'):
+                        s3_key = s3_key[len(bucket_name) + 1:]
+                
+                s3_client = boto3.client(
+                    's3',
+                    aws_access_key_id=aws_access_key,
+                    aws_secret_access_key=aws_secret_key,
+                    region_name=region
+                )
+                
+                # S3에서 객체 가져오기
+                response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+                image_data = response['Body'].read()
+                content_type = response.get('ContentType', 'image/png')
+                
+                return Response(
+                    content=image_data,
+                    media_type=content_type,
+                    headers={
+                        "Cache-Control": "public, max-age=3600",
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                )
+            except Exception as e:
+                print(f"S3 직접 다운로드 실패, HTTP 요청 시도: {e}")
+        
+        # boto3 실패 시 HTTP 요청으로 시도
+        headers = {}
+        if aws_access_key and aws_secret_key:
+            # AWS 서명이 필요한 경우는 boto3만 사용 가능
+            pass
+        
+        response = requests.get(decoded_url, timeout=10, headers=headers)
+        response.raise_for_status()
+        
+        content_type = response.headers.get('Content-Type', 'image/png')
+        
+        return Response(
+            content=response.content,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "Access-Control-Allow-Origin": "*"
+            }
+        )
+        
+    except requests.exceptions.RequestException as e:
+        return JSONResponse({
+            "success": False,
+            "error": "Image download failed",
+            "message": f"이미지 다운로드 실패: {str(e)}"
+        }, status_code=500)
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"S3 이미지 프록시 오류: {error_detail}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"이미지 프록시 중 오류 발생: {str(e)}"
+        }, status_code=500)
 
 @app.get("/admin", response_class=HTMLResponse, tags=["관리자"])
 async def admin_page(request: Request):

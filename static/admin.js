@@ -1,11 +1,21 @@
 // 전역 변수
 let currentPage = 1;
 const itemsPerPage = 20;
+let currentSearchModel = null;
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', () => {
-    loadStats();
     loadLogs(currentPage);
+    
+    // 검색 입력 필드에 Enter 키 이벤트 추가
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleSearch();
+            }
+        });
+    }
 });
 
 // 통계 로드
@@ -29,14 +39,20 @@ async function loadStats() {
 }
 
 // 로그 목록 로드
-async function loadLogs(page) {
+async function loadLogs(page, model = null) {
     try {
-        const response = await fetch(`/api/admin/logs?page=${page}&limit=${itemsPerPage}`);
+        let url = `/api/admin/logs?page=${page}&limit=${itemsPerPage}`;
+        if (model && model.trim() !== '') {
+            url += `&model=${encodeURIComponent(model.trim())}`;
+        }
+        
+        const response = await fetch(url);
         const data = await response.json();
         
         if (data.success) {
             renderLogs(data.data);
             renderPagination(data.pagination);
+            updateLogsCount(data.pagination.total);
             currentPage = page;
         } else {
             showError('로그를 불러오는 중 오류가 발생했습니다.');
@@ -44,7 +60,49 @@ async function loadLogs(page) {
     } catch (error) {
         console.error('로그 로드 오류:', error);
         document.getElementById('logs-tbody').innerHTML = 
-            '<tr><td colspan="7" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+            '<tr><td colspan="4" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+    }
+}
+
+// 검색 처리
+function handleSearch() {
+    const searchInput = document.getElementById('search-input');
+    const searchValue = searchInput ? searchInput.value.trim() : '';
+    const clearButton = document.getElementById('search-clear-button');
+    
+    currentSearchModel = searchValue || null;
+    currentPage = 1; // 검색 시 첫 페이지로 이동
+    
+    // 검색어가 있으면 초기화 버튼 표시
+    if (clearButton) {
+        clearButton.style.display = searchValue ? 'inline-block' : 'none';
+    }
+    
+    loadLogs(currentPage, currentSearchModel);
+}
+
+// 검색 초기화
+function clearSearch() {
+    const searchInput = document.getElementById('search-input');
+    const clearButton = document.getElementById('search-clear-button');
+    
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    if (clearButton) {
+        clearButton.style.display = 'none';
+    }
+    
+    currentSearchModel = null;
+    currentPage = 1;
+    loadLogs(currentPage);
+}
+
+// 로그 갯수 업데이트
+function updateLogsCount(count) {
+    const logsCountElement = document.getElementById('logs-count');
+    if (logsCountElement) {
+        logsCountElement.textContent = count;
     }
 }
 
@@ -53,23 +111,41 @@ function renderLogs(logs) {
     const tbody = document.getElementById('logs-tbody');
     
     if (logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="loading">로그가 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="loading">로그가 없습니다.</td></tr>';
         return;
     }
     
-    tbody.innerHTML = logs.map(log => `
+    tbody.innerHTML = logs.map(log => {
+        // 백엔드에서 반환하는 필드명 그대로 사용
+        // 백엔드: idx as id, model, run_time, result_url
+        const id = log.id !== undefined ? log.id : '-';
+        const model = log.model !== undefined ? log.model : '-';
+        const runTime = log.run_time !== undefined ? log.run_time : null;
+        const resultUrl = log.result_url !== undefined ? log.result_url : '';
+        
+        // 처리 시간 포맷팅 (숫자일 경우 소수점 2자리까지)
+        let timeDisplay = '-';
+        if (runTime !== null && runTime !== undefined) {
+            if (typeof runTime === 'number') {
+                timeDisplay = runTime.toFixed(2) + '초';
+            } else {
+                timeDisplay = String(runTime);
+            }
+        }
+        
+        return `
         <tr>
-            <td>${log.id}</td>
-            <td>${formatDateTime(log.created_at)}</td>
-            <td>${log.model_name}</td>
-            <td>${log.api_name}</td>
-            <td>${renderStatusBadge(log.success)}</td>
-            <td>${log.processing_time ? log.processing_time.toFixed(2) + '초' : '-'}</td>
+            <td>${id}</td>
+            <td>${model}</td>
+            <td>${timeDisplay}</td>
             <td>
-                <button class="btn-detail" onclick="showDetail(${log.id})">상세</button>
+                <button class="btn-detail-emoji" onclick="showDetail(${id})" title="상세보기">
+                    ${resultUrl ? '🖼️' : '❌'}
+                </button>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // 상태 배지 렌더링
@@ -90,13 +166,20 @@ function renderPagination(pagination) {
         return;
     }
     
-    let html = `
-        <button onclick="loadLogs(1)" ${pagination.page === 1 ? 'disabled' : ''}>처음</button>
-    `;
+    // 페이지네이션 버튼 생성 함수
+    const createPageButton = (pageNum, text, disabled = false, active = false) => {
+        if (disabled) {
+            return `<button disabled>${text}</button>`;
+        }
+        const activeClass = active ? ' class="active"' : '';
+        return `<button onclick="loadLogsWithSearch(${pageNum})"${activeClass}>${text}</button>`;
+    };
+    
+    let html = createPageButton(1, '처음', pagination.page === 1);
     
     // 이전 페이지
     if (pagination.page > 1) {
-        html += `<button onclick="loadLogs(${pagination.page - 1})">이전</button>`;
+        html += createPageButton(pagination.page - 1, '이전');
     }
     
     // 페이지 번호들
@@ -108,7 +191,7 @@ function renderPagination(pagination) {
     }
     
     for (let i = startPage; i <= endPage; i++) {
-        html += `<button onclick="loadLogs(${i})" class="${i === pagination.page ? 'active' : ''}">${i}</button>`;
+        html += createPageButton(i, i.toString(), false, i === pagination.page);
     }
     
     if (endPage < pagination.total_pages) {
@@ -117,16 +200,19 @@ function renderPagination(pagination) {
     
     // 다음 페이지
     if (pagination.page < pagination.total_pages) {
-        html += `<button onclick="loadLogs(${pagination.page + 1})">다음</button>`;
+        html += createPageButton(pagination.page + 1, '다음');
     }
     
-    html += `
-        <button onclick="loadLogs(${pagination.total_pages})" ${pagination.page === pagination.total_pages ? 'disabled' : ''}>마지막</button>
-    `;
+    html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
     
     html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
     
     paginationDiv.innerHTML = html;
+}
+
+// 검색어를 포함한 로그 로드 (페이지네이션용)
+function loadLogsWithSearch(page) {
+    loadLogs(page, currentSearchModel);
 }
 
 // 로그 상세 보기
@@ -151,67 +237,88 @@ async function showDetail(logId) {
 function renderDetailModal(log) {
     const modalBody = document.getElementById('modal-body');
     
-    const promptHtml = log.prompt ? `
-        <div class="detail-item">
-            <div class="detail-label">사용한 프롬프트</div>
-            <div class="detail-prompt">${escapeHtml(log.prompt)}</div>
-        </div>
-    ` : '';
-    
-    const resultImageHtml = log.result_image_path ? `
+    // result_url이 있으면 이미지 표시, 없으면 메시지 표시
+    const resultImageHtml = log.result_url ? `
         <div class="detail-item">
             <div class="detail-label">결과 이미지</div>
-            <div class="image-preview">
-                <img src="/${log.result_image_path}" alt="Result" loading="lazy">
+            <div class="image-preview-single">
+                <img 
+                    id="result-image" 
+                    src="/api/admin/s3-image-proxy?url=${encodeURIComponent(log.result_url)}" 
+                    alt="Result" 
+                    loading="lazy"
+                    onload="handleImageLoad(this);"
+                    onerror="handleImageError(this, '${escapeHtml(log.result_url)}');"
+                    style="opacity: 0; transition: opacity 0.3s;"
+                >
+                <div id="image-loading" style="text-align: center; padding: 20px; color: #666;">
+                    ⏳ 이미지를 불러오는 중...
+                </div>
+                <div id="image-error" style="display: none; text-align: center; padding: 20px; color: #ef4444;">
+                    ❌ 이미지를 불러올 수 없습니다
+                    <br><small style="color: #999; word-break: break-all;">${escapeHtml(log.result_url)}</small>
+                </div>
             </div>
         </div>
-    ` : '';
-    
-    const errorMessageHtml = log.error_message ? `
+    ` : `
         <div class="detail-item">
-            <div class="detail-label">에러 메시지</div>
-            <div class="detail-value" style="color: #ef4444;">${escapeHtml(log.error_message)}</div>
+            <div class="detail-label">결과 이미지</div>
+            <div class="detail-value" style="color: #ef4444; text-align: center; padding: 20px;">
+                ❌ 결과 이미지가 없습니다
+            </div>
         </div>
-    ` : '';
+    `;
     
     modalBody.innerHTML = `
         <div class="detail-grid">
-            <div class="detail-item">
-                <div class="detail-label">ID</div>
-                <div class="detail-value">${log.id}</div>
-            </div>
-            <div class="detail-item">
-                <div class="detail-label">매칭 일시</div>
-                <div class="detail-value">${formatDateTime(log.created_at)}</div>
-            </div>
-            <div class="detail-item">
-                <div class="detail-label">모델명</div>
-                <div class="detail-value">${escapeHtml(log.model_name)}</div>
-            </div>
-            <div class="detail-item">
-                <div class="detail-label">사용한 API</div>
-                <div class="detail-value">${escapeHtml(log.api_name)}</div>
-            </div>
-            <div class="detail-item">
-                <div class="detail-label">상태</div>
-                <div class="detail-value">${renderStatusBadge(log.success)}</div>
-            </div>
-            <div class="detail-item">
-                <div class="detail-label">처리 시간</div>
-                <div class="detail-value">${log.processing_time ? log.processing_time.toFixed(3) + '초' : '-'}</div>
-            </div>
-            ${promptHtml}
-            <div class="detail-item">
-                <div class="detail-label">입력 이미지</div>
-                <div class="image-preview">
-                    <img src="/${log.person_image_path}" alt="Person" loading="lazy">
-                    <img src="/${log.dress_image_path}" alt="Dress" loading="lazy">
-                </div>
-            </div>
             ${resultImageHtml}
-            ${errorMessageHtml}
         </div>
     `;
+    
+    // 이미지 로드 상태 확인
+    if (log.result_url) {
+        setTimeout(() => {
+            const img = document.getElementById('result-image');
+            const loading = document.getElementById('image-loading');
+            
+            if (img) {
+                // 이미지가 이미 로드되어 있으면 loading 숨기기
+                if (img.complete && img.naturalHeight !== 0) {
+                    if (loading) loading.style.display = 'none';
+                    img.style.opacity = '1';
+                } else {
+                    // 이미지 로딩 중 표시
+                    if (loading) loading.style.display = 'block';
+                }
+            }
+        }, 100);
+    }
+}
+
+// 이미지 로드 성공 처리
+function handleImageLoad(img) {
+    img.style.opacity = '1';
+    const loading = document.getElementById('image-loading');
+    if (loading) loading.style.display = 'none';
+}
+
+// 이미지 로드 오류 처리
+function handleImageError(img, url) {
+    img.style.display = 'none';
+    const loading = document.getElementById('image-loading');
+    const error = document.getElementById('image-error');
+    
+    if (loading) loading.style.display = 'none';
+    if (error) {
+        error.style.display = 'block';
+        // URL이 S3인 경우 CORS 문제일 수 있음을 표시
+        if (url && (url.includes('s3') || url.includes('amazonaws.com'))) {
+            const errorMsg = error.querySelector('small');
+            if (errorMsg) {
+                errorMsg.textContent = 'S3 이미지 로드 실패 (CORS 또는 네트워크 오류 가능)';
+            }
+        }
+    }
 }
 
 // 모달 열기

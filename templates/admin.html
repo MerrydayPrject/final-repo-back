@@ -8,82 +8,51 @@
 </head>
 <body>
     <div class="admin-container">
-        <header class="admin-header">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <h1 style="margin: 0;">🎨 옷 합성 시스템 관리</h1>
-                <a href="/" class="btn-home">🏠 홈으로</a>
-            </div>
-            <p class="subtitle">합성 로그 및 통계 확인</p>
-        </header>
-
-        <!-- 통계 대시보드 -->
-        <section class="stats-section">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon">📊</div>
-                    <div class="stat-content">
-                        <div class="stat-label">전체 합성</div>
-                        <div class="stat-value" id="stat-total">0</div>
-                    </div>
-                </div>
-                <div class="stat-card success">
-                    <div class="stat-icon">✅</div>
-                    <div class="stat-content">
-                        <div class="stat-label">성공</div>
-                        <div class="stat-value" id="stat-success">0</div>
-                    </div>
-                </div>
-                <div class="stat-card danger">
-                    <div class="stat-icon">❌</div>
-                    <div class="stat-content">
-                        <div class="stat-label">실패</div>
-                        <div class="stat-value" id="stat-failed">0</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">📈</div>
-                    <div class="stat-content">
-                        <div class="stat-label">성공률</div>
-                        <div class="stat-value" id="stat-success-rate">0%</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">⏱️</div>
-                    <div class="stat-content">
-                        <div class="stat-label">평균 처리 시간</div>
-                        <div class="stat-value" id="stat-avg-time">0초</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">📅</div>
-                    <div class="stat-content">
-                        <div class="stat-label">오늘</div>
-                        <div class="stat-value" id="stat-today">0</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         <!-- 로그 목록 -->
         <section class="logs-section">
-            <h2>📋 합성 로그 목록</h2>
+            <div class="logs-header">
+                <div class="logs-header-top">
+                    <h2>📋 합성 로그 목록</h2>
+                    <div class="logs-header-right">
+                        <div class="logs-count">
+                            <span class="logs-count-label">전체 합성:</span>
+                            <span class="logs-count-value" id="logs-count">0</span>
+                        </div>
+                        <a href="/" class="btn-home">🏠 홈으로</a>
+                    </div>
+                </div>
+                <div class="search-container">
+                    <div class="search-box">
+                        <input 
+                            type="text" 
+                            id="search-input" 
+                            class="search-input" 
+                            placeholder="모델명으로 검색..."
+                            autocomplete="off"
+                        >
+                        <button class="search-button" id="search-button" onclick="handleSearch()">
+                            🔍 검색
+                        </button>
+                        <button class="search-clear-button" id="search-clear-button" onclick="clearSearch()" style="display: none;">
+                            ✕ 초기화
+                        </button>
+                    </div>
+                </div>
+            </div>
             
             <div class="table-container">
                 <table class="logs-table">
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>매칭 일시</th>
                             <th>모델</th>
-                            <th>API</th>
-                            <th>상태</th>
                             <th>처리 시간</th>
-                            <th>작업</th>
+                            <th>상세보기</th>
                         </tr>
                     </thead>
                     <tbody id="logs-tbody">
                         <tr>
-                            <td colspan="7" class="loading">데이터를 불러오는 중...</td>
+                            <td colspan="4" class="loading">데이터를 불러오는 중...</td>
                         </tr>
                     </tbody>
                 </table>
