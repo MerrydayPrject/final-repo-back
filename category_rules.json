@@ -12,11 +12,19 @@
     "style": "벨라인"
   },
   {
-    "prefix": "P",
-    "style": "프린세스"
-  },
-  {
     "prefix": "K",
     "style": "한복"
+  },
+  {
+    "prefix": "M",
+    "style": "머메이드"
+  },
+  {
+    "prefix": "T",
+    "style": "트럼펫"
+  },
+  {
+    "prefix": "SN",
+    "style": "스퀘어넥"
   }
 ]

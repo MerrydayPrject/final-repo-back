@@ -1364,6 +1364,98 @@ async def upload_dresses(
             "message": f"업로드 중 오류 발생: {str(e)}"
         }, status_code=500)
 
+# ===================== S3 이미지 프록시 =====================
+
+def get_s3_image(file_name: str) -> Optional[bytes]:
+    """
+    S3에서 이미지 다운로드
+    
+    Args:
+        file_name: 파일명 (예: "Adress1.JPG")
+    
+    Returns:
+        이미지 바이트 데이터 또는 None (실패 시)
+    """
+    try:
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+        region = os.getenv("AWS_REGION", "ap-northeast-2")
+        
+        if not all([aws_access_key, aws_secret_key, bucket_name]):
+            print("AWS S3 설정이 완료되지 않았습니다.")
+            return None
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name=region
+        )
+        
+        # S3에서 파일 다운로드
+        s3_key = f"dresses/{file_name}"
+        try:
+            response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+            return response['Body'].read()
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                print(f"S3에 파일이 없습니다: {s3_key}")
+            else:
+                print(f"S3 다운로드 오류: {e}")
+            return None
+    except Exception as e:
+        print(f"S3 이미지 다운로드 중 예상치 못한 오류: {e}")
+        return None
+
+@app.get("/api/images/{file_name:path}", tags=["이미지 프록시"])
+async def proxy_s3_image(file_name: str):
+    """
+    S3 이미지를 프록시로 제공
+    
+    CORS 문제를 우회하기 위해 백엔드에서 S3 이미지를 다운로드하여 제공합니다.
+    
+    Args:
+        file_name: 이미지 파일명 (예: "Adress1.JPG")
+    
+    Returns:
+        이미지 파일 또는 404 에러
+    """
+    try:
+        image_data = get_s3_image(file_name)
+        
+        if not image_data:
+            return Response(
+                content="Image not found",
+                status_code=404,
+                media_type="text/plain"
+            )
+        
+        # 파일 확장자로 MIME 타입 결정
+        file_ext = Path(file_name).suffix.lower()
+        content_type_map = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp'
+        }
+        content_type = content_type_map.get(file_ext, 'image/jpeg')
+        
+        return Response(
+            content=image_data,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+    except Exception as e:
+        return Response(
+            content=f"Error: {str(e)}",
+            status_code=500,
+            media_type="text/plain"
+        )
+
 # ===================== 드레스 관리 API =====================
 
 @app.get("/api/admin/dresses", tags=["드레스 관리"])

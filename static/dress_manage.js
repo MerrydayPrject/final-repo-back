@@ -143,7 +143,14 @@ function renderDresses(dresses) {
     }
 
     tbody.innerHTML = dresses.map(dress => {
-        const imageUrl = `/images/${dress.image_name}`;
+        // 백엔드 프록시를 통해 S3 이미지 제공 (CORS 문제 우회)
+        // S3 URL만 사용, 로컬 경로는 사용하지 않음
+        let imageUrl = null;
+        if (dress.url && (dress.url.startsWith('http://') || dress.url.startsWith('https://'))) {
+            // S3 URL이면 프록시 사용
+            imageUrl = `/api/images/${dress.image_name}`;
+        }
+        // S3 URL이 없으면 null (이미지 없음 표시)
         const styleClass = getStyleClass(dress.style);
 
         return `
@@ -152,13 +159,16 @@ function renderDresses(dresses) {
                 <td class="image-name-cell">${escapeHtml(dress.image_name)}</td>
                 <td><span class="style-badge ${styleClass}">${escapeHtml(dress.style)}</span></td>
                 <td class="image-preview-cell">
-                    <img 
-                        src="${imageUrl}" 
-                        alt="${escapeHtml(dress.image_name)}"
-                        class="image-preview"
-                        onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'image-preview error\\'>이미지 없음</div>';"
-                        loading="lazy"
-                    >
+                    ${imageUrl 
+                        ? `<img 
+                            src="${imageUrl}" 
+                            alt="${escapeHtml(dress.image_name)}"
+                            class="image-preview"
+                            onerror="console.error('이미지 로드 실패:', '${imageUrl}', event); this.onerror=null; this.parentElement.innerHTML='<div class=\\'image-preview error\\' title=\\'${imageUrl}\\'>이미지 없음</div>';"
+                            loading="lazy"
+                        >`
+                        : '<div class="image-preview error">S3 URL 없음</div>'
+                    }
                 </td>
                 <td class="action-cell">
                     <button 
