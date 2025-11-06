@@ -1695,7 +1695,7 @@ async def proxy_s3_image(file_name: str):
 @app.get("/api/admin/dresses", tags=["드레스 관리"])
 async def get_dresses(
     page: int = Query(1, ge=1, description="페이지 번호"),
-    limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수")
+    limit: int = Query(20, ge=1, le=10000, description="페이지당 항목 수")
 ):
     """
     드레스 목록 조회 (페이징 지원)
@@ -1704,7 +1704,7 @@ async def get_dresses(
     
     Args:
         page: 페이지 번호 (기본값: 1)
-        limit: 페이지당 항목 수 (기본값: 20, 최대: 100)
+        limit: 페이지당 항목 수 (기본값: 20, 최대: 10000)
     
     Returns:
         JSONResponse: 드레스 목록 및 페이지네이션 정보
