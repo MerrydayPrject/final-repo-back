@@ -58,10 +58,10 @@ app.add_middleware(
 Path("static").mkdir(exist_ok=True)
 Path("templates").mkdir(exist_ok=True)
 Path("uploads").mkdir(exist_ok=True)
+# images 폴더는 S3 사용으로 불필요
 
 # 정적 파일 및 템플릿 설정
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/images", StaticFiles(directory="images"), name="images")
 templates = Jinja2Templates(directory="templates")
 
 # 전역 변수로 모델 저장
@@ -657,7 +657,8 @@ async def remove_background(file: UploadFile = File(..., description="배경을 
 @app.post("/api/compose-dress", tags=["Gemini 이미지 합성"])
 async def compose_dress(
     person_image: UploadFile = File(..., description="사람 이미지 파일"),
-    dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+    dress_image: Optional[UploadFile] = File(None, description="드레스 이미지 파일"),
+    dress_url: Optional[str] = Form(None, description="드레스 이미지 URL (S3 또는 로컬)"),
     model_name: Optional[str] = Form(None, description="모델명"),
     prompt: Optional[str] = Form(None, description="AI 명령어 (프롬프트)")
 ):
@@ -702,9 +703,9 @@ ONLY apply the dress design, color, and style onto the existing person."""
     text_input = prompt or default_prompt
     used_prompt = prompt or default_prompt
     success = False
-    person_url = ""
-    dress_url = ""
-    result_url = ""
+    person_s3_url = ""
+    dress_s3_url = ""
+    result_s3_url = ""
     
     try:
         # .env에서 API 키 가져오기
@@ -717,12 +718,103 @@ ONLY apply the dress design, color, and style onto the existing person."""
                 "message": error_msg
             }, status_code=500)
         
-        # 이미지 읽기
+        # 사람 이미지 읽기
         person_contents = await person_image.read()
-        dress_contents = await dress_image.read()
-        
         person_img = Image.open(io.BytesIO(person_contents))
-        dress_img = Image.open(io.BytesIO(dress_contents))
+        
+        # 드레스 이미지 처리: 파일 또는 URL
+        dress_img = None
+        if dress_image:
+            # 파일로 업로드된 경우
+            dress_contents = await dress_image.read()
+            dress_img = Image.open(io.BytesIO(dress_contents))
+        elif dress_url:
+            # S3 URL에서 드레스 이미지 다운로드 (AWS 자격 증명 사용)
+            try:
+                if not dress_url.startswith('http'):
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Invalid dress URL",
+                        "message": f"유효하지 않은 드레스 URL입니다. HTTP(S) URL이 필요합니다: {dress_url}"
+                    }, status_code=400)
+                
+                # S3 URL 파싱하여 bucket과 key 추출
+                # URL 형식: https://bucket.s3.region.amazonaws.com/key 또는 https://s3.region.amazonaws.com/bucket/key
+                parsed_url = urlparse(dress_url)
+                
+                # AWS S3 클라이언트 생성
+                aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+                aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+                region = os.getenv("AWS_REGION", "ap-northeast-2")
+                
+                if not all([aws_access_key, aws_secret_key]):
+                    # AWS 자격 증명이 없으면 일반 HTTP 요청 시도 (퍼블릭 버킷용)
+                    print(f"AWS 자격 증명 없음, HTTP 요청 시도: {dress_url}")
+                    response = requests.get(dress_url, timeout=10)
+                    response.raise_for_status()
+                    dress_img = Image.open(io.BytesIO(response.content))
+                else:
+                    # boto3를 사용하여 S3에서 다운로드
+                    s3_client = boto3.client(
+                        's3',
+                        aws_access_key_id=aws_access_key,
+                        aws_secret_access_key=aws_secret_key,
+                        region_name=region
+                    )
+                    
+                    # URL에서 bucket과 key 추출
+                    # 형식 1: https://bucket.s3.region.amazonaws.com/key
+                    # 형식 2: https://s3.region.amazonaws.com/bucket/key
+                    if '.s3.' in parsed_url.netloc or '.s3-' in parsed_url.netloc:
+                        # bucket.s3.region.amazonaws.com 형식
+                        bucket_name = parsed_url.netloc.split('.')[0]
+                        s3_key = parsed_url.path.lstrip('/')
+                    else:
+                        # 다른 형식 - path에서 bucket/key 추출
+                        path_parts = parsed_url.path.lstrip('/').split('/', 1)
+                        if len(path_parts) == 2:
+                            bucket_name, s3_key = path_parts
+                        else:
+                            raise ValueError(f"S3 URL 형식을 파싱할 수 없습니다: {dress_url}")
+                    
+                    print(f"S3 다운로드 시도: bucket={bucket_name}, key={s3_key}")
+                    
+                    # S3에서 객체 가져오기
+                    s3_response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+                    image_data = s3_response['Body'].read()
+                    dress_img = Image.open(io.BytesIO(image_data))
+                    print(f"S3 URL에서 드레스 이미지 다운로드 성공: {dress_url}")
+                
+            except ClientError as e:
+                error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+                print(f"S3 ClientError ({error_code}): {e}")
+                return JSONResponse({
+                    "success": False,
+                    "error": f"S3 access denied ({error_code})",
+                    "message": f"S3 접근 권한 오류: {str(e)}"
+                }, status_code=400)
+            except requests.exceptions.RequestException as e:
+                print(f"S3 HTTP 다운로드 오류: {e}")
+                return JSONResponse({
+                    "success": False,
+                    "error": "S3 download failed",
+                    "message": f"S3에서 드레스 이미지를 다운로드할 수 없습니다: {str(e)}"
+                }, status_code=400)
+            except Exception as e:
+                print(f"드레스 이미지 처리 오류: {e}")
+                import traceback
+                traceback.print_exc()
+                return JSONResponse({
+                    "success": False,
+                    "error": "Image processing failed",
+                    "message": f"드레스 이미지를 처리할 수 없습니다: {str(e)}"
+                }, status_code=400)
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": "No dress image provided",
+                "message": "드레스 이미지 파일 또는 URL이 필요합니다."
+            }, status_code=400)
         
         # 입력 이미지들을 파일 시스템에 저장
         person_image_path = save_uploaded_image(person_img, "person")
@@ -731,11 +823,11 @@ ONLY apply the dress design, color, and style onto the existing person."""
         # S3에 입력 이미지 업로드
         person_buffered = io.BytesIO()
         person_img.save(person_buffered, format="PNG")
-        person_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+        person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
         
         dress_buffered = io.BytesIO()
         dress_img.save(dress_buffered, format="PNG")
-        dress_url = upload_log_to_s3(dress_buffered.getvalue(), model_id, "dress") or ""
+        dress_s3_url = upload_log_to_s3(dress_buffered.getvalue(), model_id, "dress") or ""
         
         # 원본 이미지들을 base64로 변환
         person_base64 = base64.b64encode(person_buffered.getvalue()).decode()
@@ -757,8 +849,8 @@ ONLY apply the dress design, color, and style onto the existing person."""
             
             # 실패 로그 저장
             save_test_log(
-                person_url=person_url or "",
-                dress_url=dress_url or None,
+                person_url=person_s3_url or "",
+                dress_url=dress_s3_url or None,
                 result_url="",
                 model=model_id,
                 prompt=used_prompt,
@@ -796,16 +888,16 @@ ONLY apply the dress design, color, and style onto the existing person."""
             # S3에 결과 이미지 업로드
             result_buffered = io.BytesIO()
             result_img.save(result_buffered, format="PNG")
-            result_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
+            result_s3_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
             
             success = True
             run_time = time.time() - start_time
             
             # 성공 로그 저장
             save_test_log(
-                person_url=person_url or "",
-                dress_url=dress_url or None,
-                result_url=result_url or "",
+                person_url=person_s3_url or "",
+                dress_url=dress_s3_url or None,
+                result_url=result_s3_url or "",
                 model=model_id,
                 prompt=used_prompt,
                 success=True,
@@ -825,8 +917,8 @@ ONLY apply the dress design, color, and style onto the existing person."""
             
             # 실패 로그 저장
             save_test_log(
-                person_url=person_url or "",
-                dress_url=dress_url or None,
+                person_url=person_s3_url or "",
+                dress_url=dress_s3_url or None,
                 result_url="",
                 model=model_id,
                 prompt=used_prompt,
@@ -849,9 +941,9 @@ ONLY apply the dress design, color, and style onto the existing person."""
         # 오류 로그 저장
         try:
             save_test_log(
-                person_url=person_url or "",
-                dress_url=dress_url or None,
-                result_url=result_url or "",
+                person_url=person_s3_url or "",
+                dress_url=dress_s3_url or None,
+                result_url=result_s3_url or "",
                 model=model_id,
                 prompt=used_prompt,
                 success=False,
@@ -1408,12 +1500,139 @@ def get_s3_image(file_name: str) -> Optional[bytes]:
         print(f"S3 이미지 다운로드 중 예상치 못한 오류: {e}")
         return None
 
+@app.get("/api/proxy-image", tags=["이미지 프록시"])
+async def proxy_image_by_url(url: str = Query(..., description="S3 이미지 URL")):
+    """
+    S3 URL로 이미지 프록시 (썸네일용)
+    
+    프론트엔드에서 S3 이미지를 직접 로드할 때 CORS 문제를 해결하기 위한 프록시
+    
+    Args:
+        url: S3 이미지 전체 URL (예: https://bucket.s3.region.amazonaws.com/key)
+    
+    Returns:
+        이미지 바이너리 데이터
+    """
+    try:
+        if not url.startswith('http'):
+            return Response(
+                content="Invalid URL",
+                status_code=400,
+                media_type="text/plain",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                }
+            )
+        
+        # URL 파싱
+        parsed_url = urlparse(url)
+        
+        # AWS S3 클라이언트 생성
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        region = os.getenv("AWS_REGION", "ap-northeast-2")
+        
+        if not all([aws_access_key, aws_secret_key]):
+            # AWS 자격 증명이 없으면 일반 HTTP 요청 시도
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            image_data = response.content
+        else:
+            # boto3를 사용하여 S3에서 다운로드
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key,
+                region_name=region
+            )
+            
+            # URL에서 bucket과 key 추출
+            if '.s3.' in parsed_url.netloc or '.s3-' in parsed_url.netloc:
+                bucket_name = parsed_url.netloc.split('.')[0]
+                s3_key = parsed_url.path.lstrip('/')
+            else:
+                path_parts = parsed_url.path.lstrip('/').split('/', 1)
+                if len(path_parts) == 2:
+                    bucket_name, s3_key = path_parts
+                else:
+                    raise ValueError(f"S3 URL 형식을 파싱할 수 없습니다: {url}")
+            
+            # S3에서 객체 가져오기
+            s3_response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+            image_data = s3_response['Body'].read()
+        
+        # 파일 확장자로 MIME 타입 결정
+        file_ext = Path(url).suffix.lower()
+        content_type_map = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp'
+        }
+        content_type = content_type_map.get(file_ext, 'image/jpeg')
+        
+        return Response(
+            content=image_data,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+    except ClientError as e:
+        print(f"S3 프록시 ClientError: {e}")
+        return Response(
+            content="S3 access error",
+            status_code=403,
+            media_type="text/plain",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+    except Exception as e:
+        print(f"이미지 프록시 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response(
+            content=f"Error: {str(e)}",
+            status_code=500,
+            media_type="text/plain",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+
+@app.options("/api/images/{file_name:path}", tags=["이미지 프록시"])
+async def proxy_s3_image_options(file_name: str):
+    """
+    CORS preflight 요청 처리
+    """
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
+
 @app.get("/api/images/{file_name:path}", tags=["이미지 프록시"])
 async def proxy_s3_image(file_name: str):
     """
-    S3 이미지를 프록시로 제공
+    S3 이미지를 프록시로 제공 (CORS 지원)
     
-    CORS 문제를 우회하기 위해 백엔드에서 S3 이미지를 다운로드하여 제공합니다.
+    프론트엔드에서 fetch로 이미지를 가져올 수 있도록 CORS 헤더를 포함합니다.
+    모든 이미지는 S3에서 가져옵니다.
     
     Args:
         file_name: 이미지 파일명 (예: "Adress1.JPG")
@@ -1422,13 +1641,19 @@ async def proxy_s3_image(file_name: str):
         이미지 파일 또는 404 에러
     """
     try:
+        # S3에서 이미지 가져오기
         image_data = get_s3_image(file_name)
         
         if not image_data:
             return Response(
                 content="Image not found",
                 status_code=404,
-                media_type="text/plain"
+                media_type="text/plain",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                }
             )
         
         # 파일 확장자로 MIME 타입 결정
@@ -1446,14 +1671,23 @@ async def proxy_s3_image(file_name: str):
             content=image_data,
             media_type=content_type,
             headers={
-                "Cache-Control": "public, max-age=3600"
+                "Cache-Control": "public, max-age=3600",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
             }
         )
     except Exception as e:
+        print(f"이미지 프록시 오류: {e}")
         return Response(
             content=f"Error: {str(e)}",
             status_code=500,
-            media_type="text/plain"
+            media_type="text/plain",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
         )
 
 # ===================== 드레스 관리 API =====================
@@ -1529,15 +1763,16 @@ async def get_dresses(
 @app.post("/api/admin/dresses", tags=["드레스 관리"])
 async def add_dress(request: Request):
     """
-    드레스 추가 (이미지명만 입력)
+    드레스 추가 (S3 URL 또는 이미지명 입력)
     
-    이미지명과 스타일을 받아서 데이터베이스에 추가합니다.
-    이미지는 images 폴더에 이미 존재한다고 가정합니다.
+    이미지명과 스타일, S3 URL을 받아서 데이터베이스에 추가합니다.
+    모든 이미지는 S3에 저장되어 있어야 합니다.
     """
     try:
         body = await request.json()
         image_name = body.get("image_name")
         style = body.get("style")
+        url = body.get("url")  # S3 URL
         
         if not image_name or not style:
             return JSONResponse({
@@ -1586,17 +1821,13 @@ async def add_dress(request: Request):
                         "message": f"이미지명 '{image_name}'이 이미 존재합니다."
                     }, status_code=400)
                 
-                # 이미지 파일 존재 확인
-                image_path = Path("images") / image_name
-                if not image_path.exists():
-                    return JSONResponse({
-                        "success": False,
-                        "error": "Image file not found",
-                        "message": f"이미지 파일 '{image_name}'을 찾을 수 없습니다."
-                    }, status_code=404)
-                
-                # URL 생성 (로컬 이미지 경로)
-                image_url = f"/images/{image_name}"
+                # URL이 제공되지 않으면 기본 S3 URL 생성
+                if not url:
+                    bucket_name = os.getenv("AWS_S3_BUCKET_NAME", "marryday1")
+                    region = os.getenv("AWS_REGION", "ap-northeast-2")
+                    image_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/dresses/{image_name}"
+                else:
+                    image_url = url
                 
                 # 삽입
                 try:
@@ -1671,16 +1902,6 @@ async def delete_dress(dress_id: int):
                 if url and url.startswith('https://'):
                     # S3 URL인 경우 삭제 시도
                     s3_deleted = delete_from_s3(file_name)
-                else:
-                    # 로컬 파일인 경우 삭제 시도
-                    local_image_path = Path("images") / file_name
-                    if local_image_path.exists():
-                        try:
-                            local_image_path.unlink()
-                            s3_deleted = True
-                            print(f"로컬 이미지 삭제 완료: {file_name}")
-                        except Exception as e:
-                            print(f"로컬 이미지 삭제 오류: {e}")
                 
                 # 데이터베이스에서 삭제
                 cursor.execute("DELETE FROM dresses WHERE idx = %s", (dress_id,))
@@ -1878,9 +2099,11 @@ async def import_dresses(file: UploadFile = File(...)):
                             fail_count += 1
                             continue
                         
-                        # URL이 없으면 기본값 생성
+                        # URL이 없으면 기본 S3 URL 생성
                         if not url:
-                            url = f"/images/{file_name}"
+                            bucket_name = os.getenv("AWS_S3_BUCKET_NAME", "marryday1")
+                            region = os.getenv("AWS_REGION", "ap-northeast-2")
+                            url = f"https://{bucket_name}.s3.{region}.amazonaws.com/dresses/{file_name}"
                         
                         # 삽입
                         try:
