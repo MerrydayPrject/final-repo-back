@@ -736,7 +736,7 @@ async def generate_custom_prompt_from_images(person_img: Image.Image, dress_img:
         생성된 맞춤 프롬프트 문자열
     """
     try:
-        print("🔍 이미지 분석 시작...")
+        print("이미지 분석 시작...")
         client = genai.Client(api_key=api_key)
         
         analysis_prompt = """You are creating a detailed instruction prompt for a virtual try-on task.
@@ -842,19 +842,19 @@ Output ONLY the final prompt text with this complete structure. Be extremely spe
                     custom_prompt += part.text
         
         if custom_prompt:
-            print(f"✅ 맞춤 프롬프트 생성 완료 (길이: {len(custom_prompt)}자)")
+            print(f"맞춤 프롬프트 생성 완료 (길이: {len(custom_prompt)}자)")
             print("\n" + "="*80)
-            print("📝 생성된 맞춤 프롬프트:")
+            print("생성된 맞춤 프롬프트:")
             print("="*80)
             print(custom_prompt)
             print("="*80 + "\n")
             return custom_prompt
         else:
-            print("⚠️ 프롬프트 생성 실패, 기본 프롬프트 사용")
+            print("프롬프트 생성 실패, 기본 프롬프트 사용")
             return None
             
     except Exception as e:
-        print(f"❌ 프롬프트 생성 중 오류: {str(e)}")
+        print(f"프롬프트 생성 중 오류: {str(e)}")
         import traceback
         traceback.print_exc()
         return None
@@ -958,7 +958,7 @@ async def generate_prompt(
         
         # 맞춤 프롬프트 생성
         print("\n" + "="*80)
-        print("🔍 이미지 분석 및 프롬프트 생성")
+        print("이미지 분석 및 프롬프트 생성")
         print("="*80)
         
         custom_prompt = await generate_custom_prompt_from_images(person_img, dress_img, api_key)
@@ -1009,7 +1009,7 @@ MANDATORY FOOTWEAR CHANGE - THIS IS CRITICAL:
             })
             
     except Exception as e:
-        print(f"❌ 프롬프트 생성 API 오류: {str(e)}")
+        print(f"프롬프트 생성 API 오류: {str(e)}")
         import traceback
         traceback.print_exc()
         return JSONResponse({
@@ -1222,7 +1222,7 @@ OTHER REQUIREMENTS:
         
         # 원본 인물 이미지 크기 저장
         person_size = person_img.size
-        print(f"📐 인물 이미지 크기: {person_size[0]}x{person_size[1]}")
+        print(f"인물 이미지 크기: {person_size[0]}x{person_size[1]}")
         
         # 드레스 이미지 전처리 (배경 정보 제거 및 중앙 정렬)
         print("드레스 이미지 전처리 시작...")
@@ -1230,14 +1230,14 @@ OTHER REQUIREMENTS:
         print("드레스 이미지 전처리 완료")
         
         # 드레스 이미지를 인물 이미지 크기로 조정 (결과 이미지 크기 맞추기 위함)
-        print(f"🔄 드레스 이미지를 인물 크기({person_size[0]}x{person_size[1]})로 조정...")
+        print(f"드레스 이미지를 인물 크기({person_size[0]}x{person_size[1]})로 조정...")
         dress_img = dress_img.resize(person_size, Image.Resampling.LANCZOS)
-        print(f"✅ 드레스 이미지 크기 조정 완료: {dress_img.size[0]}x{dress_img.size[1]}")
+        print(f"드레스 이미지 크기 조정 완료: {dress_img.size[0]}x{dress_img.size[1]}")
         
         # 프롬프트가 없으면 이미지 분석을 통해 맞춤 프롬프트 생성
         if not prompt:
             print("\n" + "="*80)
-            print("📋 프롬프트가 제공되지 않음 - 자동 프롬프트 생성 시작")
+            print("프롬프트가 제공되지 않음 - 자동 프롬프트 생성 시작")
             print("="*80)
             
             # 이미지 분석을 통한 맞춤 프롬프트 생성
@@ -1246,15 +1246,15 @@ OTHER REQUIREMENTS:
             if custom_prompt:
                 text_input = custom_prompt
                 used_prompt = custom_prompt
-                print("✅ 맞춤 프롬프트가 생성되어 합성에 사용됩니다.")
+                print("맞춤 프롬프트가 생성되어 합성에 사용됩니다.")
                 print("="*80 + "\n")
             else:
                 # 프롬프트 생성 실패 시 기본 프롬프트 사용
                 text_input = default_prompt
                 used_prompt = default_prompt
-                print("\n⚠️ 맞춤 프롬프트 생성 실패 - 기본 프롬프트 사용")
+                print("\n맞춤 프롬프트 생성 실패 - 기본 프롬프트 사용")
                 print("\n" + "="*80)
-                print("📝 사용될 기본 프롬프트:")
+                print("사용될 기본 프롬프트:")
                 print("="*80)
                 print(default_prompt)
                 print("="*80 + "\n")
@@ -1263,9 +1263,9 @@ OTHER REQUIREMENTS:
             text_input = prompt
             used_prompt = prompt
             print("\n" + "="*80)
-            print("✅ 사용자 제공 프롬프트 사용")
+            print("사용자 제공 프롬프트 사용")
             print("="*80)
-            print("📝 사용될 프롬프트:")
+            print("사용될 프롬프트:")
             print("="*80)
             print(prompt)
             print("="*80 + "\n")
@@ -1288,9 +1288,9 @@ OTHER REQUIREMENTS:
         
         # 이미지 합성 시작 알림
         print("\n" + "="*80)
-        print("🎨 Gemini 2.5 Flash Image로 이미지 합성 시작")
+        print("Gemini 2.5 Flash Image로 이미지 합성 시작")
         print("="*80)
-        print("📝 합성에 사용되는 최종 프롬프트:")
+        print("합성에 사용되는 최종 프롬프트:")
         print("-"*80)
         print(text_input)
         print("="*80 + "\n")
@@ -1328,7 +1328,7 @@ OTHER REQUIREMENTS:
         candidate = response.candidates[0]
         if not hasattr(candidate, 'content') or candidate.content is None:
             error_msg = "Gemini API 응답에 content가 없습니다."
-            print(f"❌ {error_msg}")
+            print(f"{error_msg}")
             print(f"Candidate: {candidate}")
             run_time = time.time() - start_time
             
@@ -1350,7 +1350,7 @@ OTHER REQUIREMENTS:
         
         if not hasattr(candidate.content, 'parts') or candidate.content.parts is None:
             error_msg = "Gemini API 응답에 parts가 없습니다."
-            print(f"❌ {error_msg}")
+            print(f"{error_msg}")
             print(f"Content: {candidate.content}")
             run_time = time.time() - start_time
             
