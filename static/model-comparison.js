@@ -429,12 +429,11 @@ async function runModelTest(modelId) {
         }
     }
     
-    // gemini-compose 모델은 프롬프트 생성 플로우 사용
-    if (modelId === 'gemini-compose' || model.endpoint === '/api/compose-dress') {
+    // gemini-compose 모델인 경우: 프롬프트 생성 및 확인 프로세스
+    if (modelId === 'gemini-compose' && model.input_type === 'dual_image') {
         await runGeminiComposeWithPromptCheck(modelId, model);
         return;
     }
-    
     const loadingDiv = document.getElementById(`loading-${modelId}`);
     const resultDiv = document.getElementById(`result-${modelId}`);
     const runBtn = document.getElementById(`run-btn-${modelId}`);
