@@ -57,7 +57,7 @@ app.add_middleware(
 # 디렉토리 생성
 Path("static").mkdir(exist_ok=True)
 Path("templates").mkdir(exist_ok=True)
-Path("uploads").mkdir(exist_ok=True)
+# uploads 폴더는 S3 사용으로 불필요 (로컬 저장 안 함)
 # images 폴더는 S3 사용으로 불필요
 
 # 정적 파일 및 템플릿 설정
@@ -163,13 +163,14 @@ def init_database():
     finally:
         connection.close()
 
-def save_uploaded_image(image: Image.Image, prefix: str) -> str:
-    """이미지를 파일 시스템에 저장"""
-    timestamp = int(time.time() * 1000)
-    filename = f"{prefix}_{timestamp}.png"
-    filepath = Path("uploads") / filename
-    image.save(filepath)
-    return str(filepath)
+# DEPRECATED: 로컬 파일 저장 대신 S3만 사용
+# def save_uploaded_image(image: Image.Image, prefix: str) -> str:
+#     """이미지를 파일 시스템에 저장"""
+#     timestamp = int(time.time() * 1000)
+#     filename = f"{prefix}_{timestamp}.png"
+#     filepath = Path("uploads") / filename
+#     image.save(filepath)
+#     return str(filepath)
 
 def load_category_rules() -> List[dict]:
     """카테고리 규칙 JSON 파일 로드"""
@@ -1040,9 +1041,6 @@ async def compose_dress(
     Returns:
         JSONResponse: 합성된 이미지 (base64)
     """
-    person_image_path = None
-    dress_image_path = None
-    result_image_path = None
     start_time = time.time()
     model_id = model_name or "gemini-compose"
     
@@ -1272,11 +1270,7 @@ OTHER REQUIREMENTS:
             print(prompt)
             print("="*80 + "\n")
         
-        # 입력 이미지들을 파일 시스템에 저장
-        person_image_path = save_uploaded_image(person_img, "person")
-        dress_image_path = save_uploaded_image(dress_img, "dress")
-        
-        # S3에 입력 이미지 업로드
+        # S3에 입력 이미지 업로드 (로컬 저장 없이 S3에만 업로드)
         person_buffered = io.BytesIO()
         person_img.save(person_buffered, format="PNG")
         person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
@@ -1393,11 +1387,8 @@ OTHER REQUIREMENTS:
             # 첫 번째 이미지를 base64로 인코딩
             result_image_base64 = base64.b64encode(image_parts[0]).decode()
             
-            # 결과 이미지를 파일 시스템에 저장
+            # S3에 결과 이미지 업로드 (로컬 저장 없이 S3에만 업로드)
             result_img = Image.open(io.BytesIO(image_parts[0]))
-            result_image_path = save_uploaded_image(result_img, "result")
-            
-            # S3에 결과 이미지 업로드
             result_buffered = io.BytesIO()
             result_img.save(result_buffered, format="PNG")
             result_s3_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
