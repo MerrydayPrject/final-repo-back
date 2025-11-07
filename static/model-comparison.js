@@ -202,16 +202,43 @@ function generateParameterFields(model) {
         return '';
     }
     
-    const paramsHtml = Object.entries(model.parameters).map(([key, param]) => `
-        <div class="model-parameter-item">
-            <label>${param.label}</label>
-            <input type="${param.type}" 
-                   id="param-${model.id}-${key}" 
-                   placeholder="${param.placeholder || ''}" 
-                   value="${param.default || ''}"
-                   ${param.required ? 'required' : ''}>
-        </div>
-    `).join('');
+    const paramsHtml = Object.entries(model.parameters).map(([key, param]) => {
+        if (param.type === 'checkbox') {
+            return `
+                <div class="model-parameter-item">
+                    <label>
+                        <input type="checkbox" 
+                               id="param-${model.id}-${key}" 
+                               ${param.default ? 'checked' : ''}>
+                        ${param.label}
+                    </label>
+                </div>
+            `;
+        } else if (param.type === 'select') {
+            const options = (param.options || []).map(opt => 
+                `<option value="${opt}" ${opt === param.default ? 'selected' : ''}>${opt}</option>`
+            ).join('');
+            return `
+                <div class="model-parameter-item">
+                    <label>${param.label}</label>
+                    <select id="param-${model.id}-${key}" ${param.required ? 'required' : ''}>
+                        ${options}
+                    </select>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="model-parameter-item">
+                    <label>${param.label}</label>
+                    <input type="${param.type}" 
+                           id="param-${model.id}-${key}" 
+                           placeholder="${param.placeholder || ''}" 
+                           value="${param.default || ''}"
+                           ${param.required ? 'required' : ''}>
+                </div>
+            `;
+        }
+    }).join('');
     
     return `
         <div class="model-parameters-section">
@@ -300,12 +327,22 @@ function setupModalDragAndDrop(model) {
 // 이미지 업로드 처리
 function handleModelImageUpload(event, modelId, type) {
     const file = event.target.files[0];
-    if (!file) return;
+    if (!file) {
+        console.warn('파일이 선택되지 않았습니다.');
+        return;
+    }
     
     if (!file.type.startsWith('image/')) {
         alert('이미지 파일만 업로드 가능합니다.');
         return;
     }
+    
+    // 모달 데이터 저장 (파일 읽기 전에 먼저 저장)
+    if (!modelModals[modelId]) {
+        modelModals[modelId] = {};
+    }
+    modelModals[modelId][type] = file;
+    console.log(`이미지 업로드 완료: ${modelId} - ${type}`, file.name, file.size);
     
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -313,15 +350,26 @@ function handleModelImageUpload(event, modelId, type) {
         const imgId = `img-${modelId}-${type}`;
         const uploadAreaId = `upload-${modelId}-${type}`;
         
-        document.getElementById(imgId).src = e.target.result;
-        document.getElementById(previewId).style.display = 'block';
-        document.querySelector(`#${uploadAreaId} .model-upload-content`).style.display = 'none';
+        const previewElement = document.getElementById(previewId);
+        const imgElement = document.getElementById(imgId);
+        const uploadAreaElement = document.getElementById(uploadAreaId);
         
-        // 모달 데이터 저장
-        if (!modelModals[modelId]) {
-            modelModals[modelId] = {};
+        if (imgElement && previewElement && uploadAreaElement) {
+            imgElement.src = e.target.result;
+            previewElement.style.display = 'block';
+            const uploadContent = uploadAreaElement.querySelector('.model-upload-content');
+            if (uploadContent) {
+                uploadContent.style.display = 'none';
+            }
         }
-        modelModals[modelId][type] = file;
+    };
+    reader.onerror = (error) => {
+        console.error('파일 읽기 오류:', error);
+        alert('이미지 파일을 읽는 중 오류가 발생했습니다.');
+        // 파일 읽기 실패 시 저장된 파일 제거
+        if (modelModals[modelId]) {
+            delete modelModals[modelId][type];
+        }
     };
     reader.readAsDataURL(file);
 }
@@ -347,14 +395,24 @@ async function runModelTest(modelId) {
     const model = models.find(m => m.id === modelId);
     if (!model) return;
     
-    // 이미지 검증
+    // 이미지 검증 (더 엄격한 검증)
     if (model.input_type === 'dual_image') {
-        if (!modelModals[modelId] || !modelModals[modelId]['person'] || !modelModals[modelId]['dress']) {
+        const personFile = modelModals[modelId]?.person;
+        const dressFile = modelModals[modelId]?.dress;
+        
+        if (!personFile || !dressFile) {
             alert('사람 이미지와 드레스 이미지를 모두 업로드해주세요.');
             return;
         }
+        
+        // 파일이 실제로 존재하는지 확인
+        if (!(personFile instanceof File) || !(dressFile instanceof File)) {
+            alert('이미지 파일이 올바르지 않습니다. 다시 업로드해주세요.');
+            return;
+        }
     } else {
-        if (!modelModals[modelId] || !modelModals[modelId]['single']) {
+        const singleFile = modelModals[modelId]?.single;
+        if (!singleFile || !(singleFile instanceof File)) {
             alert('이미지를 업로드해주세요.');
             return;
         }
@@ -387,10 +445,33 @@ async function runModelTest(modelId) {
         
         // 입력 이미지 추가
         if (model.input_type === 'dual_image') {
-            formData.append(model.inputs[0].name, modelModals[modelId]['person']);
-            formData.append(model.inputs[1].name, modelModals[modelId]['dress']);
+            const personFile = modelModals[modelId]['person'];
+            const dressFile = modelModals[modelId]['dress'];
+            
+            console.log('이미지 파일 확인:', { personFile, dressFile, modelModals: modelModals[modelId] });
+            
+            if (!personFile || !dressFile) {
+                console.error('이미지 파일이 없습니다:', { personFile, dressFile });
+                alert('이미지 파일이 없습니다. 다시 업로드해주세요.');
+                loadingDiv.style.display = 'none';
+                runBtn.disabled = false;
+                return;
+            }
+            
+            formData.append(model.inputs[0].name, personFile);
+            formData.append(model.inputs[1].name, dressFile);
+            console.log(`FormData에 이미지 추가: ${model.inputs[0].name}, ${model.inputs[1].name}`);
         } else {
-            formData.append(model.inputs[0].name, modelModals[modelId]['single']);
+            const singleFile = modelModals[modelId]['single'];
+            if (!singleFile) {
+                console.error('이미지 파일이 없습니다:', singleFile);
+                alert('이미지 파일이 없습니다. 다시 업로드해주세요.');
+                loadingDiv.style.display = 'none';
+                runBtn.disabled = false;
+                return;
+            }
+            formData.append(model.inputs[0].name, singleFile);
+            console.log(`FormData에 이미지 추가: ${model.inputs[0].name}`);
         }
         
         // 모델명과 prompt 추가 (로그 저장용)
@@ -405,15 +486,18 @@ async function runModelTest(modelId) {
         // 파라미터 추가
         let url = model.endpoint;
         if (model.parameters) {
-            const params = new URLSearchParams();
-            for (const [key] of Object.entries(model.parameters)) {
+            for (const [key, param] of Object.entries(model.parameters)) {
                 const input = document.getElementById(`param-${modelId}-${key}`);
-                if (input && input.value) {
-                    params.append(key, input.value);
+                if (input) {
+                    if (param.type === 'checkbox') {
+                        // checkbox는 문자열로 변환 (백엔드에서 str로 받음)
+                        formData.append(key, input.checked ? 'true' : 'false');
+                    } else {
+                        if (input.value) {
+                            formData.append(key, input.value);
+                        }
+                    }
                 }
-            }
-            if (params.toString()) {
-                url += `?${params.toString()}`;
             }
         }
         
