@@ -722,7 +722,7 @@ def preprocess_dress_image(dress_img: Image.Image, target_size: int = 1024) -> I
     
     return white_bg
 
-async def generate_custom_prompt_from_images(person_img: Image.Image, dress_img: Image.Image, api_key: str) -> Optional[str]:
+async def generate_custom_prompt_from_images(person_img: Image.Image, dress_img: Image.Image, api_key: str) -> str:
     """
     이미지를 분석하여 맞춤 프롬프트를 생성합니다.
     
@@ -732,44 +732,102 @@ async def generate_custom_prompt_from_images(person_img: Image.Image, dress_img:
         api_key: Gemini API 키
     
     Returns:
-        생성된 맞춤 프롬프트 문자열 또는 None
+        생성된 맞춤 프롬프트 문자열
     """
     try:
         print("🔍 이미지 분석 시작...")
         client = genai.Client(api_key=api_key)
         
-        analysis_prompt = """Analyze these two images carefully:
+        analysis_prompt = """You are creating a detailed instruction prompt for a virtual try-on task.
 
+Analyze these two images:
 Image 1 (Person): A woman in her current outfit
-Image 2 (Dress): A formal dress/gown
+Image 2 (Dress): A formal dress/gown that will replace her current outfit
 
-Your task: Create a detailed instruction for virtual try-on that will dress the woman from Image 1 in the dress from Image 2.
+First, carefully observe and describe:
+1. Image 1 - List ALL clothing items she is wearing:
+   - What type of top/shirt? (long sleeves, short sleeves, or sleeveless?)
+   - What type of bottom? (pants, jeans, skirt, shorts?)
+   - What shoes is she wearing?
+   - Which body parts are currently covered by clothing?
 
-First, describe what you see:
-1. In Image 1 - What clothing is the woman wearing? (be specific: tops, bottoms, shoes, sleeves)
-2. In Image 2 - What does the dress look like? (color, style, length, neckline, sleeves or sleeveless)
+2. Image 2 - Describe the dress in detail:
+   - What color and style is the dress?
+   - Does it have sleeves, or is it sleeveless?
+   - What is the length? (short, knee-length, floor-length?)
+   - What is the neckline style?
+   - Which body parts will the dress cover, and which will be exposed?
 
-Then, create a prompt with these requirements:
+Now, create a detailed prompt using this EXACT structure:
 
-CRITICAL - SKIN EXPOSURE RULES:
-- Compare the clothing coverage in Image 1 vs Image 2
-- If Image 1 has long sleeves but Image 2 dress is sleeveless → Generate natural bare arms with skin
-- If Image 1 has pants/jeans but Image 2 dress is short → Generate natural bare legs with skin
-- If Image 1 covers shoulders but Image 2 dress is strapless → Generate natural bare shoulders with skin
-- Any body part that will be EXPOSED by the new dress MUST show natural skin, NOT the original clothing
-- Example: Woman in long-sleeve shirt wearing sleeveless dress = bare arms visible
-- Example: Woman in jeans wearing short dress = bare legs visible
+OPENING STATEMENT:
+"You are performing a virtual try-on task. Create an image of the woman from Image 1 wearing the dress from Image 2."
+
+CRITICAL INSTRUCTION:
+"The woman in Image 1 is currently wearing [list specific items: e.g., a long-sleeved shirt, jeans, and sneakers]. You MUST completely remove and erase ALL of this original clothing before applying the new dress. The original clothing must be 100% invisible in the final result."
+
+STEP 1 - REMOVE ALL ORIGINAL CLOTHING:
+List each specific item to remove:
+"Delete and erase from Image 1:
+- The [specific top description] (including all sleeves)
+- The [specific bottom description]
+- The [specific shoes description]
+- Any other visible clothing items
+
+Treat the original clothing as if it never existed. The woman should be conceptually nude before you apply the dress."
+
+STEP 2 - APPLY THE DRESS FROM IMAGE 2:
+Describe the dress application:
+"Take ONLY the dress garment from Image 2 and apply it to the woman's body:
+- This is a [color] [style] dress that is [sleeveless/has sleeves/etc.]
+- The dress is [length description]
+- Copy the exact dress design, color, pattern, and style from Image 2
+- Maintain the same coverage as shown in Image 2
+- Fit the dress naturally to her body shape and pose from Image 1"
+
+STEP 3 - GENERATE NATURAL SKIN FOR EXPOSED BODY PARTS:
+For each body part that will be exposed, write specific instructions:
+
+"For every body part that is NOT covered by the dress, you must generate natural skin:
+
+[If applicable] If the dress is sleeveless:
+- Generate natural BARE ARMS with realistic skin
+- Match the exact skin tone from her face, neck, and hands in Image 1
+- Include realistic skin texture with natural color variations, shadows, and highlights
+- IMPORTANT: Do NOT show any fabric from the original [sleeve description]
+
+[If applicable] If the dress is short or knee-length:
+- Generate natural BARE LEGS with realistic skin
+- Match the exact skin tone from her face, neck, and hands in Image 1
+- Include realistic skin texture with natural color variations, shadows, and highlights
+- IMPORTANT: Do NOT show any fabric from the original [pants/jeans description]
+
+[If applicable] If the dress exposes shoulders or back:
+- Generate natural BARE SHOULDERS/BACK with realistic skin
+- Match the exact skin tone from her face, neck, and hands in Image 1
+- IMPORTANT: Do NOT show any fabric from the original clothing"
+
+RULES - WHAT NOT TO DO:
+"- NEVER keep any part of the [original top] from Image 1
+- NEVER keep any part of the [original bottom] from Image 1
+- NEVER keep the original sleeves on arms that should show skin
+- NEVER show original clothing fabric where skin should be visible
+- NEVER mix elements from the original outfit with the new dress"
+
+RULES - WHAT TO DO:
+"- ALWAYS show natural skin on body parts not covered by the dress
+- ALWAYS match skin tone to the visible skin in her face/neck/hands from Image 1
+- ALWAYS ensure the original clothing is completely erased before applying the dress
+- ALWAYS maintain consistent and realistic skin texture on exposed areas"
 
 OTHER REQUIREMENTS:
-- Remove ALL clothing items from Image 1 that you identified
-- Apply the dress from Image 2 onto the woman (exact color, style, design)
-- Replace footwear with elegant heels matching the dress color
-- Keep the woman's face, hair, body shape, and pose from Image 1
-- Use white background
-- Full body visible from head to toe
+"- Preserve her face, facial features, hair, and body pose exactly as in Image 1
+- Use a pure white background
+- Replace footwear with elegant heels that match or complement the dress color
+- The final image should look photorealistic and natural"
 
-Output ONLY the final prompt instructions, nothing else. Start with "Create an image of the woman from Image 1 wearing the dress from Image 2." and continue with specific details based on what you observed, including skin exposure instructions."""
-        
+Output ONLY the final prompt text with this complete structure. Be extremely specific about which clothing items to remove and which body parts need natural skin generation."""
+
         response = client.models.generate_content(
             model="gemini-2.0-flash-exp",
             contents=[person_img, dress_img, analysis_prompt]
@@ -784,9 +842,14 @@ Output ONLY the final prompt instructions, nothing else. Start with "Create an i
         
         if custom_prompt:
             print(f"✅ 맞춤 프롬프트 생성 완료 (길이: {len(custom_prompt)}자)")
+            print("\n" + "="*80)
+            print("📝 생성된 맞춤 프롬프트:")
+            print("="*80)
+            print(custom_prompt)
+            print("="*80 + "\n")
             return custom_prompt
         else:
-            print("⚠️ 프롬프트 생성 실패")
+            print("⚠️ 프롬프트 생성 실패, 기본 프롬프트 사용")
             return None
             
     except Exception as e:
@@ -906,34 +969,36 @@ async def generate_prompt(
                 "message": "프롬프트가 성공적으로 생성되었습니다."
             })
         else:
-            # 기본 프롬프트 반환 (Image 1 = Person, Image 2 = Dress)
-            default_prompt = """IMPORTANT: You must preserve the person's identity completely.
+            # 기본 프롬프트 반환
+            default_prompt = """Create an image of the woman from Image 1 wearing the dress from Image 2.
 
-Task: Apply ONLY the dress from the second image onto the person from the first image.
-
-STRICT REQUIREMENTS:
-1. PRESERVE EXACTLY: The person's face, facial features, skin tone, hair, and body proportions from the first image
-2. PRESERVE EXACTLY: The person's pose, stance, and body position from the first image
-3. PRESERVE EXACTLY: The background and lighting from the person's image (first image)
-4. CHANGE ONLY: Replace the person's clothing with the dress from the second image
-5. The dress should fit naturally on the person's body shape
-6. Maintain realistic shadows and fabric draping on the dress
-7. Keep the person's hands, arms, legs exactly as they are in the original (first image)
+CRITICAL INSTRUCTIONS:
+- Extract ONLY the dress design, pattern, color, and style from Image 2
+- COMPLETELY IGNORE the background, pose, body position, and any other visual context from Image 2
+- Apply the dress onto the woman's body from Image 1
+- Maintain the woman's face, facial features, and posture from Image 1 exactly as they are
+- The clothing from Image 1 should NOT be reflected in the final image
+- Use a pure white background (#FFFFFF)
+- DO NOT replicate or reference any pose, stance, or positioning from the dress image
+- Focus solely on transferring the dress garment itself onto the woman from Image 1
 
 CRITICAL - SKIN EXPOSURE RULES:
-- If the person in the first image wears long sleeves but the dress in the second image is sleeveless → Generate natural bare arms with skin
-- If the person in the first image wears pants but the dress in the second image is short → Generate natural bare legs with skin
-- If the person in the first image covers shoulders but the dress in the second image is strapless → Generate natural bare shoulders with skin
+- If Image 1 woman wears long sleeves but Image 2 dress is sleeveless → Generate natural bare arms with skin
+- If Image 1 woman wears pants but Image 2 dress is short → Generate natural bare legs with skin
+- If Image 1 woman covers shoulders but Image 2 dress is strapless → Generate natural bare shoulders with skin
 - Any body part that will be EXPOSED by the new dress MUST show natural skin tone, NOT the original clothing
 - Example: Woman in long-sleeve shirt wearing sleeveless dress = bare arms visible with natural skin
 - Example: Woman in jeans wearing short dress = bare legs visible with natural skin
 
-MANDATORY FOOTWEAR CHANGE:
-- Replace footwear with elegant high heels or formal dress shoes matching the dress color
-- NEVER keep sneakers or casual footwear from the first image
-
-DO NOT change the person's appearance, face, body type, or any physical features from the first image.
-ONLY apply the dress design, color, and style from the second image onto the existing person."""
+MANDATORY FOOTWEAR CHANGE - THIS IS CRITICAL:
+- You MUST completely replace the footwear with elegant high heels or formal dress shoes
+- NEVER use sneakers, casual shoes, or athletic footwear
+- NEVER keep white sneakers or any casual footwear from Image 1
+- For a black dress: generate black high heels or black formal pumps
+- For colored dresses: generate heels that match or complement the dress color
+- The shoes must be formal, elegant, and appropriate for a cocktail dress or evening gown
+- The heel height should be appropriate for formal wear (3-4 inches)
+- This footwear change is NON-NEGOTIABLE and must be applied"""
             
             return JSONResponse({
                 "success": True,
@@ -982,24 +1047,67 @@ async def compose_dress(
     model_id = model_name or "gemini-compose"
     
     # 기본 프롬프트
-    default_prompt = """IMPORTANT: You must preserve the person's identity completely.
+    default_prompt = """You are performing a virtual try-on task. Create an image of the woman from Image 1 wearing the dress from Image 2.
 
-Task: Apply ONLY the dress from the second image onto the person from the first image.
+CRITICAL INSTRUCTION - READ CAREFULLY:
+The woman in Image 1 is currently wearing clothing (shirt, pants, sleeves, shoes, etc.). You MUST completely remove and erase ALL of this original clothing before applying the new dress. Think of this as a two-step process: first remove all existing clothes, then dress her in the new outfit. The original clothing must be 100% invisible in the final result.
 
-STRICT REQUIREMENTS:
-1. PRESERVE EXACTLY: The person's face, facial features, skin tone, hair, and body proportions from the first image
-2. PRESERVE EXACTLY: The person's pose, stance, and body position from the first image
-3. PRESERVE EXACTLY: The background and lighting from the person's image (first image)
-4. CHANGE ONLY: Replace the person's clothing with the dress from the second image
-5. The dress should fit naturally on the person's body shape
-6. Maintain realistic shadows and fabric draping on the dress
-7. Keep the person's hands, arms, legs exactly as they are in the original (first image)
+STEP 1 - REMOVE ALL ORIGINAL CLOTHING:
+Delete and erase from Image 1:
+- The shirt/top (including all sleeves)
+- The pants/jeans/bottoms
+- The shoes/sneakers
+- Any other visible clothing items
 
-DO NOT change the person's appearance, face, body type, or any physical features from the first image.
-ONLY apply the dress design, color, and style from the second image onto the existing person."""
+Treat the original clothing as if it never existed. The woman should be conceptually nude before you apply the dress.
+
+STEP 2 - APPLY THE DRESS FROM IMAGE 2:
+Take ONLY the dress garment from Image 2 and apply it to the woman's body:
+- Copy the exact dress design, color, pattern, and style from Image 2
+- Maintain the same coverage as shown in Image 2 (if sleeveless in Image 2, result must be sleeveless)
+- Fit the dress naturally to her body shape and pose from Image 1
+- DO NOT copy the background, pose, or any other elements from Image 2
+
+STEP 3 - GENERATE NATURAL SKIN FOR EXPOSED BODY PARTS:
+For every body part that is NOT covered by the dress, you must generate natural skin:
+
+If the dress is sleeveless (no sleeves):
+- Generate natural BARE ARMS with realistic skin
+- Match the exact skin tone from her face, neck, and hands in Image 1
+- Include realistic skin texture with natural color variations, shadows, and highlights
+- IMPORTANT: Do NOT show any fabric from the original shirt sleeves
+
+If the dress is short or knee-length:
+- Generate natural BARE LEGS with realistic skin
+- Match the exact skin tone from her face, neck, and hands in Image 1
+- Include realistic skin texture with natural color variations, shadows, and highlights  
+- IMPORTANT: Do NOT show any fabric from the original pants
+
+If the dress exposes shoulders or back:
+- Generate natural BARE SHOULDERS/BACK with realistic skin
+- Match the exact skin tone from her face, neck, and hands in Image 1
+- IMPORTANT: Do NOT show any fabric from the original clothing
+
+RULES - WHAT NOT TO DO:
+- NEVER keep any part of the shirt/top from Image 1
+- NEVER keep any part of the pants/jeans from Image 1
+- NEVER keep the original sleeves on arms that should show skin
+- NEVER show original clothing fabric where skin should be visible
+- NEVER mix elements from the original outfit with the new dress
+
+RULES - WHAT TO DO:
+- ALWAYS show natural skin on body parts not covered by the dress
+- ALWAYS match skin tone to the visible skin in her face/neck/hands from Image 1
+- ALWAYS ensure the original clothing is completely erased before applying the dress
+- ALWAYS maintain consistent and realistic skin texture on exposed areas
+
+OTHER REQUIREMENTS:
+- Preserve her face, facial features, hair, and body pose exactly as in Image 1
+- Use a pure white background
+- Replace footwear with elegant heels that match or complement the dress color
+- The final image should look photorealistic and natural"""
     
-    text_input = prompt or default_prompt
-    used_prompt = prompt or default_prompt
+    # text_input과 used_prompt는 이미지 분석 후 설정됨
     success = False
     person_s3_url = ""
     dress_s3_url = ""
@@ -1114,6 +1222,56 @@ ONLY apply the dress design, color, and style from the second image onto the exi
                 "message": "드레스 이미지 파일 또는 URL이 필요합니다."
             }, status_code=400)
         
+        # 원본 인물 이미지 크기 저장
+        person_size = person_img.size
+        print(f"📐 인물 이미지 크기: {person_size[0]}x{person_size[1]}")
+        
+        # 드레스 이미지 전처리 (배경 정보 제거 및 중앙 정렬)
+        print("드레스 이미지 전처리 시작...")
+        dress_img = preprocess_dress_image(dress_img, target_size=1024)
+        print("드레스 이미지 전처리 완료")
+        
+        # 드레스 이미지를 인물 이미지 크기로 조정 (결과 이미지 크기 맞추기 위함)
+        print(f"🔄 드레스 이미지를 인물 크기({person_size[0]}x{person_size[1]})로 조정...")
+        dress_img = dress_img.resize(person_size, Image.Resampling.LANCZOS)
+        print(f"✅ 드레스 이미지 크기 조정 완료: {dress_img.size[0]}x{dress_img.size[1]}")
+        
+        # 프롬프트가 없으면 이미지 분석을 통해 맞춤 프롬프트 생성
+        if not prompt:
+            print("\n" + "="*80)
+            print("📋 프롬프트가 제공되지 않음 - 자동 프롬프트 생성 시작")
+            print("="*80)
+            
+            # 이미지 분석을 통한 맞춤 프롬프트 생성
+            custom_prompt = await generate_custom_prompt_from_images(person_img, dress_img, api_key)
+            
+            if custom_prompt:
+                text_input = custom_prompt
+                used_prompt = custom_prompt
+                print("✅ 맞춤 프롬프트가 생성되어 합성에 사용됩니다.")
+                print("="*80 + "\n")
+            else:
+                # 프롬프트 생성 실패 시 기본 프롬프트 사용
+                text_input = default_prompt
+                used_prompt = default_prompt
+                print("\n⚠️ 맞춤 프롬프트 생성 실패 - 기본 프롬프트 사용")
+                print("\n" + "="*80)
+                print("📝 사용될 기본 프롬프트:")
+                print("="*80)
+                print(default_prompt)
+                print("="*80 + "\n")
+        else:
+            # 사용자 제공 프롬프트 사용
+            text_input = prompt
+            used_prompt = prompt
+            print("\n" + "="*80)
+            print("✅ 사용자 제공 프롬프트 사용")
+            print("="*80)
+            print("📝 사용될 프롬프트:")
+            print("="*80)
+            print(prompt)
+            print("="*80 + "\n")
+        
         # 입력 이미지들을 파일 시스템에 저장
         person_image_path = save_uploaded_image(person_img, "person")
         dress_image_path = save_uploaded_image(dress_img, "dress")
@@ -1134,13 +1292,23 @@ ONLY apply the dress design, color, and style from the second image onto the exi
         # Gemini Client 생성 (공식 문서와 동일한 방식)
         client = genai.Client(api_key=api_key)
         
-        # Gemini API 호출 (person, dress, text 순서)
+        # 이미지 합성 시작 알림
+        print("\n" + "="*80)
+        print("🎨 Gemini 2.5 Flash Image로 이미지 합성 시작")
+        print("="*80)
+        print("📝 합성에 사용되는 최종 프롬프트:")
+        print("-"*80)
+        print(text_input)
+        print("="*80 + "\n")
+        
+        # Gemini API 호출 (person(Image 1), dress(Image 2), text 순서)
+        # 프롬프트에서 Image 1 = person, Image 2 = dress로 참조
         response = client.models.generate_content(
             model="gemini-2.5-flash-image",
             contents=[person_img, dress_img, text_input]
         )
         
-        # 응답 확인
+        # 응답 확인 (더 안전한 처리)
         if not response.candidates or len(response.candidates) == 0:
             error_msg = "Gemini API가 응답을 생성하지 못했습니다. 이미지가 안전 정책에 위배되거나 모델이 이미지를 생성할 수 없습니다."
             run_time = time.time() - start_time
@@ -1162,16 +1330,62 @@ ONLY apply the dress design, color, and style from the second image onto the exi
                 "message": error_msg
             }, status_code=500)
         
-        # 응답에서 이미지 추출 (예시 코드와 동일한 방식)
+        # content와 parts가 있는지 확인
+        candidate = response.candidates[0]
+        if not hasattr(candidate, 'content') or candidate.content is None:
+            error_msg = "Gemini API 응답에 content가 없습니다."
+            print(f"❌ {error_msg}")
+            print(f"Candidate: {candidate}")
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=dress_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return JSONResponse({
+                "success": False,
+                "error": "No content",
+                "message": error_msg
+            }, status_code=500)
+        
+        if not hasattr(candidate.content, 'parts') or candidate.content.parts is None:
+            error_msg = "Gemini API 응답에 parts가 없습니다."
+            print(f"❌ {error_msg}")
+            print(f"Content: {candidate.content}")
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=dress_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return JSONResponse({
+                "success": False,
+                "error": "No parts",
+                "message": error_msg
+            }, status_code=500)
+        
+        # 응답에서 이미지 추출 (안전한 방식)
         image_parts = [
             part.inline_data.data
-            for part in response.candidates[0].content.parts
+            for part in candidate.content.parts
             if hasattr(part, 'inline_data') and part.inline_data
         ]
         
         # 텍스트 응답도 추출
         result_text = ""
-        for part in response.candidates[0].content.parts:
+        for part in candidate.content.parts:
             if hasattr(part, 'text') and part.text:
                 result_text += part.text
         
@@ -1265,7 +1479,6 @@ async def gemini_test_page(request: Request):
     사람 이미지와 드레스 이미지를 업로드하여 합성 결과를 테스트할 수 있는 페이지
     """
     return templates.TemplateResponse("gemini_test.html", {"request": request})
-
 # ===================== S3 업로드 함수 =====================
 
 def upload_to_s3(file_content: bytes, file_name: str, content_type: str = "image/png", folder: str = "dresses") -> Optional[str]:
