@@ -676,6 +676,282 @@ async def remove_background(file: UploadFile = File(..., description="배경을 
             "message": f"처리 중 오류 발생: {str(e)}"
         }, status_code=500)
 
+# ===================== 프롬프트 생성 헬퍼 함수 =====================
+
+def preprocess_dress_image(dress_img: Image.Image, target_size: int = 1024) -> Image.Image:
+    """
+    드레스 이미지를 전처리하여 배경 정보를 제거하고 중앙 정렬합니다.
+    
+    Args:
+        dress_img: 원본 드레스 이미지 (PIL Image)
+        target_size: 출력 이미지 크기 (정사각형)
+    
+    Returns:
+        전처리된 드레스 이미지 (흰색 배경에 중앙 정렬)
+    """
+    # RGB로 변환 (투명도 채널이 있을 경우를 대비)
+    if dress_img.mode == 'RGBA':
+        # 알파 채널을 사용하여 드레스 영역 감지
+        alpha = dress_img.split()[3]
+        bbox = alpha.getbbox()  # 투명하지 않은 영역의 경계 상자
+        
+        if bbox:
+            # 드레스 영역만 크롭
+            dress_cropped = dress_img.crop(bbox)
+        else:
+            dress_cropped = dress_img
+    else:
+        dress_cropped = dress_img
+    
+    # 드레스 이미지 크기 조정 (비율 유지) - 더 크게 표시
+    dress_cropped.thumbnail((target_size * 0.95, target_size * 0.95), Image.Resampling.LANCZOS)
+    
+    # 흰색 배경 생성
+    white_bg = Image.new('RGB', (target_size, target_size), (255, 255, 255))
+    
+    # 드레스를 중앙에 배치
+    dress_rgb = dress_cropped.convert('RGB')
+    offset_x = (target_size - dress_rgb.width) // 2
+    offset_y = (target_size - dress_rgb.height) // 2
+    
+    # RGBA 모드인 경우 알파 채널을 마스크로 사용
+    if dress_cropped.mode == 'RGBA':
+        white_bg.paste(dress_rgb, (offset_x, offset_y), dress_cropped.split()[3])
+    else:
+        white_bg.paste(dress_rgb, (offset_x, offset_y))
+    
+    return white_bg
+
+async def generate_custom_prompt_from_images(person_img: Image.Image, dress_img: Image.Image, api_key: str) -> Optional[str]:
+    """
+    이미지를 분석하여 맞춤 프롬프트를 생성합니다.
+    
+    Args:
+        person_img: 사람 이미지 (PIL Image)
+        dress_img: 드레스 이미지 (PIL Image)
+        api_key: Gemini API 키
+    
+    Returns:
+        생성된 맞춤 프롬프트 문자열 또는 None
+    """
+    try:
+        print("🔍 이미지 분석 시작...")
+        client = genai.Client(api_key=api_key)
+        
+        analysis_prompt = """Analyze these two images carefully:
+
+Image 1 (Person): A woman in her current outfit
+Image 2 (Dress): A formal dress/gown
+
+Your task: Create a detailed instruction for virtual try-on that will dress the woman from Image 1 in the dress from Image 2.
+
+First, describe what you see:
+1. In Image 1 - What clothing is the woman wearing? (be specific: tops, bottoms, shoes, sleeves)
+2. In Image 2 - What does the dress look like? (color, style, length, neckline, sleeves or sleeveless)
+
+Then, create a prompt with these requirements:
+
+CRITICAL - SKIN EXPOSURE RULES:
+- Compare the clothing coverage in Image 1 vs Image 2
+- If Image 1 has long sleeves but Image 2 dress is sleeveless → Generate natural bare arms with skin
+- If Image 1 has pants/jeans but Image 2 dress is short → Generate natural bare legs with skin
+- If Image 1 covers shoulders but Image 2 dress is strapless → Generate natural bare shoulders with skin
+- Any body part that will be EXPOSED by the new dress MUST show natural skin, NOT the original clothing
+- Example: Woman in long-sleeve shirt wearing sleeveless dress = bare arms visible
+- Example: Woman in jeans wearing short dress = bare legs visible
+
+OTHER REQUIREMENTS:
+- Remove ALL clothing items from Image 1 that you identified
+- Apply the dress from Image 2 onto the woman (exact color, style, design)
+- Replace footwear with elegant heels matching the dress color
+- Keep the woman's face, hair, body shape, and pose from Image 1
+- Use white background
+- Full body visible from head to toe
+
+Output ONLY the final prompt instructions, nothing else. Start with "Create an image of the woman from Image 1 wearing the dress from Image 2." and continue with specific details based on what you observed, including skin exposure instructions."""
+        
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=[person_img, dress_img, analysis_prompt]
+        )
+        
+        # 생성된 프롬프트 추출
+        custom_prompt = ""
+        if response.candidates and len(response.candidates) > 0:
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'text') and part.text:
+                    custom_prompt += part.text
+        
+        if custom_prompt:
+            print(f"✅ 맞춤 프롬프트 생성 완료 (길이: {len(custom_prompt)}자)")
+            return custom_prompt
+        else:
+            print("⚠️ 프롬프트 생성 실패")
+            return None
+            
+    except Exception as e:
+        print(f"❌ 프롬프트 생성 중 오류: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+@app.post("/api/generate-prompt", tags=["프롬프트 생성"])
+async def generate_prompt(
+    person_image: UploadFile = File(..., description="사람 이미지 파일"),
+    dress_image: Optional[UploadFile] = File(None, description="드레스 이미지 파일"),
+    dress_url: Optional[str] = Form(None, description="드레스 이미지 URL (S3 또는 로컬)")
+):
+    """
+    이미지를 분석하여 맞춤 프롬프트만 생성합니다.
+    
+    사용자가 프롬프트를 확인한 후 compose-dress API를 호출할 수 있습니다.
+    
+    Args:
+        person_image: 사람 이미지 파일
+        dress_image: 드레스 이미지 파일
+        dress_url: 드레스 이미지 URL
+    
+    Returns:
+        JSONResponse: 생성된 프롬프트
+    """
+    try:
+        # API 키 확인
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return JSONResponse({
+                "success": False,
+                "error": "API key not found",
+                "message": ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
+            }, status_code=500)
+        
+        # 사람 이미지 읽기
+        person_contents = await person_image.read()
+        person_img = Image.open(io.BytesIO(person_contents))
+        
+        # 드레스 이미지 처리
+        dress_img = None
+        if dress_image:
+            dress_contents = await dress_image.read()
+            dress_img = Image.open(io.BytesIO(dress_contents))
+        elif dress_url:
+            try:
+                if not dress_url.startswith('http'):
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Invalid dress URL",
+                        "message": f"유효하지 않은 드레스 URL입니다."
+                    }, status_code=400)
+                
+                parsed_url = urlparse(dress_url)
+                aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+                aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+                region = os.getenv("AWS_REGION", "ap-northeast-2")
+                
+                if not all([aws_access_key, aws_secret_key]):
+                    response = requests.get(dress_url, timeout=10)
+                    response.raise_for_status()
+                    dress_img = Image.open(io.BytesIO(response.content))
+                else:
+                    s3_client = boto3.client(
+                        's3',
+                        aws_access_key_id=aws_access_key,
+                        aws_secret_access_key=aws_secret_key,
+                        region_name=region
+                    )
+                    
+                    if '.s3.' in parsed_url.netloc or '.s3-' in parsed_url.netloc:
+                        bucket_name = parsed_url.netloc.split('.')[0]
+                        s3_key = parsed_url.path.lstrip('/')
+                    else:
+                        path_parts = parsed_url.path.lstrip('/').split('/', 1)
+                        if len(path_parts) == 2:
+                            bucket_name, s3_key = path_parts
+                        else:
+                            raise ValueError(f"S3 URL 형식을 파싱할 수 없습니다.")
+                    
+                    s3_response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+                    image_data = s3_response['Body'].read()
+                    dress_img = Image.open(io.BytesIO(image_data))
+                    
+            except Exception as e:
+                print(f"드레스 이미지 다운로드 오류: {e}")
+                return JSONResponse({
+                    "success": False,
+                    "error": "Image download failed",
+                    "message": f"드레스 이미지를 다운로드할 수 없습니다: {str(e)}"
+                }, status_code=400)
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": "No dress image provided",
+                "message": "드레스 이미지 파일 또는 URL이 필요합니다."
+            }, status_code=400)
+        
+        # 드레스 이미지 전처리
+        print("드레스 이미지 전처리 시작...")
+        dress_img = preprocess_dress_image(dress_img, target_size=1024)
+        print("드레스 이미지 전처리 완료")
+        
+        # 맞춤 프롬프트 생성
+        print("\n" + "="*80)
+        print("🔍 이미지 분석 및 프롬프트 생성")
+        print("="*80)
+        
+        custom_prompt = await generate_custom_prompt_from_images(person_img, dress_img, api_key)
+        
+        if custom_prompt:
+            return JSONResponse({
+                "success": True,
+                "prompt": custom_prompt,
+                "message": "프롬프트가 성공적으로 생성되었습니다."
+            })
+        else:
+            # 기본 프롬프트 반환 (Image 1 = Person, Image 2 = Dress)
+            default_prompt = """IMPORTANT: You must preserve the person's identity completely.
+
+Task: Apply ONLY the dress from the second image onto the person from the first image.
+
+STRICT REQUIREMENTS:
+1. PRESERVE EXACTLY: The person's face, facial features, skin tone, hair, and body proportions from the first image
+2. PRESERVE EXACTLY: The person's pose, stance, and body position from the first image
+3. PRESERVE EXACTLY: The background and lighting from the person's image (first image)
+4. CHANGE ONLY: Replace the person's clothing with the dress from the second image
+5. The dress should fit naturally on the person's body shape
+6. Maintain realistic shadows and fabric draping on the dress
+7. Keep the person's hands, arms, legs exactly as they are in the original (first image)
+
+CRITICAL - SKIN EXPOSURE RULES:
+- If the person in the first image wears long sleeves but the dress in the second image is sleeveless → Generate natural bare arms with skin
+- If the person in the first image wears pants but the dress in the second image is short → Generate natural bare legs with skin
+- If the person in the first image covers shoulders but the dress in the second image is strapless → Generate natural bare shoulders with skin
+- Any body part that will be EXPOSED by the new dress MUST show natural skin tone, NOT the original clothing
+- Example: Woman in long-sleeve shirt wearing sleeveless dress = bare arms visible with natural skin
+- Example: Woman in jeans wearing short dress = bare legs visible with natural skin
+
+MANDATORY FOOTWEAR CHANGE:
+- Replace footwear with elegant high heels or formal dress shoes matching the dress color
+- NEVER keep sneakers or casual footwear from the first image
+
+DO NOT change the person's appearance, face, body type, or any physical features from the first image.
+ONLY apply the dress design, color, and style from the second image onto the existing person."""
+            
+            return JSONResponse({
+                "success": True,
+                "prompt": default_prompt,
+                "message": "맞춤 프롬프트 생성 실패. 기본 프롬프트를 사용하세요.",
+                "is_default": True
+            })
+            
+    except Exception as e:
+        print(f"❌ 프롬프트 생성 API 오류: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"프롬프트 생성 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
 @app.post("/api/compose-dress", tags=["Gemini 이미지 합성"])
 async def compose_dress(
     person_image: UploadFile = File(..., description="사람 이미지 파일"),
@@ -708,19 +984,19 @@ async def compose_dress(
     # 기본 프롬프트
     default_prompt = """IMPORTANT: You must preserve the person's identity completely.
 
-Task: Apply ONLY the dress from the first image onto the person from the second image.
+Task: Apply ONLY the dress from the second image onto the person from the first image.
 
 STRICT REQUIREMENTS:
-1. PRESERVE EXACTLY: The person's face, facial features, skin tone, hair, and body proportions
-2. PRESERVE EXACTLY: The person's pose, stance, and body position
-3. PRESERVE EXACTLY: The background and lighting from the person's image
-4. CHANGE ONLY: Replace the person's clothing with the dress from the first image
+1. PRESERVE EXACTLY: The person's face, facial features, skin tone, hair, and body proportions from the first image
+2. PRESERVE EXACTLY: The person's pose, stance, and body position from the first image
+3. PRESERVE EXACTLY: The background and lighting from the person's image (first image)
+4. CHANGE ONLY: Replace the person's clothing with the dress from the second image
 5. The dress should fit naturally on the person's body shape
 6. Maintain realistic shadows and fabric draping on the dress
-7. Keep the person's hands, arms, legs exactly as they are in the original
+7. Keep the person's hands, arms, legs exactly as they are in the original (first image)
 
-DO NOT change the person's appearance, face, body type, or any physical features.
-ONLY apply the dress design, color, and style onto the existing person."""
+DO NOT change the person's appearance, face, body type, or any physical features from the first image.
+ONLY apply the dress design, color, and style from the second image onto the existing person."""
     
     text_input = prompt or default_prompt
     used_prompt = prompt or default_prompt
@@ -858,10 +1134,10 @@ ONLY apply the dress design, color, and style onto the existing person."""
         # Gemini Client 생성 (공식 문서와 동일한 방식)
         client = genai.Client(api_key=api_key)
         
-        # Gemini API 호출 (공식 문서 방식: dress, model, text 순서)
+        # Gemini API 호출 (person, dress, text 순서)
         response = client.models.generate_content(
             model="gemini-2.5-flash-image",
-            contents=[dress_img, person_img, text_input]
+            contents=[person_img, dress_img, text_input]
         )
         
         # 응답 확인

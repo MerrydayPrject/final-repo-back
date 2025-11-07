@@ -429,6 +429,12 @@ async function runModelTest(modelId) {
         }
     }
     
+    // gemini-compose 모델은 프롬프트 생성 플로우 사용
+    if (modelId === 'gemini-compose' || model.endpoint === '/api/compose-dress') {
+        await runGeminiComposeWithPromptCheck(modelId, model);
+        return;
+    }
+    
     const loadingDiv = document.getElementById(`loading-${modelId}`);
     const resultDiv = document.getElementById(`result-${modelId}`);
     const runBtn = document.getElementById(`run-btn-${modelId}`);
@@ -739,3 +745,369 @@ document.addEventListener('click', (e) => {
         }
     }
 });
+
+// ===================== Gemini Compose 프롬프트 생성 플로우 =====================
+
+async function runGeminiComposeWithPromptCheck(modelId, model) {
+    const personFile = modelModals[modelId]?.person;
+    const dressFile = modelModals[modelId]?.dress;
+    
+    if (!personFile || !dressFile) {
+        alert('사람 이미지와 드레스 이미지를 모두 업로드해주세요.');
+        return;
+    }
+    
+    const loadingDiv = document.getElementById(`loading-${modelId}`);
+    const runBtn = document.getElementById(`run-btn-${modelId}`);
+    
+    try {
+        loadingDiv.style.display = 'flex';
+        runBtn.disabled = true;
+        runBtn.textContent = '프롬프트 생성 중...';
+        
+        // 1. 프롬프트 생성 API 호출
+        const formData = new FormData();
+        formData.append('person_image', personFile);
+        formData.append('dress_image', dressFile);
+        
+        const response = await fetch('/api/generate-prompt', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `프롬프트 생성 실패: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+        runBtn.textContent = '테스트 실행';
+        
+        if (data.success) {
+            // 2. 프롬프트 확인 모달 표시
+            showPromptConfirmModal(modelId, model, data.prompt);
+        } else {
+            throw new Error(data.message || '프롬프트 생성에 실패했습니다');
+        }
+    } catch (error) {
+        console.error('프롬프트 생성 오류:', error);
+        alert(`프롬프트 생성 실패: ${error.message}`);
+        
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+        runBtn.textContent = '테스트 실행';
+    }
+}
+
+function showPromptConfirmModal(modelId, model, generatedPrompt) {
+    // HTML escape 함수
+    const escapeHtml = (text) => {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+    
+    const modal = document.createElement('div');
+    modal.className = 'prompt-confirm-modal';
+    modal.id = `prompt-modal-${modelId}`;
+    modal.innerHTML = `
+        <div class="prompt-confirm-overlay"></div>
+        <div class="prompt-confirm-content">
+            <div class="prompt-confirm-header">
+                <h3><i class="fas fa-magic"></i> AI가 생성한 프롬프트</h3>
+                <button class="prompt-close-button" onclick="closePromptConfirmModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="prompt-confirm-body">
+                <div class="prompt-preview">
+                    <label>생성된 프롬프트:</label>
+                    <div class="prompt-text">${escapeHtml(generatedPrompt).replace(/\n/g, '<br>')}</div>
+                </div>
+                <div class="prompt-actions">
+                    <p class="prompt-info">
+                        <i class="fas fa-info-circle"></i>
+                        이 프롬프트를 사용하여 이미지 합성을 진행하시겠습니까?
+                    </p>
+                    <div class="button-group">
+                        <button class="btn-secondary" onclick="closePromptConfirmModal()">
+                            <i class="fas fa-times"></i> 취소
+                        </button>
+                        <button class="btn-primary" onclick="confirmAndRunCompose('${modelId}')">
+                            <i class="fas fa-check"></i> 확인 및 합성 시작
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 기존 모달이 있으면 제거
+    const existingModal = document.getElementById(`prompt-modal-${modelId}`);
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    document.body.appendChild(modal);
+    
+    // 생성된 프롬프트를 저장
+    if (!modelModals[modelId]) {
+        modelModals[modelId] = {};
+    }
+    modelModals[modelId].generatedPrompt = generatedPrompt;
+    
+    // 모달 스타일 추가
+    ensurePromptModalStyles();
+    
+    // 오버레이 클릭 시 닫기
+    modal.querySelector('.prompt-confirm-overlay').addEventListener('click', closePromptConfirmModal);
+}
+
+function ensurePromptModalStyles() {
+    if (document.getElementById('prompt-modal-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'prompt-modal-styles';
+    style.textContent = `
+        .prompt-confirm-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .prompt-confirm-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+        }
+        
+        .prompt-confirm-content {
+            position: relative;
+            background: white;
+            border-radius: 12px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .prompt-confirm-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .prompt-confirm-header h3 {
+            margin: 0;
+            font-size: 1.3rem;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .prompt-confirm-header h3 i {
+            color: #8B5CF6;
+        }
+        
+        .prompt-close-button {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #999;
+            transition: color 0.2s;
+            padding: 5px 10px;
+        }
+        
+        .prompt-close-button:hover {
+            color: #333;
+        }
+        
+        .prompt-confirm-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .prompt-preview {
+            margin-bottom: 20px;
+        }
+        
+        .prompt-preview label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #555;
+        }
+        
+        .prompt-text {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #8B5CF6;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #333;
+            white-space: pre-wrap;
+        }
+        
+        .prompt-actions {
+            border-top: 1px solid #e0e0e0;
+            padding-top: 20px;
+        }
+        
+        .prompt-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #e8f4f8;
+            border-radius: 8px;
+            color: #0277bd;
+        }
+        
+        .prompt-info i {
+            font-size: 1.2rem;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        .button-group button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function closePromptConfirmModal() {
+    const modals = document.querySelectorAll('.prompt-confirm-modal');
+    modals.forEach(modal => modal.remove());
+}
+
+async function confirmAndRunCompose(modelId) {
+    closePromptConfirmModal();
+    
+    const model = models.find(m => m.id === modelId);
+    if (!model) return;
+    
+    const prompt = modelModals[modelId]?.generatedPrompt;
+    if (!prompt) {
+        alert('프롬프트를 찾을 수 없습니다. 다시 시도해주세요.');
+        return;
+    }
+    
+    const loadingDiv = document.getElementById(`loading-${modelId}`);
+    const resultDiv = document.getElementById(`result-${modelId}`);
+    const runBtn = document.getElementById(`run-btn-${modelId}`);
+    
+    try {
+        loadingDiv.style.display = 'flex';
+        resultDiv.style.display = 'none';
+        runBtn.disabled = true;
+        runBtn.textContent = '이미지 합성 중...';
+        
+        const formData = new FormData();
+        formData.append('person_image', modelModals[modelId].person);
+        formData.append('dress_image', modelModals[modelId].dress);
+        formData.append('model_name', modelId);
+        formData.append('prompt', prompt);
+        
+        const startTime = performance.now();
+        const response = await fetch(model.endpoint, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const processingTime = (performance.now() - startTime) / 1000;
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+        runBtn.textContent = '테스트 실행';
+        
+        if (data.success) {
+            displayModelResult(modelId, model, data, processingTime);
+        } else {
+            throw new Error(data.message || '이미지 합성 실패');
+        }
+    } catch (error) {
+        console.error('이미지 합성 오류:', error);
+        alert(`이미지 합성 실패: ${error.message}`);
+        
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+        runBtn.textContent = '테스트 실행';
+    }
+}
