@@ -13,6 +13,34 @@
       ],
       "category": "composition",
       "prompt": "IMPORTANT: You must preserve the person's identity completely.\n\nTask: Apply ONLY the dress from the first image onto the person from the second image.\n\nSTRICT REQUIREMENTS:\n1. PRESERVE EXACTLY: The person's face, facial features, skin tone, hair, and body proportions\n2. PRESERVE EXACTLY: The person's pose, stance, and body position\n3. PRESERVE EXACTLY: The background and lighting from the person's image\n4. CHANGE ONLY: Replace the person's clothing with the dress from the first image\n5. The dress should fit naturally on the person's body shape\n6. Maintain realistic shadows and fabric draping on the dress\n7. Keep the person's hands, arms, legs exactly as they are in the original\n\nDO NOT change the person's appearance, face, body type, or any physical features.\nONLY apply the dress design, color, and style onto the existing person."
+    },
+    {
+      "id": "enhanced-compose",
+      "name": "의상합성 고품화",
+      "description": "7개 모델을 통합한 고품화 의상 합성 파이프라인 (SegFormer B0 + RTMPose-s + HR-VITON + 구두 생성 + TPS Warp + Real-ESRGAN + Color Harmonization)",
+      "endpoint": "/api/compose-enhanced",
+      "method": "POST",
+      "input_type": "dual_image",
+      "inputs": [
+        {"name": "person_image", "label": "사람 이미지", "required": true},
+        {"name": "dress_image", "label": "드레스 이미지", "required": true}
+      ],
+      "category": "composition",
+      "parameters": {
+        "generate_shoes": {
+          "type": "checkbox",
+          "label": "구두 생성",
+          "default": false,
+          "required": false
+        },
+        "shoes_prompt": {
+          "type": "text",
+          "label": "구두 생성 프롬프트",
+          "placeholder": "예: elegant white wedding shoes",
+          "default": "",
+          "required": false
+        }
+      }
     }
   ]
 }
