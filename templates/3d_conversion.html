@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 이미지 변환</title>
+    <link rel="stylesheet" href="/static/3d_conversion.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <a href="/" class="back-button">← 뒤로가기</a>
+            <h1>🎨 3D 이미지 변환</h1>
+            <p>드레스 이미지를 3D로 변환합니다</p>
+        </header>
+
+        <main>
+            <!-- 업로드 섹션 -->
+            <section class="upload-section" id="uploadSection">
+                <div class="card">
+                    <h2>1️⃣ 이미지 업로드</h2>
+                    <div class="upload-area" id="uploadArea">
+                        <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                        <div class="upload-placeholder" id="uploadPlaceholder">
+                            <div class="upload-icon">📁</div>
+                            <p>이미지를 드래그하거나 클릭하여 업로드</p>
+                            <button class="btn-primary" id="uploadBtn">이미지 선택</button>
+                        </div>
+                        <div class="preview-container" id="previewContainer" style="display: none;">
+                            <img id="previewImage" alt="Preview">
+                            <div class="button-group">
+                                <button class="btn-secondary" id="changeImageBtn">이미지 변경</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 확인 섹션 -->
+            <section class="confirm-section" id="confirmSection" style="display: none;">
+                <div class="card">
+                    <h2>2️⃣ 3D 모델 생성 시작</h2>
+                    <div class="info-box">
+                        <p><strong>🎨 Meshy.ai</strong>를 사용하여 실제 3D 모델을 생성합니다.</p>
+                        <ul>
+                            <li>⏱️ 생성 시간: 약 2-5분</li>
+                            <li>📦 출력 형식: GLB, FBX (다운로드 가능)</li>
+                            <li>✨ PBR 텍스처 포함</li>
+                        </ul>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-primary" id="convertBtn">3D 모델 생성 시작</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 로딩 섹션 -->
+            <section class="loading-section" id="loadingSection" style="display: none;">
+                <div class="card">
+                    <div class="spinner"></div>
+                    <h2>3D 변환 중...</h2>
+                    <p id="loadingMessage">이미지를 분석하고 3D 정보를 생성하고 있습니다</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 결과 섹션 -->
+            <section class="result-section" id="resultSection" style="display: none;">
+                <div class="card">
+                    <h2>✨ 3D 모델 생성 완료</h2>
+                    
+                    <!-- 원본 이미지 & 썸네일 -->
+                    <div class="comparison-container">
+                        <div class="comparison-item">
+                            <h3>원본 이미지</h3>
+                            <div class="image-container">
+                                <img id="originalImage" alt="Original">
+                            </div>
+                        </div>
+                        <div class="comparison-arrow">→</div>
+                        <div class="comparison-item">
+                            <h3>3D 모델 미리보기</h3>
+                            <div class="image-container">
+                                <img id="thumbnailImage" alt="3D Model Thumbnail">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 다운로드 링크 -->
+                    <div class="download-section">
+                        <h3>📦 3D 모델 다운로드</h3>
+                        <div class="download-grid" id="downloadGrid">
+                            <!-- JavaScript로 동적 생성 -->
+                        </div>
+                    </div>
+
+                    <!-- 처리 정보 -->
+                    <div class="info-card">
+                        <h3>처리 정보</h3>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <span class="label">작업 ID:</span>
+                                <span class="value" id="taskId">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">생성 시간:</span>
+                                <span class="value" id="processingTime">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">상태:</span>
+                                <span class="value status-success" id="statusText">완료</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn-primary" id="saveToServerBtn">💾 서버에 저장</button>
+                        <button class="btn-secondary" id="newConversionBtn">새로운 변환</button>
+                    </div>
+                    
+                    <!-- 저장 완료 메시지 -->
+                    <div id="saveMessage" style="display: none; margin-top: 20px; padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 10px; color: #155724;">
+                        <strong>✅ 저장 완료!</strong>
+                        <div id="saveDetails" style="margin-top: 10px; font-size: 0.9em;"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 에러 섹션 -->
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="card error-card">
+                    <div class="error-icon">⚠️</div>
+                    <h2>오류 발생</h2>
+                    <p id="errorMessage"></p>
+                    <button class="btn-primary" id="retryBtn">다시 시도</button>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Powered by <a href="https://www.meshy.ai" target="_blank">Meshy.ai</a> - AI-Powered 3D Content Generation</p>
+        </footer>
+    </div>
+
+    <script src="/static/3d_conversion.js"></script>
+</body>
+</html>
+

@@ -4800,6 +4800,420 @@ async def analyze_body_with_gemini(image: Image.Image, measurements: Dict, body_
         print(f"Gemini 분석 오류: {exc}")
         return None
 
+# ===================== 3D 이미지 변환 (Meshy.ai) =====================
+
+MESHY_API_KEY = os.getenv("MESHY_API_KEY", "")
+MESHY_API_URL = "https://api.meshy.ai"
+
+def create_3d_model_meshy(image_bytes):
+    """
+    Meshy.ai API를 사용하여 이미지를 3D 모델로 변환
+    
+    Args:
+        image_bytes: 이미지 바이트 데이터
+    
+    Returns:
+        dict: 작업 정보 (task_id, status 등)
+    """
+    if not MESHY_API_KEY:
+        error_msg = (
+            "MESHY_API_KEY가 설정되지 않았습니다!\n\n"
+            "해결 방법:\n"
+            "1. final-repo-back/.env 파일 생성\n"
+            "2. 다음 줄 추가: MESHY_API_KEY=msy_your_api_key_here\n"
+            "3. https://www.meshy.ai 에서 API 키 발급\n"
+            "4. 서버 재시작"
+        )
+        print(f"[Meshy API] 오류: {error_msg}")
+        raise ValueError(error_msg)
+    
+    # 이미지를 base64 data URI로 변환
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    
+    # 이미지 포맷 감지 (파일 시그니처 기반)
+    image_format = "png"
+    if image_bytes[:2] == b'\xff\xd8':  # JPEG magic number
+        image_format = "jpeg"
+    elif image_bytes[:4] == b'\x89PNG':  # PNG magic number
+        image_format = "png"
+    
+    data_uri = f"data:image/{image_format};base64,{base64_image}"
+    
+    headers = {
+        "Authorization": f"Bearer {MESHY_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # API 요청 데이터
+    payload = {
+        "image_url": data_uri,
+        "enable_pbr": True,  # PBR 텍스처 생성
+        "should_remesh": True,  # 리메시 활성화
+        "should_texture": True,  # 텍스처 생성
+        "ai_model": "meshy-4"  # AI 모델 지정
+    }
+    
+    try:
+        print(f"[Meshy API] 요청 시작 - 이미지 크기: {len(image_bytes)} bytes")
+        print(f"[Meshy API] 엔드포인트: {MESHY_API_URL}/openapi/v1/image-to-3d")
+        print(f"[Meshy API] API 키 설정: {'O' if MESHY_API_KEY else 'X'}")
+        
+        response = requests.post(
+            f"{MESHY_API_URL}/openapi/v1/image-to-3d",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        
+        print(f"[Meshy API] 응답 상태 코드: {response.status_code}")
+        
+        # 200 (OK) 또는 202 (Accepted) 모두 성공
+        if response.status_code in [200, 202]:
+            result = response.json()
+            task_id = result.get("result")
+            print(f"[Meshy API] 성공! Task ID: {task_id}")
+            return {
+                "success": True,
+                "task_id": task_id,
+                "message": "3D 모델 생성 작업이 시작되었습니다."
+            }
+        else:
+            error_detail = response.text
+            try:
+                error_json = response.json()
+                error_detail = error_json.get("message", response.text)
+                print(f"[Meshy API] 오류 응답: {error_json}")
+            except:
+                print(f"[Meshy API] 원시 오류: {response.text}")
+            
+            return {
+                "success": False,
+                "error": f"API 오류: {response.status_code}",
+                "message": error_detail
+            }
+            
+    except requests.exceptions.Timeout:
+        print(f"[Meshy API] 타임아웃 오류")
+        return {
+            "success": False,
+            "error": "요청 시간 초과"
+        }
+    except Exception as e:
+        print(f"[Meshy API] 예외 발생: {e}")
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def check_3d_task_status(task_id):
+    """
+    Meshy.ai 3D 생성 작업 상태 확인
+    
+    Args:
+        task_id: 작업 ID
+    
+    Returns:
+        dict: 작업 상태 정보
+    """
+    if not MESHY_API_KEY:
+        return {"success": False, "error": "API 키가 없습니다."}
+    
+    headers = {
+        "Authorization": f"Bearer {MESHY_API_KEY}",
+    }
+    
+    try:
+        response = requests.get(
+            f"{MESHY_API_URL}/openapi/v1/image-to-3d/{task_id}",
+            headers=headers,
+            timeout=10
+        )
+        
+        print(f"[Meshy API] 상태 확인 - Task: {task_id}, 응답: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            status = result.get("status")
+            progress = result.get("progress", 0)
+            
+            print(f"[Meshy API] 상태: {status}, 진행률: {progress}%")
+            
+            return {
+                "success": True,
+                "status": status,
+                "progress": progress,
+                "model_urls": result.get("model_urls", {}),
+                "thumbnail_url": result.get("thumbnail_url"),
+                "texture_urls": result.get("texture_urls", []),
+                "message": f"상태: {status}"
+            }
+        else:
+            error_detail = response.text
+            try:
+                error_json = response.json()
+                error_detail = error_json.get("message", response.text)
+                print(f"[Meshy API] 상태 확인 오류: {error_json}")
+            except:
+                print(f"[Meshy API] 상태 확인 원시 오류: {response.text}")
+            
+            return {
+                "success": False,
+                "error": f"API 오류: {response.status_code}",
+                "message": error_detail
+            }
+            
+    except Exception as e:
+        print(f"[Meshy API] 상태 확인 예외: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def download_3d_model(model_url):
+    """
+    생성된 3D 모델 다운로드
+    
+    Args:
+        model_url: 모델 다운로드 URL
+    
+    Returns:
+        bytes: 모델 파일 데이터
+    """
+    try:
+        response = requests.get(model_url, timeout=30)
+        if response.status_code == 200:
+            return response.content
+        else:
+            return None
+    except Exception as e:
+        print(f"3D 모델 다운로드 실패: {e}")
+        return None
+
+def save_3d_models_to_server(task_id, model_urls, thumbnail_url=None):
+    """
+    Meshy.ai에서 생성된 3D 모델을 서버에 저장
+    
+    Args:
+        task_id: 작업 ID
+        model_urls: 모델 다운로드 URL 딕셔너리
+        thumbnail_url: 썸네일 URL (선택)
+    
+    Returns:
+        dict: 저장된 파일 경로들
+    """
+    saved_files = {}
+    save_dir = Path("3d_models") / task_id
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"[3D 저장] 저장 디렉토리: {save_dir}")
+    
+    # 각 포맷별 모델 다운로드 및 저장
+    for format_name, url in model_urls.items():
+        if not url:
+            continue
+            
+        try:
+            print(f"[3D 저장] {format_name.upper()} 다운로드 중...")
+            response = requests.get(url, timeout=60)
+            
+            if response.status_code == 200:
+                file_path = save_dir / f"model.{format_name}"
+                file_path.write_bytes(response.content)
+                
+                saved_files[format_name] = str(file_path)
+                print(f"[3D 저장] ✓ {format_name.upper()} 저장 완료: {file_path}")
+            else:
+                print(f"[3D 저장] ✗ {format_name.upper()} 다운로드 실패: {response.status_code}")
+                
+        except Exception as e:
+            print(f"[3D 저장] ✗ {format_name.upper()} 저장 오류: {e}")
+    
+    # 썸네일 저장
+    if thumbnail_url:
+        try:
+            print(f"[3D 저장] 썸네일 다운로드 중...")
+            response = requests.get(thumbnail_url, timeout=30)
+            
+            if response.status_code == 200:
+                thumbnail_path = save_dir / "thumbnail.png"
+                thumbnail_path.write_bytes(response.content)
+                
+                saved_files["thumbnail"] = str(thumbnail_path)
+                print(f"[3D 저장] ✓ 썸네일 저장 완료: {thumbnail_path}")
+                
+        except Exception as e:
+            print(f"[3D 저장] ✗ 썸네일 저장 오류: {e}")
+    
+    return saved_files
+
+@app.get("/favicon.ico")
+async def favicon():
+    """파비콘 제공"""
+    from fastapi.responses import FileResponse
+    return FileResponse("static/favicon.ico")
+
+@app.get("/3d-conversion", response_class=HTMLResponse, tags=["Web Interface"])
+async def conversion_3d_page(request: Request):
+    """3D 이미지 변환 페이지"""
+    return templates.TemplateResponse("3d_conversion.html", {"request": request})
+
+@app.post("/api/convert-to-3d", tags=["3D 변환"])
+async def convert_to_3d(
+    image: UploadFile = File(..., description="변환할 이미지")
+):
+    """
+    Meshy.ai를 사용하여 이미지를 3D 모델로 변환
+    
+    작업을 시작하고 task_id를 반환합니다.
+    생성 완료까지 2-5분 소요됩니다.
+    """
+    start_time = time.time()
+    
+    try:
+        # 이미지 읽기
+        image_bytes = await image.read()
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        # RGB 변환 및 리사이즈 (API 최적화)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # 이미지 크기 제한 (Meshy.ai 권장사항)
+        max_size = 2048
+        if max(img.size) > max_size:
+            ratio = max_size / max(img.size)
+            new_size = tuple(int(dim * ratio) for dim in img.size)
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # 이미지를 바이트로 변환
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format='PNG')
+        img_buffer.seek(0)
+        
+        # Meshy.ai API 호출
+        result = create_3d_model_meshy(img_buffer.getvalue())
+        
+        if result.get("success"):
+            return JSONResponse({
+                "success": True,
+                "task_id": result.get("task_id"),
+                "message": "3D 모델 생성 작업이 시작되었습니다. 2-5분 정도 소요됩니다.",
+                "processing_time": round(time.time() - start_time, 2)
+            })
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": result.get("error", "알 수 없는 오류"),
+                "message": result.get("message", ""),
+                "processing_time": round(time.time() - start_time, 2)
+            }, status_code=400)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "processing_time": round(time.time() - start_time, 2)
+        }, status_code=500)
+
+@app.get("/api/check-3d-status/{task_id}", tags=["3D 변환"])
+async def check_3d_status(task_id: str, save_to_server: bool = Query(False, description="서버에 자동 저장")):
+    """
+    3D 모델 생성 작업 상태 확인
+    
+    - task_id: 작업 ID
+    - save_to_server: True면 완료 시 서버에 자동 저장
+    
+    Returns:
+        - status: PENDING, IN_PROGRESS, SUCCEEDED, FAILED
+        - progress: 0-100
+        - model_urls: 완료 시 GLB, FBX 등 모델 다운로드 URL
+        - saved_files: 서버에 저장된 파일 경로들 (save_to_server=True일 때)
+    """
+    try:
+        result = check_3d_task_status(task_id)
+        
+        if result.get("success"):
+            # 완료 상태이고 서버 저장 옵션이 활성화된 경우
+            if save_to_server and result.get("status") == "SUCCEEDED":
+                model_urls = result.get("model_urls", {})
+                thumbnail_url = result.get("thumbnail_url")
+                
+                if model_urls:
+                    print(f"[API] 서버에 3D 모델 저장 시작...")
+                    saved_files = save_3d_models_to_server(task_id, model_urls, thumbnail_url)
+                    result["saved_files"] = saved_files
+                    result["saved_to_server"] = True
+                    print(f"[API] 서버 저장 완료! 파일 수: {len(saved_files)}")
+            
+            return JSONResponse(result)
+        else:
+            return JSONResponse(result, status_code=400)
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
+@app.post("/api/save-3d-model/{task_id}", tags=["3D 변환"])
+async def save_3d_model(task_id: str):
+    """
+    완료된 3D 모델을 서버에 저장
+    
+    - task_id: 저장할 작업 ID
+    
+    Returns:
+        저장된 파일 경로들
+    """
+    try:
+        # 먼저 상태 확인
+        result = check_3d_task_status(task_id)
+        
+        if not result.get("success"):
+            return JSONResponse({
+                "success": False,
+                "error": "작업 상태 확인 실패"
+            }, status_code=400)
+        
+        if result.get("status") != "SUCCEEDED":
+            return JSONResponse({
+                "success": False,
+                "error": f"작업이 완료되지 않았습니다. 현재 상태: {result.get('status')}"
+            }, status_code=400)
+        
+        # 모델 저장
+        model_urls = result.get("model_urls", {})
+        thumbnail_url = result.get("thumbnail_url")
+        
+        if not model_urls:
+            return JSONResponse({
+                "success": False,
+                "error": "다운로드 가능한 모델이 없습니다."
+            }, status_code=400)
+        
+        print(f"[API] 3D 모델 저장 요청 - Task ID: {task_id}")
+        saved_files = save_3d_models_to_server(task_id, model_urls, thumbnail_url)
+        
+        return JSONResponse({
+            "success": True,
+            "task_id": task_id,
+            "saved_files": saved_files,
+            "message": f"{len(saved_files)}개 파일이 서버에 저장되었습니다."
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
