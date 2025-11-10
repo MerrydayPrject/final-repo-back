@@ -12,7 +12,7 @@ import numpy as np
 import io
 import base64
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
@@ -26,6 +26,9 @@ import boto3
 from botocore.exceptions import ClientError
 import requests
 from urllib.parse import urlparse, unquote
+import traceback
+
+from body_analysis_test.body_analysis import BodyAnalysisService
 
 # .env 파일 로드
 load_dotenv()
@@ -62,6 +65,11 @@ Path("templates").mkdir(exist_ok=True)
 
 # 정적 파일 및 템플릿 설정
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount(
+    "/body-analysis-static",
+    StaticFiles(directory="body_analysis_test/static"),
+    name="body_analysis_static"
+)
 templates = Jinja2Templates(directory="templates")
 
 # 전역 변수로 모델 저장
@@ -74,6 +82,9 @@ segformer_b2_model = None
 rtmpose_model = None
 realesrgan_model = None
 sdxl_pipeline = None
+
+# 체형 분석 서비스 전역 변수
+body_analysis_service: Optional[BodyAnalysisService] = None
 
 # 레이블 정보
 LABELS = {
@@ -99,8 +110,21 @@ def get_db_connection():
             cursorclass=pymysql.cursors.DictCursor
         )
         return connection
+    except pymysql.Error as e:
+        error_msg = str(e)
+        print(f"DB 연결 오류: {error_msg}")
+        # 에러 타입에 따른 상세 메시지
+        if "Access denied" in error_msg or "1045" in error_msg:
+            print("⚠️  데이터베이스 인증 실패. .env 파일의 MYSQL_USER와 MYSQL_PASSWORD를 확인하세요.")
+        elif "Unknown database" in error_msg or "1049" in error_msg:
+            print("⚠️  데이터베이스가 존재하지 않습니다. 'marryday' 데이터베이스를 생성하세요.")
+        elif "Can't connect" in error_msg or "2003" in error_msg:
+            print("⚠️  MySQL 서버에 연결할 수 없습니다. MySQL 서비스가 실행 중인지 확인하세요.")
+        else:
+            print(f"⚠️  데이터베이스 연결 오류: {error_msg}")
+        return None
     except Exception as e:
-        print(f"DB 연결 오류: {e}")
+        print(f"DB 연결 오류 (예상치 못한 오류): {e}")
         return None
 
 def init_database():
@@ -254,7 +278,7 @@ class ErrorResponse(BaseModel):
 async def load_model():
     """애플리케이션 시작 시 모델 로드 및 DB 초기화"""
     import asyncio
-    global processor, model
+    global processor, model, body_analysis_service
     print("SegFormer 모델 로딩 중...")
     # 동기 블로킹 작업을 별도 스레드에서 실행
     loop = asyncio.get_event_loop()
@@ -266,6 +290,18 @@ async def load_model():
     # DB 초기화
     print("데이터베이스 초기화 중...")
     await loop.run_in_executor(None, init_database)
+
+    # 체형 분석 서비스 초기화
+    try:
+        print("체형 분석 서비스 초기화 중...")
+        body_analysis_service = await loop.run_in_executor(None, BodyAnalysisService)
+        if body_analysis_service and body_analysis_service.is_initialized:
+            print("✅ 체형 분석 서비스 초기화 완료")
+        else:
+            print("⚠️  체형 분석 서비스 초기화 실패")
+    except Exception as exc:
+        print(f"❌ 체형 분석 서비스 로딩 오류: {exc}")
+        body_analysis_service = None
 
 @app.get("/", response_class=HTMLResponse, tags=["Web Interface"])
 async def home(request: Request):
@@ -285,6 +321,12 @@ async def nukki_service(request: Request):
     """
     return templates.TemplateResponse("nukki.html", {"request": request})
 
+@app.get("/body-analysis", response_class=HTMLResponse, tags=["Web Interface"])
+async def body_analysis_page(request: Request):
+    """
+    체형 분석 웹 페이지
+    """
+    return templates.TemplateResponse("body_analysis.html", {"request": request})
 @app.get("/labels", tags=["정보"])
 async def get_labels():
     """
@@ -2552,7 +2594,7 @@ async def import_dresses(file: UploadFile = File(...)):
             return JSONResponse({
                 "success": False,
                 "error": "Database connection failed",
-                "message": "데이터베이스 연결에 실패했습니다."
+                "message": "데이터베이스 연결에 실패했습니다. 서버 로그를 확인하거나 .env 파일의 데이터베이스 설정을 확인하세요."
             }, status_code=500)
         
         success_count = 0
@@ -4603,6 +4645,160 @@ async def compose_enhanced(
             "run_time": round(run_time, 2),
             "message": f"파이프라인 실행 중 오류 발생: {str(e)}"
         }, status_code=500)
+
+@app.post("/api/analyze-body", tags=["체형 분석"])
+async def analyze_body(
+    file: UploadFile = File(..., description="전신 이미지 파일 (JPG, PNG, JPEG)")
+):
+    """
+    전신 이미지 체형 분석
+
+    MediaPipe Pose Landmarker로 포즈 랜드마크를 추출하고, 체형 비율을 계산한 후
+    (선택적으로) Gemini를 이용한 상세 분석을 수행합니다.
+    """
+    global body_analysis_service
+    try:
+        if body_analysis_service is None or not body_analysis_service.is_initialized:
+            body_analysis_service = BodyAnalysisService()
+
+        if body_analysis_service is None or not body_analysis_service.is_initialized:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "body_analysis_not_initialized",
+                    "message": "체형 분석 서비스를 초기화할 수 없습니다. 모델 파일을 확인해주세요.",
+                },
+                status_code=500,
+            )
+
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        landmarks = body_analysis_service.extract_landmarks(image)
+        if landmarks is None:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "no_pose_detected",
+                    "message": "이미지에서 포즈를 감지할 수 없습니다. 전신이 보이는 이미지를 업로드해주세요.",
+                },
+                status_code=400,
+            )
+
+        measurements = body_analysis_service.calculate_measurements(landmarks)
+        body_type = body_analysis_service.classify_body_type(measurements)
+
+        gemini_analysis = await analyze_body_with_gemini(image, measurements, body_type)
+
+        return JSONResponse(
+            {
+                "success": True,
+                "body_analysis": {
+                    "body_type": body_type.get("type", "unknown"),
+                    "measurements": measurements,
+                    "body_type_category": body_type,
+                },
+                "pose_landmarks": {
+                    "total_landmarks": len(landmarks),
+                    "detected_landmarks": landmarks,
+                },
+                "gemini_analysis": gemini_analysis,
+                "message": "체형 분석이 완료되었습니다.",
+            }
+        )
+    except Exception as exc:
+        print(f"체형 분석 오류: {exc}")
+        print(traceback.format_exc())
+        return JSONResponse(
+            {
+                "success": False,
+                "error": str(exc),
+                "message": f"체형 분석 중 오류가 발생했습니다: {exc}",
+            },
+            status_code=500,
+        )
+
+async def analyze_body_with_gemini(image: Image.Image, measurements: Dict, body_type: Dict):
+    """
+    Gemini API로 체형 상세 분석
+    """
+    try:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("GEMINI_API_KEY가 설정되지 않았습니다.")
+            return None
+
+        client = genai.Client(api_key=api_key)
+
+        prompt = f"""
+이 이미지를 자세히 관찰하고 체형을 분석해주세요.
+
+**핵심 원칙**: 이미지를 직접 보고 실제 체형 특징을 솔직하게 판단하세요. 랜드마크 기반 수치는 참고용일 뿐입니다.
+
+랜드마크 기반 체형 라인 (참고용):
+- 체형 라인: {body_type.get('type', 'unknown')}에 가깝습니다
+- 어깨/엉덩이 비율: {measurements.get('shoulder_hip_ratio', 1.0):.2f}
+- 허리/어깨 비율: {measurements.get('waist_shoulder_ratio', 1.0):.2f}
+- 허리/엉덩이 비율: {measurements.get('waist_hip_ratio', 1.0):.2f}
+
+**중요**: 위 수치는 랜드마크 기반 추정치로 정확하지 않을 수 있습니다. 실제 체형 판단은 이미지를 직접 관찰하여 하세요.
+
+**먼저 이미지에서 이 사람의 성별을 판단하세요.**
+
+**성별이 남성인 경우:**
+- 체형 특징만 분석하세요 (통통함, 마름, 근육질, 상체/하체 비율, 전체적인 체형 인상 등)
+- 드레스 추천은 절대 하지 마세요.
+
+**성별이 여성인 경우:**
+- 체형 특징을 분석하고
+- 드레스 스타일 추천을 포함하세요.
+
+**분석 지침**:
+1. **이미지를 직접 관찰**하여 이 사람의 실제 체형 특징을 솔직하게 파악하세요:
+   - 통통한지, 마른지, 근육질인지
+   - 상체/하체 볼륨 분포 (상체가 큰지, 하체가 큰지, 균형잡혔는지)
+   - 허리 라인이 명확한지, 직선적인지
+   - 전체적인 체형 인상 (건강한 느낌, 날씬한 느낌, 볼륨감 있는 느낌 등)
+
+2. **여성인 경우에만** 실제 체형 특징에 맞는 드레스 스타일을 2-3개 구체적으로 제시하고, 각 스타일이 왜 어울리는지 이유를 설명 안에 포함하세요.
+   **중요**: 
+   - 남성인 경우 이 항목은 완전히 생략하세요.
+   - 추천할 드레스 스타일은 반드시 다음 카테고리 중에서만 선택하세요:
+     - 벨라인 (벨트라인, 하이웨이스트 포함)
+     - 머메이드 (물고기 실루엣)
+     - 프린세스 (프린세스라인)
+     - A라인 (에이라인)
+     - 슬림 (스트레이트, H라인 포함)
+     - 트럼펫 (플레어 실루엣)
+   - **실제 체형 특징을 고려하여 추천하세요** (예: 통통하면 벨라인 > 머메이드, 하체가 크면 A라인 > 슬림)
+
+3. **여성인 경우에만** 실제 체형 특징에 맞지 않는 드레스 스타일을 2개 구체적으로 제시하고, 각 스타일을 피해야 하는 이유를 설명 안에 포함하세요.
+   **중요**: 
+   - 남성인 경우 이 항목은 완전히 생략하세요.
+   - 피해야 할 스타일도 위의 카테고리 중에서만 언급하세요.
+   - **실제 체형 특징을 고려하여 추천하세요**
+
+반드시 지켜야 할 사항:
+- **남성 사진인 경우 드레스 추천은 절대 하지 마세요. 체형 분석만 제공하세요.**
+- **이미지를 직접 보고 실제 체형 특징을 솔직하게 판단하세요. 랜드마크 수치는 참고용일 뿐입니다.**
+- 스타일링 팁, 액세서리 추천, 색상 추천, 코디 팁 등은 절대 포함하지 마세요.
+- 여성인 경우에만 추천 드레스 스타일명과 피해야 할 드레스 스타일명은 반드시 위의 6개 카테고리 중에서만 선택하세요.
+- 다른 드레스 스타일명은 언급하지 마세요.
+- 별도의 리스트나 항목으로 나열하지 말고, 자연스러운 문단 형식으로 설명해주세요.
+- **실제 체형 특징에 맞는 실용적이고 솔직한 추천을 해주세요.**
+"""
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=[image, prompt]
+        )
+
+        analysis_text = response.text
+        return {"detailed_analysis": analysis_text}
+
+    except Exception as exc:
+        print(f"Gemini 분석 오류: {exc}")
+        return None
 
 if __name__ == "__main__":
     import uvicorn

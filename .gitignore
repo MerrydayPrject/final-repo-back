@@ -56,3 +56,4 @@ Thumbs.db
 .env.local
 
 
+image_enhancement_server/gfpgan/weights/
