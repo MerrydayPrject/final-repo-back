@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>체형 분석 테스트 - Marryday</title>
+    <link rel="stylesheet" href="/static/body_analysis_test.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 헤더 -->
+        <header class="test-header">
+            <div class="header-content">
+                <h1 class="logo-text">Marryday</h1>
+                <div class="header-badge">체형 분석 테스트 서버</div>
+            </div>
+        </header>
+
+        <!-- 메인 컨텐츠 -->
+        <main class="main-content">
+            <div class="test-container">
+                <!-- 타이틀 섹션 -->
+                <div class="title-section">
+                    <h2 class="page-title">체형 분석 테스트</h2>
+                    <p class="page-description">전신 사진을 업로드하면 AI가 체형을 분석하고 어울리는 드레스 스타일을 추천합니다</p>
+                    <div class="page-warning">
+                        <span class="warning-icon-small">⚠️</span>
+                        <span>AI의 분석은 정확하지 않을 수 있습니다. 참고용 정보로만 활용해주세요.</span>
+                    </div>
+                </div>
+
+                <!-- 업로드 및 결과 섹션 -->
+                <div class="content-wrapper">
+                    <!-- 왼쪽: 업로드 영역 -->
+                    <div class="left-section">
+                        <div class="upload-container">
+                            <div class="upload-header">
+                                <h3>전신 사진 업로드</h3>
+                                <p>JPG, PNG, JPEG 형식 지원</p>
+                            </div>
+                            
+                            <div class="upload-area" id="uploadArea">
+                                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                                <div class="upload-content" id="uploadContent">
+                                    <div class="upload-icon">
+                                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="17 8 12 3 7 8"></polyline>
+                                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                                        </svg>
+                                    </div>
+                                    <p class="upload-text">전신 사진을 업로드 해주세요</p>
+                                    <p class="upload-subtext">클릭하거나 드래그하여 업로드</p>
+                                </div>
+                                <div class="preview-container" id="previewContainer" style="display: none;">
+                                    <img id="previewImage" src="" alt="Preview">
+                                    <button class="remove-button" id="removeButton">✕</button>
+                                </div>
+                            </div>
+
+                            <button class="analyze-button" id="analyzeButton" disabled>
+                                체형 분석하기
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 오른쪽: 결과 영역 -->
+                    <div class="right-section">
+                        <div class="result-container">
+                            <div class="result-header">
+                                <h3>분석 결과</h3>
+                            </div>
+                            
+                            <div class="result-content" id="resultContent">
+                                <div class="result-placeholder">
+                                    <div class="placeholder-icon">📊</div>
+                                    <p class="placeholder-text">이미지를 업로드하고 분석 버튼을 클릭하세요</p>
+                                </div>
+                            </div>
+
+                            <!-- 로딩 상태 -->
+                            <div class="loading-container" id="loadingContainer" style="display: none;">
+                                <div class="spinner"></div>
+                                <p>체형 분석 중...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/body_analysis_test.js"></script>
+</body>
+</html>
+
+
+

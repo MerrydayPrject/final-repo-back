@@ -99,8 +99,21 @@ def get_db_connection():
             cursorclass=pymysql.cursors.DictCursor
         )
         return connection
+    except pymysql.Error as e:
+        error_msg = str(e)
+        print(f"DB 연결 오류: {error_msg}")
+        # 에러 타입에 따른 상세 메시지
+        if "Access denied" in error_msg or "1045" in error_msg:
+            print("⚠️  데이터베이스 인증 실패. .env 파일의 MYSQL_USER와 MYSQL_PASSWORD를 확인하세요.")
+        elif "Unknown database" in error_msg or "1049" in error_msg:
+            print("⚠️  데이터베이스가 존재하지 않습니다. 'marryday' 데이터베이스를 생성하세요.")
+        elif "Can't connect" in error_msg or "2003" in error_msg:
+            print("⚠️  MySQL 서버에 연결할 수 없습니다. MySQL 서비스가 실행 중인지 확인하세요.")
+        else:
+            print(f"⚠️  데이터베이스 연결 오류: {error_msg}")
+        return None
     except Exception as e:
-        print(f"DB 연결 오류: {e}")
+        print(f"DB 연결 오류 (예상치 못한 오류): {e}")
         return None
 
 def init_database():
@@ -2552,7 +2565,7 @@ async def import_dresses(file: UploadFile = File(...)):
             return JSONResponse({
                 "success": False,
                 "error": "Database connection failed",
-                "message": "데이터베이스 연결에 실패했습니다."
+                "message": "데이터베이스 연결에 실패했습니다. 서버 로그를 확인하거나 .env 파일의 데이터베이스 설정을 확인하세요."
             }, status_code=500)
         
         success_count = 0
