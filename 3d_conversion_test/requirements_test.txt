@@ -1,0 +1,21 @@
+# 3D 이미지 변환 테스트 모듈 의존성
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+jinja2==3.1.2
+
+# 딥러닝 & 이미지 처리
+torch>=2.0.0
+torchvision>=0.15.0
+pillow>=10.0.0
+numpy>=1.24.0
+opencv-python>=4.8.0
+
+# 3D 변환 모델
+timm>=0.9.0  # MiDaS, DPT 모델용
+einops>=0.7.0  # Tensor 연산
+transformers>=4.30.0  # DPT 모델용
+
+# 유틸리티
+tqdm>=4.65.0
+

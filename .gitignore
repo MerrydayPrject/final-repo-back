@@ -44,6 +44,10 @@ models/
 uploads/*
 !uploads/.gitkeep
 
+# 3D 모델 저장 (Meshy.ai)
+3d_models/*
+!3d_models/.gitkeep
+
 # 시스템 파일
 .DS_Store
 Thumbs.db
