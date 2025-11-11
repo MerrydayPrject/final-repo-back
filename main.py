@@ -12,10 +12,11 @@ import numpy as np
 import io
 import base64
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
+from openai import OpenAI
 import os
 import time
 import pymysql
@@ -32,6 +33,9 @@ from body_analysis_test.body_analysis import BodyAnalysisService
 
 # .env 파일 로드
 load_dotenv()
+
+GPT4O_MODEL_NAME = os.getenv("GPT4O_MODEL_NAME", "gpt-4o")
+GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.5-flash-image")
 
 # FastAPI 앱 초기화
 app = FastAPI(
@@ -765,6 +769,51 @@ def preprocess_dress_image(dress_img: Image.Image, target_size: int = 1024) -> I
     
     return white_bg
 
+def _build_gpt4o_prompt_inputs(person_data_url: str, dress_data_url: str) -> List[Dict[str, Any]]:
+    return [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "You are a professional visual prompt engineer specialized in AI outfit try-on. "
+                        "Your job is to analyze two reference images: (1) a person photo, and (2) a clothing photo. "
+                        "Then, write a detailed English prompt for a generative image model (e.g., Gemini 2.5 Flash) "
+                        "that will replace only the person's outfit with the clothing from the second image. "
+                        "Rules: Keep the same person's face, body shape, pose, hairstyle, and background exactly. "
+                        "Do NOT change facial expression, body proportions, or lighting. "
+                        "Describe the new outfit (color, texture, fabric, style) based on the clothing image. "
+                        "Make it photorealistic and naturally blended, as if the person was originally photographed wearing it. "
+                        "Return ONLY the final prompt text, no explanations."
+                    ),
+                },
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": "Analyze the outfit replacement request.",
+                },
+                {"type": "input_image", "image_url": person_data_url},
+                {"type": "input_image", "image_url": dress_data_url},
+            ],
+        },
+    ]
+
+def _extract_gpt4o_prompt(response: Any) -> str:
+    try:
+        prompt_text = response.output_text  # type: ignore[attr-defined]
+    except AttributeError:
+        prompt_text = ""
+    
+    prompt_text = (prompt_text or "").strip()
+    if not prompt_text:
+        raise ValueError("GPT-4o가 유효한 프롬프트를 반환하지 않았습니다.")
+    return prompt_text
+
 async def generate_custom_prompt_from_images(person_img: Image.Image, dress_img: Image.Image, api_key: str) -> str:
     """
     이미지를 분석하여 맞춤 프롬프트를 생성합니다.
@@ -1059,6 +1108,295 @@ MANDATORY FOOTWEAR CHANGE - THIS IS CRITICAL:
             "error": str(e),
             "message": f"프롬프트 생성 중 오류 발생: {str(e)}"
         }, status_code=500)
+
+@app.post("/api/gpt4o-gemini/generate-prompt", tags=["프롬프트 생성"])
+async def generate_gpt4o_prompt(
+    person_image: UploadFile = File(..., description="사람 이미지 파일"),
+    dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+):
+    try:
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "API key not found",
+                    "message": ".env 파일에 OPENAI_API_KEY가 설정되지 않았습니다."
+                },
+                status_code=500,
+            )
+
+        person_bytes = await person_image.read()
+        dress_bytes = await dress_image.read()
+
+        if not person_bytes or not dress_bytes:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "Invalid input",
+                    "message": "사람 이미지와 드레스 이미지를 모두 업로드해주세요."
+                },
+                status_code=400,
+            )
+
+        person_b64 = base64.b64encode(person_bytes).decode("utf-8")
+        dress_b64 = base64.b64encode(dress_bytes).decode("utf-8")
+        person_mime = person_image.content_type or "image/png"
+        dress_mime = dress_image.content_type or "image/png"
+        person_data_url = f"data:{person_mime};base64,{person_b64}"
+        dress_data_url = f"data:{dress_mime};base64,{dress_b64}"
+
+        client = OpenAI(api_key=openai_api_key)
+
+        request_input = _build_gpt4o_prompt_inputs(person_data_url, dress_data_url)
+
+        try:
+            response = client.responses.create(
+                model=GPT4O_MODEL_NAME,
+                input=request_input,
+                max_output_tokens=600,
+            )
+        except Exception as exc:
+            print(f"GPT-4o API 호출 실패: {exc}")
+            traceback.print_exc()
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "OpenAI call failed",
+                    "message": f"GPT-4o 호출에 실패했습니다: {str(exc)}"
+                },
+                status_code=502,
+            )
+
+        prompt_text = (response.output_text or "").strip()
+        if not prompt_text:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "Empty response",
+                    "message": "GPT-4o가 유효한 프롬프트를 반환하지 않았습니다."
+                },
+                status_code=500,
+            )
+
+        return JSONResponse({"success": True, "prompt": prompt_text})
+    except Exception as exc:
+        print(f"GPT-4o 프롬프트 생성 중 오류: {exc}")
+        traceback.print_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "error": str(exc),
+                "message": f"프롬프트 생성 중 예상치 못한 오류가 발생했습니다: {str(exc)}"
+            },
+            status_code=500,
+        )
+
+@app.post("/api/gpt4o-gemini/compose", tags=["Gemini 이미지 합성"])
+async def compose_gpt4o_gemini(
+    person_image: UploadFile = File(..., description="사람 이미지 파일"),
+    dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+    prompt: str = Form(..., description="GPT-4o가 생성한 프롬프트"),
+    model_name: Optional[str] = Form(None, description="모델명"),
+):
+    start_time = time.time()
+    model_id = model_name or "gpt4o-gemini"
+    used_prompt = (prompt or "").strip()
+
+    if not used_prompt:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "Invalid prompt",
+                "message": "프롬프트가 비어 있습니다. GPT-4o로 생성한 프롬프트를 제공해주세요."
+            },
+            status_code=400,
+        )
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "API key not found",
+                "message": ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
+            },
+            status_code=500,
+        )
+
+    person_bytes = await person_image.read()
+    dress_bytes = await dress_image.read()
+
+    if not person_bytes or not dress_bytes:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "Invalid input",
+                "message": "사람 이미지와 드레스 이미지를 모두 업로드해주세요."
+            },
+            status_code=400,
+        )
+
+    try:
+        person_img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
+        dress_img = Image.open(io.BytesIO(dress_bytes)).convert("RGB")
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "Image decoding failed",
+                "message": f"업로드한 이미지를 열 수 없습니다: {str(exc)}"
+            },
+            status_code=400,
+        )
+
+    person_buffered = io.BytesIO()
+    person_img.save(person_buffered, format="PNG")
+    person_base64 = base64.b64encode(person_buffered.getvalue()).decode()
+
+    dress_buffered = io.BytesIO()
+    dress_img.save(dress_buffered, format="PNG")
+    dress_base64 = base64.b64encode(dress_buffered.getvalue()).decode()
+
+    person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+    dress_s3_url = upload_log_to_s3(dress_buffered.getvalue(), model_id, "dress") or ""
+    result_s3_url = ""
+
+    client = genai.Client(api_key=api_key)
+
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_FLASH_MODEL,
+            contents=[person_img, dress_img, used_prompt]
+        )
+    except Exception as exc:
+        run_time = time.time() - start_time
+        try:
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=dress_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+        except Exception:
+            pass
+
+        print(f"Gemini API 호출 실패: {exc}")
+        traceback.print_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "Gemini call failed",
+                "message": f"Gemini 2.5 Flash 호출에 실패했습니다: {str(exc)}"
+            },
+            status_code=502,
+        )
+
+    if not response.candidates:
+        run_time = time.time() - start_time
+        save_test_log(
+            person_url=person_s3_url or "",
+            dress_url=dress_s3_url or None,
+            result_url="",
+            model=model_id,
+            prompt=used_prompt,
+            success=False,
+            run_time=run_time
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "No response",
+                "message": "Gemini가 결과를 생성하지 못했습니다."
+            },
+            status_code=500,
+        )
+
+    candidate = response.candidates[0]
+    parts = getattr(candidate.content, "parts", None)
+    if not parts:
+        run_time = time.time() - start_time
+        save_test_log(
+            person_url=person_s3_url or "",
+            dress_url=dress_s3_url or None,
+            result_url="",
+            model=model_id,
+            prompt=used_prompt,
+            success=False,
+            run_time=run_time
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "No parts",
+                "message": "Gemini 응답에 이미지 데이터가 포함되지 않았습니다."
+            },
+            status_code=500,
+        )
+
+    image_parts: List[bytes] = []
+    result_text = ""
+    for part in parts:
+        if hasattr(part, "inline_data") and part.inline_data:
+            data = part.inline_data.data
+            if isinstance(data, bytes):
+                image_parts.append(data)
+            elif isinstance(data, str):
+                image_parts.append(base64.b64decode(data))
+        if hasattr(part, "text") and part.text:
+            result_text += part.text
+
+    if not image_parts:
+        run_time = time.time() - start_time
+        save_test_log(
+            person_url=person_s3_url or "",
+            dress_url=dress_s3_url or None,
+            result_url="",
+            model=model_id,
+            prompt=used_prompt,
+            success=False,
+            run_time=run_time
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "No image generated",
+                "message": "Gemini가 이미지 결과를 반환하지 않았습니다."
+            },
+            status_code=500,
+        )
+
+    result_img = Image.open(io.BytesIO(image_parts[0]))
+    result_buffered = io.BytesIO()
+    result_img.save(result_buffered, format="PNG")
+    result_s3_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
+
+    run_time = time.time() - start_time
+    save_test_log(
+        person_url=person_s3_url or "",
+        dress_url=dress_s3_url or None,
+        result_url=result_s3_url or "",
+        model=model_id,
+        prompt=used_prompt,
+        success=True,
+        run_time=run_time
+    )
+
+    result_base64 = base64.b64encode(result_buffered.getvalue()).decode()
+
+    return JSONResponse(
+        {
+            "success": True,
+            "person_image": f"data:image/png;base64,{person_base64}",
+            "dress_image": f"data:image/png;base64,{dress_base64}",
+            "result_image": f"data:image/png;base64,{result_base64}",
+            "message": "이미지 합성이 완료되었습니다.",
+            "gemini_response": result_text
+        }
+    )
 
 @app.post("/api/compose-dress", tags=["Gemini 이미지 합성"])
 async def compose_dress(

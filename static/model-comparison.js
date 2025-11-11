@@ -36,19 +36,19 @@ function renderModelButtons() {
     }
     
     const buttonsHtml = models.map(model => {
-        const isGemini = model.id === 'gemini-compose';
-        const geminiClass = isGemini ? 'gemini-model-card' : '';
-        const geminiBadge = isGemini ? '<div class="model-badge">NEW</div>' : '';
+        const isPromptPipeline = Boolean(model.requires_prompt_generation);
+        const highlightClass = isPromptPipeline ? 'gemini-model-card' : '';
+        const badge = isPromptPipeline ? '<div class="model-badge">NEW</div>' : '';
         
         return `
-            <button class="model-button-card ${geminiClass}" onclick="openModelModal('${model.id}')">
-                <div class="model-button-icon">${isGemini ? '✨' : '🤖'}</div>
+            <button class="model-button-card ${highlightClass}" onclick="openModelModal('${model.id}')">
+                <div class="model-button-icon">${isPromptPipeline ? '✨' : '🤖'}</div>
                 <div class="model-button-content">
                     <h3>${model.name}</h3>
                     <p>${model.description}</p>
                     <span class="model-category">${model.category === 'composition' ? '합성' : '세그멘테이션'}</span>
                 </div>
-                ${geminiBadge}
+                ${badge}
             </button>
         `;
     }).join('');
@@ -77,7 +77,7 @@ function createModelModals() {
                 <div class="model-modal-content">
                     <div class="model-modal-header">
                         <div class="model-modal-title">
-                            <div class="model-modal-icon">${model.id === 'gemini-compose' ? '✨' : '🤖'}</div>
+                            <div class="model-modal-icon">${model.requires_prompt_generation ? '✨' : '🤖'}</div>
                             <div>
                                 <h2>${model.name}</h2>
                                 <p>${model.description}</p>
@@ -429,8 +429,8 @@ async function runModelTest(modelId) {
         }
     }
     
-    // gemini-compose 모델인 경우: 프롬프트 생성 및 확인 프로세스
-    if (modelId === 'gemini-compose' && model.input_type === 'dual_image') {
+    // 프롬프트 생성이 필요한 파이프라인인 경우
+    if (model.requires_prompt_generation && model.input_type === 'dual_image') {
         await runGeminiComposeWithPromptCheck(modelId, model);
         return;
     }
@@ -758,6 +758,7 @@ async function runGeminiComposeWithPromptCheck(modelId, model) {
     
     const loadingDiv = document.getElementById(`loading-${modelId}`);
     const runBtn = document.getElementById(`run-btn-${modelId}`);
+    const promptEndpoint = model.prompt_generation_endpoint || '/api/generate-prompt';
     
     try {
         loadingDiv.style.display = 'flex';
@@ -769,7 +770,7 @@ async function runGeminiComposeWithPromptCheck(modelId, model) {
         formData.append('person_image', personFile);
         formData.append('dress_image', dressFile);
         
-        const response = await fetch('/api/generate-prompt', {
+        const response = await fetch(promptEndpoint, {
             method: 'POST',
             body: formData
         });
