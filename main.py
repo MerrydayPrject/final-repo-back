@@ -36,6 +36,7 @@ load_dotenv()
 
 GPT4O_MODEL_NAME = os.getenv("GPT4O_MODEL_NAME", "gpt-4o")
 GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.5-flash-image")
+GEMINI_PROMPT_MODEL = os.getenv("GEMINI_PROMPT_MODEL", "gemini-2.0-flash-exp")
 
 # FastAPI 앱 초기화
 app = FastAPI(
@@ -921,7 +922,7 @@ OTHER REQUIREMENTS:
 Output ONLY the final prompt text with this complete structure. Be extremely specific about which clothing items to remove and which body parts need natural skin generation."""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model=GEMINI_PROMPT_MODEL,
             contents=[person_img, dress_img, analysis_prompt]
         )
         
@@ -950,7 +951,7 @@ Output ONLY the final prompt text with this complete structure. Be extremely spe
         traceback.print_exc()
         return None
 
-@app.post("/api/generate-prompt", tags=["프롬프트 생성"])
+@app.post("/api/gemini/generate-prompt", tags=["프롬프트 생성"])
 async def generate_prompt(
     person_image: UploadFile = File(..., description="사람 이미지 파일"),
     dress_image: Optional[UploadFile] = File(None, description="드레스 이미지 파일"),
@@ -970,10 +971,11 @@ async def generate_prompt(
         JSONResponse: 생성된 프롬프트
     """
     try:
+        llm_info = {"llm": GEMINI_PROMPT_MODEL}
         # API 키 확인
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            return JSONResponse({
+            return JSONResponse({**llm_info, 
                 "success": False,
                 "error": "API key not found",
                 "message": ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
@@ -991,7 +993,7 @@ async def generate_prompt(
         elif dress_url:
             try:
                 if not dress_url.startswith('http'):
-                    return JSONResponse({
+                    return JSONResponse({**llm_info, 
                         "success": False,
                         "error": "Invalid dress URL",
                         "message": f"유효하지 않은 드레스 URL입니다."
@@ -1030,13 +1032,13 @@ async def generate_prompt(
                     
             except Exception as e:
                 print(f"드레스 이미지 다운로드 오류: {e}")
-                return JSONResponse({
+                return JSONResponse({**llm_info, 
                     "success": False,
                     "error": "Image download failed",
                     "message": f"드레스 이미지를 다운로드할 수 없습니다: {str(e)}"
                 }, status_code=400)
         else:
-            return JSONResponse({
+            return JSONResponse({**llm_info, 
                 "success": False,
                 "error": "No dress image provided",
                 "message": "드레스 이미지 파일 또는 URL이 필요합니다."
@@ -1055,7 +1057,7 @@ async def generate_prompt(
         custom_prompt = await generate_custom_prompt_from_images(person_img, dress_img, api_key)
         
         if custom_prompt:
-            return JSONResponse({
+            return JSONResponse({**llm_info, 
                 "success": True,
                 "prompt": custom_prompt,
                 "message": "프롬프트가 성공적으로 생성되었습니다."
@@ -1092,7 +1094,7 @@ MANDATORY FOOTWEAR CHANGE - THIS IS CRITICAL:
 - The heel height should be appropriate for formal wear (3-4 inches)
 - This footwear change is NON-NEGOTIABLE and must be applied"""
             
-            return JSONResponse({
+            return JSONResponse({**llm_info, 
                 "success": True,
                 "prompt": default_prompt,
                 "message": "맞춤 프롬프트 생성 실패. 기본 프롬프트를 사용하세요.",
@@ -1103,7 +1105,7 @@ MANDATORY FOOTWEAR CHANGE - THIS IS CRITICAL:
         print(f"프롬프트 생성 API 오류: {str(e)}")
         import traceback
         traceback.print_exc()
-        return JSONResponse({
+        return JSONResponse({**llm_info, 
             "success": False,
             "error": str(e),
             "message": f"프롬프트 생성 중 오류 발생: {str(e)}"
@@ -1115,10 +1117,12 @@ async def generate_gpt4o_prompt(
     dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
 ):
     try:
+        llm_info = {"llm": GPT4O_MODEL_NAME}
         openai_api_key = os.getenv("OPENAI_API_KEY")
         if not openai_api_key:
             return JSONResponse(
                 {
+                    **llm_info,
                     "success": False,
                     "error": "API key not found",
                     "message": ".env 파일에 OPENAI_API_KEY가 설정되지 않았습니다."
@@ -1132,6 +1136,7 @@ async def generate_gpt4o_prompt(
         if not person_bytes or not dress_bytes:
             return JSONResponse(
                 {
+                    **llm_info,
                     "success": False,
                     "error": "Invalid input",
                     "message": "사람 이미지와 드레스 이미지를 모두 업로드해주세요."
@@ -1161,6 +1166,7 @@ async def generate_gpt4o_prompt(
             traceback.print_exc()
             return JSONResponse(
                 {
+                    **llm_info,
                     "success": False,
                     "error": "OpenAI call failed",
                     "message": f"GPT-4o 호출에 실패했습니다: {str(exc)}"
@@ -1172,6 +1178,7 @@ async def generate_gpt4o_prompt(
         if not prompt_text:
             return JSONResponse(
                 {
+                    **llm_info,
                     "success": False,
                     "error": "Empty response",
                     "message": "GPT-4o가 유효한 프롬프트를 반환하지 않았습니다."
@@ -1179,12 +1186,13 @@ async def generate_gpt4o_prompt(
                 status_code=500,
             )
 
-        return JSONResponse({"success": True, "prompt": prompt_text})
+        return JSONResponse({**llm_info, "success": True, "prompt": prompt_text})
     except Exception as exc:
         print(f"GPT-4o 프롬프트 생성 중 오류: {exc}")
         traceback.print_exc()
         return JSONResponse(
             {
+                **llm_info,
                 "success": False,
                 "error": str(exc),
                 "message": f"프롬프트 생성 중 예상치 못한 오류가 발생했습니다: {str(exc)}"
@@ -5551,6 +5559,62 @@ async def save_3d_model(task_id: str):
             "success": False,
             "error": str(e)
         }, status_code=500)
+
+@app.get("/api/proxy-3d-model", tags=["3D 변환"])
+async def proxy_3d_model(model_url: str = Query(..., description="다운로드할 3D 모델 URL")):
+    """
+    CORS 문제를 해결하기 위해 3D 모델 파일을 프록시하여 제공
+    
+    - model_url: Meshy.ai의 GLB/FBX 파일 URL
+    
+    Returns:
+        3D 모델 파일 (binary)
+    """
+    try:
+        print(f"[API] 3D 모델 프록시 요청: {model_url}")
+        
+        # Meshy.ai에서 파일 다운로드
+        response = requests.get(model_url, timeout=60, stream=True)
+        
+        if response.status_code == 200:
+            # CORS 헤더 추가
+            headers = {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Content-Type": response.headers.get("Content-Type", "application/octet-stream"),
+                "Content-Disposition": f'attachment; filename="model.glb"'
+            }
+            
+            return Response(
+                content=response.content,
+                headers=headers,
+                media_type=response.headers.get("Content-Type", "application/octet-stream")
+            )
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": f"파일 다운로드 실패: {response.status_code}"
+            }, status_code=response.status_code)
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
+@app.options("/api/proxy-3d-model", tags=["3D 변환"])
+async def proxy_3d_model_options():
+    """CORS preflight 요청 처리"""
+    return Response(
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn

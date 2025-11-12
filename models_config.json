@@ -7,6 +7,7 @@
       "endpoint": "/api/gpt4o-gemini/compose",
       "method": "POST",
       "input_type": "dual_image",
+      "prompt_llm": "gpt-4o",
       "inputs": [
         {"name": "person_image", "label": "사람 이미지", "required": true},
         {"name": "dress_image", "label": "드레스 이미지", "required": true}
@@ -22,6 +23,7 @@
       "endpoint": "/api/compose-dress",
       "method": "POST",
       "input_type": "dual_image",
+      "prompt_llm": "gemini",
       "inputs": [
         {"name": "person_image", "label": "사람 이미지", "required": true},
         {"name": "dress_image", "label": "드레스 이미지", "required": true}
@@ -36,6 +38,7 @@
       "endpoint": "/api/compose-enhanced",
       "method": "POST",
       "input_type": "dual_image",
+      "prompt_llm": "",
       "inputs": [
         {"name": "person_image", "label": "사람 이미지", "required": true},
         {"name": "dress_image", "label": "드레스 이미지", "required": true}
