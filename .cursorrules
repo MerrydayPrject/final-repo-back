@@ -1,0 +1,12 @@
+When implementing or modifying features in this repository:
+
+1. Always provide responses and documentation in **Korean**.
+2. For every new feature added, update the **Markdown documentation file** located at `docs/all_in_one.md`.
+3. If any **requirements or specifications** are changed, also update the **`marryday.prd`** file accordingly.
+4. Follow this standard development order for any new functionality:
+   - Step 1️⃣: Create or update the **Router** file (API endpoint definition)
+   - Step 2️⃣: Implement logic in the **Service** layer
+   - Step 3️⃣: Define or modify **Model / Core Entities / Pydantic Schemas**
+   - Step 4️⃣: Create a dedicated **Config** file under the appropriate path for environment variables, constants, or settings
+5. If additional Python libraries are required, **append them to `requirements.txt`** immediately after installation.
+6. Ensure all new or changed features are properly documented, committed, and pushed following the project’s Git workflow.
