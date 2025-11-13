@@ -3411,8 +3411,8 @@ async def get_s3_image_proxy(url: str = Query(..., description="S3 이미지 URL
 @app.post("/api/analyze-body", tags=["체형 분석"])
 async def analyze_body(
     file: UploadFile = File(..., description="전신 이미지 파일"),
-    height: float = Form(None, description="키 (cm)"),
-    weight: float = Form(None, description="몸무게 (kg)")
+    height: float = Form(..., description="키 (cm)"),
+    weight: float = Form(..., description="몸무게 (kg)")
 ):
     """
     전신 이미지 체형 분석
@@ -3422,8 +3422,8 @@ async def analyze_body(
     
     Args:
         file: 전신 이미지 파일
-        height: 키 (cm, 선택사항)
-        weight: 몸무게 (kg, 선택사항)
+        height: 키 (cm, 필수)
+        weight: 몸무게 (kg, 필수)
     """
     import time
     start_time = time.time()

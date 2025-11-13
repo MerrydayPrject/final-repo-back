@@ -421,6 +421,15 @@ function formatDateTime(dateString) {
     });
 }
 
+function formatTime(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -472,26 +481,64 @@ function renderBodyLogs(logs) {
     if (!tbody) return;
     
     if (logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="loading">로그가 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="loading">로그가 없습니다.</td></tr>';
         return;
     }
     
+    // 체형 특징을 부드러운 표현으로 변환하는 함수
+    const softFeatureMap = {
+        '키가 작은 체형': '키가 작으신 체형',
+        '키가 큰 체형': '키가 크신 체형',
+        '허리가 짧은 체형': '허리 비율이 짧으신 체형',
+        '어깨가 넓은 체형': '균형잡힌 상체체형',
+        '어깨가 좁은 체형': '어깨라인이 슬림한 체형',
+        '마른 체형': '슬림한 체형',
+        '글래머러스한 체형': '곡선미가 돋보이는 체형',
+        '팔 라인이 신경 쓰이는 체형': '팔라인이 신경쓰이는 체형',
+        '복부가 신경 쓰이는 체형': '' // 표시하지 않음
+    };
+    
     tbody.innerHTML = logs.map(log => {
         const id = log.id !== undefined ? log.id : '-';
+        const model = log.model !== undefined ? log.model : '-';
         const height = log.height !== undefined && log.height !== null ? log.height + ' cm' : '-';
         const weight = log.weight !== undefined && log.weight !== null ? log.weight + ' kg' : '-';
         const bmi = log.bmi !== undefined && log.bmi !== null ? log.bmi.toFixed(1) : '-';
-        const features = log.body_features ? JSON.parse(log.body_features).join(', ') : '-';
-        const createdAt = log.created_at ? formatDateTime(log.created_at) : '-';
+        
+        // 체형 특징 파싱 및 변환
+        let features = [];
+        if (log.characteristic) {
+            try {
+                // JSON 문자열인 경우 파싱
+                if (log.characteristic.startsWith('[') || log.characteristic.startsWith('{')) {
+                    features = JSON.parse(log.characteristic);
+                } else {
+                    // 쉼표로 구분된 문자열인 경우
+                    features = log.characteristic.split(',').map(f => f.trim()).filter(f => f);
+                }
+            } catch (e) {
+                // 파싱 실패 시 그대로 사용
+                features = [log.characteristic];
+            }
+        }
+        
+        // 부드러운 표현으로 변환
+        const softFeatures = features.map(feature => {
+            return softFeatureMap[feature] !== undefined ? softFeatureMap[feature] : feature;
+        }).filter(f => f !== ''); // 빈 문자열 제거
+        
+        const featuresDisplay = softFeatures.length > 0 ? softFeatures.join(', ') : '-';
+        const processingTime = log.processing_time || '-';
         
         return `
         <tr>
             <td>${id}</td>
+            <td>${model}</td>
             <td>${height}</td>
             <td>${weight}</td>
             <td>${bmi}</td>
-            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${features}">${features}</td>
-            <td>${createdAt}</td>
+            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${featuresDisplay}">${featuresDisplay}</td>
+            <td>${processingTime}</td>
             <td>
                 <button class="btn-detail-emoji" onclick="showBodyDetail(${id})" title="상세보기">
                     📋

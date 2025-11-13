@@ -88,23 +88,41 @@ analyzeButton.addEventListener('click', async () => {
 // 체형 분석 API 호출
 async function analyzeBody(file) {
     try {
+        // 키/몸무게 필수 검증
+        const heightInput = document.getElementById('heightInput');
+        const weightInput = document.getElementById('weightInput');
+        
+        if (!heightInput || !heightInput.value || heightInput.value.trim() === '') {
+            showError('키를 입력해주세요.');
+            return;
+        }
+        
+        if (!weightInput || !weightInput.value || weightInput.value.trim() === '') {
+            showError('몸무게를 입력해주세요.');
+            return;
+        }
+        
+        const height = parseFloat(heightInput.value);
+        const weight = parseFloat(weightInput.value);
+        
+        if (isNaN(height) || height < 100 || height > 250) {
+            showError('키는 100cm 이상 250cm 이하여야 합니다.');
+            return;
+        }
+        
+        if (isNaN(weight) || weight < 30 || weight > 200) {
+            showError('몸무게는 30kg 이상 200kg 이하여야 합니다.');
+            return;
+        }
+        
         // 로딩 표시
         showLoading();
         analyzeButton.disabled = true;
         
         const formData = new FormData();
         formData.append('file', file);
-        
-        // 키/몸무게 추가
-        const heightInput = document.getElementById('heightInput');
-        const weightInput = document.getElementById('weightInput');
-        
-        if (heightInput && heightInput.value) {
-            formData.append('height', heightInput.value);
-        }
-        if (weightInput && weightInput.value) {
-            formData.append('weight', weightInput.value);
-        }
+        formData.append('height', height);
+        formData.append('weight', weight);
         
         const response = await fetch(`${API_BASE_URL}/api/analyze-body`, {
             method: 'POST',
