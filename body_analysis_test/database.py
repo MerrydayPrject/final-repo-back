@@ -169,22 +169,95 @@ def format_body_type_info_for_prompt(definitions: List[Dict]) -> str:
     if not definitions:
         return ""
     
+    # 사용 불가능한 드레스 스타일 목록
+    unavailable_styles = ['드롭 웨이스트', '드롭웨이스트', '하이웨이스트', '엠파이어 라인', '엠파이어라인']
+    
+    def filter_unavailable_styles(text: str) -> str:
+        """사용 불가능한 드레스 스타일을 필터링하고 대체"""
+        if not text:
+            return text
+        
+        filtered = text
+        
+        # 먼저 대체 작업 수행
+        # "드롭 웨이스트"를 "벨라인"으로 대체 (허리가 짧은 체형의 경우)
+        if '드롭 웨이스트' in filtered or '드롭웨이스트' in filtered:
+            if '벨라인' not in filtered:
+                filtered = filtered.replace('드롭 웨이스트', '벨라인')
+                filtered = filtered.replace('드롭웨이스트', '벨라인')
+            else:
+                # 벨라인이 이미 있으면 드롭 웨이스트만 제거
+                filtered = filtered.replace('드롭 웨이스트', '')
+                filtered = filtered.replace('드롭웨이스트', '')
+        
+        # "엠파이어 라인"을 "프린세스"로 대체 (키가 작은 체형의 경우)
+        if '엠파이어 라인' in filtered or '엠파이어라인' in filtered:
+            if '프린세스' not in filtered:
+                filtered = filtered.replace('엠파이어 라인', '프린세스')
+                filtered = filtered.replace('엠파이어라인', '프린세스')
+            else:
+                # 프린세스가 이미 있으면 엠파이어 라인만 제거
+                filtered = filtered.replace('엠파이어 라인', '')
+                filtered = filtered.replace('엠파이어라인', '')
+        
+        # "하이웨이스트"는 제거 (벨라인과 유사하므로)
+        filtered = filtered.replace('하이웨이스트', '')
+        
+        # 연속된 쉼표 정리
+        filtered = filtered.replace(', ,', ',')
+        filtered = filtered.replace(' ,', ',')
+        filtered = filtered.replace(',,', ',')
+        filtered = filtered.replace(' , ', ', ')
+        filtered = filtered.strip().strip(',').strip()
+        
+        return filtered
+    
     parts = []
     
     for definition in definitions:
         body_feature = definition.get('body_feature', '')
         
         if definition.get('strengths'):
-            parts.append(f"**{body_feature}**: {definition['strengths']}")
+            strengths = definition['strengths']
+            # strengths에서도 사용 불가능한 스타일 언급 제거
+            for style in unavailable_styles:
+                if style in strengths:
+                    # "드롭 웨이스트" 언급을 "벨라인"으로 대체
+                    if '드롭 웨이스트' in strengths or '드롭웨이스트' in strengths:
+                        strengths = strengths.replace('드롭 웨이스트', '벨라인')
+                        strengths = strengths.replace('드롭웨이스트', '벨라인')
+                    # "엠파이어 라인" 언급을 "프린세스"로 대체
+                    elif '엠파이어 라인' in strengths or '엠파이어라인' in strengths:
+                        strengths = strengths.replace('엠파이어 라인', '프린세스')
+                        strengths = strengths.replace('엠파이어라인', '프린세스')
+                    # "하이웨이스트" 언급 제거
+                    elif '하이웨이스트' in strengths:
+                        strengths = strengths.replace('하이웨이스트', '벨라인')
+            parts.append(f"**{body_feature}**: {strengths}")
         
         if definition.get('style_tips'):
-            parts.append(f"  - 스타일 팁: {definition['style_tips']}")
+            style_tips = definition['style_tips']
+            # style_tips에서도 사용 불가능한 스타일 언급 제거/대체
+            for style in unavailable_styles:
+                if '드롭 웨이스트' in style_tips or '드롭웨이스트' in style_tips:
+                    style_tips = style_tips.replace('드롭 웨이스트', '벨라인')
+                    style_tips = style_tips.replace('드롭웨이스트', '벨라인')
+                elif '엠파이어 라인' in style_tips or '엠파이어라인' in style_tips:
+                    style_tips = style_tips.replace('엠파이어 라인', '프린세스')
+                    style_tips = style_tips.replace('엠파이어라인', '프린세스')
+                elif '하이웨이스트' in style_tips:
+                    style_tips = style_tips.replace('하이웨이스트', '벨라인')
+            parts.append(f"  - 스타일 팁: {style_tips}")
         
         if definition.get('recommended_dresses'):
-            parts.append(f"  - 추천 드레스: {definition['recommended_dresses']}")
+            recommended = filter_unavailable_styles(definition['recommended_dresses'])
+            if recommended:  # 필터링 후에도 내용이 있으면 추가
+                parts.append(f"  - 추천 드레스: {recommended}")
         
         if definition.get('avoid_dresses'):
-            parts.append(f"  - 피해야 할 드레스: {definition['avoid_dresses']}")
+            avoid = filter_unavailable_styles(definition['avoid_dresses'])
+            if avoid:  # 필터링 후에도 내용이 있으면 추가
+                parts.append(f"  - 피해야 할 드레스: {avoid}")
         
         parts.append("")  # 빈 줄 추가
     

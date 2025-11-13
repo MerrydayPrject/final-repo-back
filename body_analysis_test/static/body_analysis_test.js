@@ -95,6 +95,17 @@ async function analyzeBody(file) {
         const formData = new FormData();
         formData.append('file', file);
         
+        // 키/몸무게 추가
+        const heightInput = document.getElementById('heightInput');
+        const weightInput = document.getElementById('weightInput');
+        
+        if (heightInput && heightInput.value) {
+            formData.append('height', heightInput.value);
+        }
+        if (weightInput && weightInput.value) {
+            formData.append('weight', weightInput.value);
+        }
+        
         const response = await fetch(`${API_BASE_URL}/api/analyze-body`, {
             method: 'POST',
             body: formData
@@ -167,13 +178,59 @@ function displayResults(data) {
         return filtered.slice(0, 6); // 최대 6개 (모든 카테고리)
     }
     
-    // 체형 타입 (간단하게)
+    // 체형 타입 및 기본 정보
     html += `
         <div class="result-card">
             <div class="result-item">
                 <div class="result-label">체형 타입</div>
                 <div class="body-type-text">${body_analysis.body_type}의 체형에 가깝습니다</div>
             </div>
+            ${body_analysis.height ? `
+                <div class="result-item">
+                    <div class="result-label">키</div>
+                    <div class="result-value">${body_analysis.height} cm</div>
+                </div>
+            ` : ''}
+            ${body_analysis.bmi ? `
+                <div class="result-item">
+                    <div class="result-label">BMI</div>
+                    <div class="result-value">${body_analysis.bmi.toFixed(1)}</div>
+                </div>
+            ` : ''}
+            ${body_analysis.body_features && body_analysis.body_features.length > 0 ? `
+                <div class="result-item">
+                    <div class="result-label">체형 특징</div>
+                    <div class="style-badges">
+                        ${body_analysis.body_features.map(feature => {
+                            // 부드러운 표현으로 변환
+                            let displayFeature = feature;
+                            
+                            // 체형 특징별 부드러운 표현 매핑
+                            const softFeatureMap = {
+                                '키가 작은 체형': '키가 작으신 체형',
+                                '키가 큰 체형': '키가 크신 체형',
+                                '허리가 짧은 체형': '허리 비율이 짧으신 체형',
+                                '어깨가 넓은 체형': '균형잡힌 상체체형',
+                                '어깨가 좁은 체형': '어깨라인이 슬림한 체형',
+                                '마른 체형': '슬림한 체형',
+                                '글래머러스한 체형': '곡선미가 돋보이는 체형',
+                                '팔 라인이 신경 쓰이는 체형': '팔라인이 신경쓰이는 체형',
+                                '복부가 신경 쓰이는 체형': '' // 표시하지 않음
+                            };
+                            
+                            // 매핑된 표현이 있으면 사용, 없으면 원본 사용
+                            displayFeature = softFeatureMap[feature] !== undefined 
+                                ? softFeatureMap[feature] 
+                                : feature;
+                            
+                            // 빈 문자열이면 표시하지 않음
+                            if (!displayFeature) return '';
+                            
+                            return `<span class="dress-style-badge" style="background: #e3f2fd; color: #1976d2;">${displayFeature}</span>`;
+                        }).filter(f => f !== '').join('')}
+                    </div>
+                </div>
+            ` : ''}
             ${measurements ? `
                 <div class="result-item">
                     <div class="result-label">어깨/엉덩이 비율</div>
@@ -204,6 +261,11 @@ function displayResults(data) {
         }
         const avoidStyles = extractDressStyles(avoidSection, true);
         
+        // 추천 스타일에서 피해야 할 스타일 제외하고 최대 2개만 선택
+        const filteredRecommendedStyles = recommendedStyles
+            .filter(style => !avoidStyles.includes(style))
+            .slice(0, 2);
+        
         // 마크다운 볼드를 HTML strong 태그로 변환
         analysisText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
         // 리스트 항목 정리
@@ -214,11 +276,11 @@ function displayResults(data) {
         
         html += `
             <div class="result-card">
-                ${recommendedStyles.length > 0 ? `
+                ${filteredRecommendedStyles.length > 0 ? `
                     <div class="result-item">
                         <div class="result-label">추천 드레스 스타일</div>
                         <div class="style-badges">
-                            ${recommendedStyles.map(style => `<span class="dress-style-badge recommended">${style}</span>`).join('')}
+                            ${filteredRecommendedStyles.map(style => `<span class="dress-style-badge recommended">${style}</span>`).join('')}
                         </div>
                     </div>
                 ` : ''}

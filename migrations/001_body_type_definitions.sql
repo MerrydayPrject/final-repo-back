@@ -20,10 +20,10 @@ DELETE FROM body_type_definitions;
 -- 1. 키가 작은 체형
 INSERT INTO body_type_definitions (body_feature, strengths, style_tips, recommended_dresses, avoid_dresses) VALUES
 ('키가 작은 체형',
-'작은 키의 신부님은 허리선이 높게 올라간 엠파이어 라인 드레스가 체형을 길어 보이게 만들어줍니다.',
+'작은 키의 신부님은 허리선이 높게 올라간 프린세스 드레스가 체형을 길어 보이게 만들어줍니다.',
 '심플한 디자인을 선택하면 키가 더 커 보이는 효과를 볼 수 있습니다.',
-'엠파이어 라인',
-'긴 기장의 드레스 (키가 작아 보일 수 있음)');
+'프린세스',
+'슬림 (키가 작아 보일 수 있음)');
 
 -- 2. 글래머러스한 체형
 INSERT INTO body_type_definitions (body_feature, strengths, style_tips, recommended_dresses, avoid_dresses) VALUES
@@ -60,10 +60,10 @@ INSERT INTO body_type_definitions (body_feature, strengths, style_tips, recommen
 -- 6. 허리가 짧은 체형
 INSERT INTO body_type_definitions (body_feature, strengths, style_tips, recommended_dresses, avoid_dresses) VALUES
 ('허리가 짧은 체형',
-'허리선이 살짝 내려간 드롭 웨이스트 드레스는 하체를 길어 보이게 만들어 전체적인 비율을 맞춰줍니다.',
-'허리선을 낮춰서 하체를 길어 보이게 하는 스타일이 적합합니다.',
-'드롭 웨이스트',
-'하이웨이스트 (허리가 더 짧아 보일 수 있음)');
+'허리선을 강조하는 벨라인 드레스는 하체를 길어 보이게 만들어 전체적인 비율을 맞춰줍니다.',
+'허리 라인을 강조하여 비율을 조화롭게 연출하는 스타일이 적합합니다.',
+'벨라인',
+'슬림 (허리가 더 짧아 보일 수 있음)');
 
 -- 7. 복부가 신경 쓰이는 체형
 INSERT INTO body_type_definitions (body_feature, strengths, style_tips, recommended_dresses, avoid_dresses) VALUES
@@ -78,8 +78,8 @@ INSERT INTO body_type_definitions (body_feature, strengths, style_tips, recommen
 ('키가 큰 체형',
 '키가 큰 신부님은 긴 기장의 슬림 드레스가 우아함을 더해줍니다.',
 '특히 미니멀한 디자인은 세련된 이미지를 강조해줍니다.',
-'슬림',
-'엠파이어 라인 (키가 더 커 보일 수 있음)');
+'슬림, 미니드레스',
+'프린세스 (키가 더 커 보일 수 있음)');
 
 -- 9. 어깨가 좁은 체형
 INSERT INTO body_type_definitions (body_feature, strengths, style_tips, recommended_dresses, avoid_dresses) VALUES

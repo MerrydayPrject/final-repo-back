@@ -56,6 +56,31 @@
                                 </div>
                             </div>
 
+                            <div class="input-group" style="margin-top: 20px; display: flex; gap: 15px;">
+                                <div style="flex: 1;">
+                                    <label for="heightInput" style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">키 (cm)</label>
+                                    <input 
+                                        type="number" 
+                                        id="heightInput" 
+                                        placeholder="예: 165" 
+                                        min="100" 
+                                        max="250" 
+                                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;"
+                                    >
+                                </div>
+                                <div style="flex: 1;">
+                                    <label for="weightInput" style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">몸무게 (kg)</label>
+                                    <input 
+                                        type="number" 
+                                        id="weightInput" 
+                                        placeholder="예: 55" 
+                                        min="30" 
+                                        max="200" 
+                                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;"
+                                    >
+                                </div>
+                            </div>
+
                             <button class="analyze-button" id="analyzeButton" disabled>
                                 체형 분석하기
                             </button>
