@@ -61,6 +61,16 @@ async def model_comparison_page(request: Request):
     return templates.TemplateResponse("model-comparison.html", {"request": request})
 
 
+@router.get("/llm-model", response_class=HTMLResponse, tags=["Web Interface"])
+async def llm_model_page(request: Request):
+    """
+    LLM 모델 테스트 페이지
+    
+    프롬프트 생성용과 이미지 생성용 LLM 모델을 선택하여 테스트할 수 있는 페이지
+    """
+    return templates.TemplateResponse("llm_model.html", {"request": request})
+
+
 @router.get("/admin", response_class=HTMLResponse, tags=["관리자"])
 async def admin_page(request: Request):
     """

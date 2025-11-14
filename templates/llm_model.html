@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM 모델 테스트</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/llm_model.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>🤖 LLM 모델 테스트</h1>
+                    <p>프롬프트 생성용과 이미지 생성용 LLM 모델을 선택하여 테스트합니다</p>
+                </div>
+                <a href="/" class="btn-home">🏠 홈으로</a>
+            </div>
+        </header>
+
+        <main>
+            <!-- 모델 선택 섹션 -->
+            <section class="llm-model-selection-section">
+                <h2>모델 선택</h2>
+                <div class="llm-model-selection-grid">
+                    <div class="llm-model-select-group">
+                        <label class="llm-model-label">
+                            <span class="label-icon">📝</span>
+                            프롬프트 생성용 LLM 모델
+                        </label>
+                        <select id="prompt-llm-select" class="llm-model-select">
+                            <option value="gpt-4o">GPT-4o</option>
+                            <option value="gemini">Gemini</option>
+                        </select>
+                    </div>
+                    <div class="llm-model-select-group">
+                        <label class="llm-model-label">
+                            <span class="label-icon">🎨</span>
+                            이미지 생성용 LLM 모델
+                        </label>
+                        <select id="image-llm-select" class="llm-model-select">
+                            <option value="gemini">Gemini</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 이미지 업로드 섹션 -->
+            <section class="llm-upload-section">
+                <h2>이미지 업로드</h2>
+                <div class="llm-upload-row">
+                    <div class="llm-upload-item">
+                        <label class="llm-upload-label">
+                            <span class="upload-icon">👤</span>
+                            사람 이미지
+                        </label>
+                        <div class="llm-upload-area" id="upload-person">
+                            <input type="file" id="input-person" accept="image/*" style="display: none;" onchange="handleImageUpload(event, 'person')">
+                            <div class="llm-upload-content">
+                                <div class="llm-upload-icon">📁</div>
+                                <p>이미지를 드래그하거나 클릭</p>
+                                <button class="llm-upload-btn" onclick="document.getElementById('input-person').click()">파일 선택</button>
+                            </div>
+                            <div class="llm-preview-container" id="preview-person" style="display: none;">
+                                <img id="img-person" alt="Person Preview">
+                                <button class="llm-remove-btn" onclick="removeImage('person')">&times;</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="llm-upload-item">
+                        <label class="llm-upload-label">
+                            <span class="upload-icon">👗</span>
+                            드레스 이미지
+                        </label>
+                        <div class="llm-upload-area" id="upload-dress">
+                            <input type="file" id="input-dress" accept="image/*" style="display: none;" onchange="handleImageUpload(event, 'dress')">
+                            <div class="llm-upload-content">
+                                <div class="llm-upload-icon">📁</div>
+                                <p>이미지를 드래그하거나 클릭</p>
+                                <button class="llm-upload-btn" onclick="document.getElementById('input-dress').click()">파일 선택</button>
+                            </div>
+                            <div class="llm-preview-container" id="preview-dress" style="display: none;">
+                                <img id="img-dress" alt="Dress Preview">
+                                <button class="llm-remove-btn" onclick="removeImage('dress')">&times;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 테스트 실행 섹션 -->
+            <section class="llm-action-section">
+                <button class="llm-run-btn" id="run-btn" onclick="runLLMTest()">
+                    <span class="btn-icon">🚀</span>
+                    테스트 실행
+                </button>
+            </section>
+
+            <!-- 로딩 섹션 -->
+            <div class="llm-loading" id="loading" style="display: none;">
+                <div class="llm-spinner"></div>
+                <p id="loading-text">처리 중...</p>
+            </div>
+
+            <!-- 결과 섹션 -->
+            <div class="llm-result-section" id="result" style="display: none;">
+                <div class="llm-result-header">
+                    <div class="llm-processing-time">
+                        <span>처리 시간: </span>
+                        <span id="processing-time">-</span>
+                    </div>
+                </div>
+                <div class="llm-result-images" id="result-images">
+                    <!-- 결과 이미지가 여기에 표시됨 -->
+                </div>
+                <div class="llm-result-actions">
+                    <button class="llm-download-btn" id="download-btn" onclick="downloadResult()" style="display: none;">
+                        <span class="btn-icon">💾</span>
+                        결과 다운로드
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/llm_model.js"></script>
+</body>
+</html>
+
