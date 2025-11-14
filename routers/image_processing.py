@@ -15,7 +15,11 @@ from core.model_loader import (
     get_realesrgan_model, get_sdxl_pipeline, get_rtmpose_model,
     get_segformer_b2_processor, get_segformer_b2_model
 )
+from core.xai_client import generate_image_from_text
 from config.settings import GEMINI_FLASH_MODEL
+from services.log_service import save_test_log
+from core.s3_client import upload_log_to_s3
+import time
 
 router = APIRouter()
 
@@ -273,6 +277,174 @@ async def generate_shoes(
         
     except Exception as e:
         traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"처리 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.post("/api/generate-image-xai", tags=["이미지 생성"])
+async def generate_image_xai(
+    prompt: str = Form(..., description="이미지 생성 프롬프트"),
+    model: Optional[str] = Form(None, description="사용할 모델 ID (선택사항, 기본값: grok-2-image)"),
+    n: int = Form(1, description="생성할 이미지 수"),
+    person_image: Optional[UploadFile] = File(None, description="사람 이미지 파일 (로깅용)"),
+    dress_image: Optional[UploadFile] = File(None, description="드레스 이미지 파일 (로깅용)"),
+    prompt_llm: Optional[str] = Form(None, description="프롬프트 생성에 사용된 LLM 모델")
+):
+    """
+    x.ai API를 사용한 텍스트 to 이미지 생성
+    
+    프롬프트를 기반으로 x.ai API를 사용하여 이미지를 생성합니다.
+    person_image와 dress_image가 제공되면 로그를 저장합니다.
+    
+    Note: 
+    - x.ai API는 size 파라미터를 지원하지 않습니다.
+    - 모델이 지정되지 않으면 기본값 "grok-2-image"를 사용합니다.
+    """
+    start_time = time.time()
+    
+    try:
+        # 모델이 지정되지 않으면 기본값 사용 (xai_client에서 처리)
+        result = generate_image_from_text(
+            prompt=prompt,
+            model=model,
+            n=n
+        )
+        
+        run_time = time.time() - start_time
+        
+        # 모델명 결정 (prompt_llm이 있으면 그것을 포함)
+        model_name = result.get("model", "x.ai-default")
+        if prompt_llm:
+            model_name = f"{prompt_llm}+{model_name}"
+        
+        if result["success"]:
+            # 로깅을 위한 이미지 처리
+            person_s3_url = ""
+            dress_s3_url = None
+            result_s3_url = ""
+            
+            # 결과 이미지를 S3에 업로드
+            if result.get("result_image"):
+                try:
+                    # base64 이미지를 디코딩
+                    if result["result_image"].startswith("data:image"):
+                        base64_data = result["result_image"].split(",")[1]
+                    else:
+                        base64_data = result["result_image"]
+                    
+                    image_bytes = base64.b64decode(base64_data)
+                    result_s3_url = upload_log_to_s3(image_bytes, model_name, "result") or ""
+                except Exception as e:
+                    print(f"결과 이미지 S3 업로드 실패: {e}")
+            
+            # 사람 이미지와 드레스 이미지가 제공된 경우 S3에 업로드
+            if person_image:
+                try:
+                    person_bytes = await person_image.read()
+                    person_s3_url = upload_log_to_s3(person_bytes, model_name, "person") or ""
+                except Exception as e:
+                    print(f"사람 이미지 S3 업로드 실패: {e}")
+            
+            if dress_image:
+                try:
+                    dress_bytes = await dress_image.read()
+                    dress_s3_url = upload_log_to_s3(dress_bytes, model_name, "dress") or None
+                except Exception as e:
+                    print(f"드레스 이미지 S3 업로드 실패: {e}")
+            
+            # 로그 저장
+            save_test_log(
+                person_url=person_s3_url,
+                dress_url=dress_s3_url,
+                result_url=result_s3_url,
+                model=model_name,
+                prompt=prompt,
+                success=True,
+                run_time=run_time
+            )
+            
+            return JSONResponse({
+                "success": True,
+                "result_image": result["result_image"],
+                "model": model_name,
+                "message": result.get("message", "x.ai로 이미지 생성 완료")
+            })
+        else:
+            # 실패 시에도 로그 저장 (이미지가 있는 경우)
+            if person_image or dress_image:
+                person_s3_url = ""
+                dress_s3_url = None
+                
+                if person_image:
+                    try:
+                        person_bytes = await person_image.read()
+                        person_s3_url = upload_log_to_s3(person_bytes, model_name, "person") or ""
+                    except Exception as e:
+                        print(f"사람 이미지 S3 업로드 실패: {e}")
+                
+                if dress_image:
+                    try:
+                        dress_bytes = await dress_image.read()
+                        dress_s3_url = upload_log_to_s3(dress_bytes, model_name, "dress") or None
+                    except Exception as e:
+                        print(f"드레스 이미지 S3 업로드 실패: {e}")
+                
+                save_test_log(
+                    person_url=person_s3_url,
+                    dress_url=dress_s3_url,
+                    result_url="",
+                    model=model_name,
+                    prompt=prompt,
+                    success=False,
+                    run_time=run_time
+                )
+            
+            return JSONResponse({
+                "success": False,
+                "error": result.get("error", "Unknown error"),
+                "message": result.get("message", "이미지 생성 실패")
+            }, status_code=500)
+        
+    except Exception as e:
+        traceback.print_exc()
+        run_time = time.time() - start_time
+        
+        # 예외 발생 시에도 로그 저장 시도
+        if person_image or dress_image:
+            model_name = model or "x.ai-default"
+            if prompt_llm:
+                model_name = f"{prompt_llm}+{model_name}"
+            
+            person_s3_url = ""
+            dress_s3_url = None
+            
+            if person_image:
+                try:
+                    person_bytes = await person_image.read()
+                    person_s3_url = upload_log_to_s3(person_bytes, model_name, "person") or ""
+                except:
+                    pass
+            
+            if dress_image:
+                try:
+                    dress_bytes = await dress_image.read()
+                    dress_s3_url = upload_log_to_s3(dress_bytes, model_name, "dress") or None
+                except:
+                    pass
+            
+            save_test_log(
+                person_url=person_s3_url,
+                dress_url=dress_s3_url,
+                result_url="",
+                model=model_name,
+                prompt=prompt,
+                success=False,
+                run_time=run_time
+            )
+        
         return JSONResponse({
             "success": False,
             "error": str(e),

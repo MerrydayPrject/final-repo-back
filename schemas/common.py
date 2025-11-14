@@ -1,3 +1,12 @@
 """공통 스키마"""
-# 현재는 비어있지만 향후 공통 스키마 추가 가능
+from pydantic import BaseModel
+from typing import Optional
+
+
+class ShortPromptResponse(BaseModel):
+    """Short prompt 생성 응답 스키마"""
+    success: bool
+    prompt: str
+    llm: str
+    message: Optional[str] = None
 

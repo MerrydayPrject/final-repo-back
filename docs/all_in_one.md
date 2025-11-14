@@ -250,6 +250,8 @@ python test_body_analysis.py 8002
 |--------|-----------|------|
 | POST | `/api/gemini/generate-prompt` | Gemini로 커스텀 합성 프롬프트 생성 |
 | POST | `/api/gpt4o-gemini/generate-prompt` | GPT-4o로 커스텀 합성 프롬프트 생성 |
+| POST | `/api/prompt/generate-short` | GPT-4o-V2로 x.ai 최적화 short prompt 생성 (≤1024자) |
+| POST | `/api/xai/generate-prompt` | x.ai grok 모델로 이미지 기반 프롬프트 생성 |
 
 ### 6.6 이미지 처리 (image_processing.py)
 
@@ -258,6 +260,7 @@ python test_body_analysis.py 8002
 | POST | `/api/upscale` | Real-ESRGAN을 활용한 업스케일링 (x2/x4) |
 | POST | `/api/color-harmonize` | 색상 보정 (Color Harmonization) |
 | POST | `/api/generate-shoes` | 구두 생성 (Gemini 또는 SDXL) |
+| POST | `/api/generate-image-xai` | x.ai API를 사용한 텍스트 to 이미지 생성 |
 | POST | `/api/tps-warp` | TPS Warp 변환 |
 | POST | `/api/pose-estimation` | RTMPose-s로 포즈 키포인트 추론 |
 
@@ -378,7 +381,22 @@ python test_body_analysis.py 8002
 **주요 기능**:
 - Gemini를 사용한 이미지 분석 및 프롬프트 생성
 - GPT-4o를 사용한 고품질 프롬프트 생성
+- GPT-4o-V2를 사용한 x.ai 최적화 short prompt 생성 (≤1024자)
+- x.ai grok 모델을 사용한 이미지 분석 기반 프롬프트 생성
 - 사람 이미지와 드레스 이미지를 분석하여 맞춤 프롬프트 생성
+
+**Short Prompt 파이프라인** (`/api/prompt/generate-short`):
+- GPT-4o-V2 모델을 사용하여 x.ai 이미지 생성을 위한 최적화된 short prompt 생성
+- 프롬프트는 최대 1024자로 제한되며, 단일 연속 문단 형식으로 생성
+- 얼굴, 몸, 포즈, 배경을 정확히 유지하면서 원본 의상을 완전히 제거하고 드레스만 적용
+- 노출된 신체 부위에 자연스러운 피부 생성 및 드레스에 맞는 신발 추가
+
+**x.ai 프롬프트 생성 파이프라인** (`/api/xai/generate-prompt`):
+- x.ai grok-2-vision-1212 모델을 사용하여 이미지 분석 기반 프롬프트 생성
+- Image 1(사람)과 Image 2(드레스)를 분석하여 상세한 프롬프트 생성
+- 드레스의 실루엣, 패브릭, 색상, 넥라인, 디테일 등을 자동 분석하여 프롬프트에 포함
+- 사람의 얼굴, 체형, 포즈, 조명, 배경을 정확히 유지하면서 드레스만 교체하는 프롬프트 생성
+- 드레스에 어울리는 신발 자동 추가
 
 ### 7.6 image_processing.py - 이미지 처리
 

@@ -12,9 +12,16 @@ import requests
 import boto3
 from botocore.exceptions import ClientError
 
-from core.llm_clients import generate_custom_prompt_from_images, _build_gpt4o_prompt_inputs, _extract_gpt4o_prompt
-from config.settings import GPT4O_MODEL_NAME, GEMINI_PROMPT_MODEL
+from core.llm_clients import (
+    generate_custom_prompt_from_images, 
+    _build_gpt4o_prompt_inputs, 
+    _extract_gpt4o_prompt,
+    call_gpt4o_v2_short_prompt
+)
+from core.xai_client import generate_prompt_from_images
+from config.settings import GPT4O_MODEL_NAME, GPT4O_V2_MODEL_NAME, GEMINI_PROMPT_MODEL, XAI_PROMPT_MODEL
 from services.image_service import preprocess_dress_image
+from schemas.common import ShortPromptResponse
 from openai import OpenAI
 
 router = APIRouter()
@@ -247,6 +254,193 @@ async def generate_gpt4o_prompt(
         return JSONResponse(
             {
                 **llm_info,
+                "success": False,
+                "error": str(exc),
+                "message": f"프롬프트 생성 중 예상치 못한 오류가 발생했습니다: {str(exc)}"
+            },
+            status_code=500,
+        )
+
+
+@router.post("/api/prompt/generate-short", tags=["프롬프트 생성"], response_model=ShortPromptResponse)
+async def generate_short_prompt(
+    person_image: UploadFile = File(..., description="사람 이미지 파일"),
+    dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+):
+    """
+    GPT-4o-V2를 사용하여 x.ai 최적화 short prompt 생성 (≤1024자)
+    """
+    try:
+        llm_info = {"llm": GPT4O_V2_MODEL_NAME}
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            return JSONResponse(
+                {
+                    **llm_info,
+                    "success": False,
+                    "error": "API key not found",
+                    "message": ".env 파일에 OPENAI_API_KEY가 설정되지 않았습니다."
+                },
+                status_code=500,
+            )
+
+        person_bytes = await person_image.read()
+        dress_bytes = await dress_image.read()
+
+        if not person_bytes or not dress_bytes:
+            return JSONResponse(
+                {
+                    **llm_info,
+                    "success": False,
+                    "error": "Invalid input",
+                    "message": "사람 이미지와 드레스 이미지를 모두 업로드해주세요."
+                },
+                status_code=400,
+            )
+
+        # 이미지 전처리
+        person_img = Image.open(io.BytesIO(person_bytes))
+        dress_img = Image.open(io.BytesIO(dress_bytes))
+        
+        # 드레스 이미지 전처리
+        print("드레스 이미지 전처리 시작...")
+        dress_img = preprocess_dress_image(dress_img, target_size=1024)
+        print("드레스 이미지 전처리 완료")
+
+        # Base64 인코딩
+        person_buffer = io.BytesIO()
+        person_img.save(person_buffer, format="PNG")
+        person_b64 = base64.b64encode(person_buffer.getvalue()).decode("utf-8")
+        
+        dress_buffer = io.BytesIO()
+        dress_img.save(dress_buffer, format="PNG")
+        dress_b64 = base64.b64encode(dress_buffer.getvalue()).decode("utf-8")
+        
+        person_mime = person_image.content_type or "image/png"
+        dress_mime = dress_image.content_type or "image/png"
+        person_data_url = f"data:{person_mime};base64,{person_b64}"
+        dress_data_url = f"data:{dress_mime};base64,{dress_b64}"
+
+        # GPT-4o-V2로 short prompt 생성
+        print("\n" + "="*80)
+        print("GPT-4o-V2 Short Prompt 생성")
+        print("="*80)
+        
+        try:
+            prompt_text = call_gpt4o_v2_short_prompt(person_data_url, dress_data_url, openai_api_key)
+            
+            return JSONResponse({
+                **llm_info,
+                "success": True,
+                "prompt": prompt_text,
+                "message": "Short prompt가 성공적으로 생성되었습니다."
+            })
+        except Exception as exc:
+            print(f"GPT-4o-V2 API 호출 실패: {exc}")
+            traceback.print_exc()
+            return JSONResponse(
+                {
+                    **llm_info,
+                    "success": False,
+                    "error": "OpenAI call failed",
+                    "message": f"GPT-4o-V2 호출에 실패했습니다: {str(exc)}"
+                },
+                status_code=502,
+            )
+            
+    except Exception as exc:
+        print(f"Short prompt 생성 중 오류: {exc}")
+        traceback.print_exc()
+        return JSONResponse(
+            {
+                "llm": GPT4O_V2_MODEL_NAME,
+                "success": False,
+                "error": str(exc),
+                "message": f"프롬프트 생성 중 예상치 못한 오류가 발생했습니다: {str(exc)}"
+            },
+            status_code=500,
+        )
+
+
+@router.post("/api/xai/generate-prompt", tags=["프롬프트 생성"], response_model=ShortPromptResponse)
+async def generate_xai_prompt(
+    person_image: UploadFile = File(..., description="사람 이미지 파일"),
+    dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+):
+    """
+    x.ai grok 모델을 사용하여 이미지 기반 프롬프트 생성
+    """
+    try:
+        llm_info = {"llm": XAI_PROMPT_MODEL}
+        
+        # 이미지 읽기
+        person_bytes = await person_image.read()
+        dress_bytes = await dress_image.read()
+        
+        if not person_bytes or not dress_bytes:
+            return JSONResponse(
+                {
+                    **llm_info,
+                    "success": False,
+                    "error": "Invalid input",
+                    "message": "사람 이미지와 드레스 이미지를 모두 업로드해주세요."
+                },
+                status_code=400,
+            )
+        
+        # 이미지 전처리
+        person_img = Image.open(io.BytesIO(person_bytes))
+        dress_img = Image.open(io.BytesIO(dress_bytes))
+        
+        # 드레스 이미지 전처리
+        print("드레스 이미지 전처리 시작...")
+        dress_img = preprocess_dress_image(dress_img, target_size=1024)
+        print("드레스 이미지 전처리 완료")
+        
+        # x.ai로 프롬프트 생성
+        print("\n" + "="*80)
+        print("x.ai 프롬프트 생성")
+        print("="*80)
+        
+        try:
+            result = generate_prompt_from_images(person_img, dress_img)
+            
+            if result["success"]:
+                return JSONResponse({
+                    **llm_info,
+                    "success": True,
+                    "prompt": result["prompt"],
+                    "message": result.get("message", "프롬프트가 성공적으로 생성되었습니다.")
+                })
+            else:
+                return JSONResponse(
+                    {
+                        **llm_info,
+                        "success": False,
+                        "error": result.get("error", "Unknown error"),
+                        "message": result.get("message", "프롬프트 생성에 실패했습니다.")
+                    },
+                    status_code=502,
+                )
+        except Exception as exc:
+            print(f"x.ai API 호출 실패: {exc}")
+            traceback.print_exc()
+            return JSONResponse(
+                {
+                    **llm_info,
+                    "success": False,
+                    "error": "x.ai call failed",
+                    "message": f"x.ai 호출에 실패했습니다: {str(exc)}"
+                },
+                status_code=502,
+            )
+            
+    except Exception as exc:
+        print(f"x.ai 프롬프트 생성 중 오류: {exc}")
+        traceback.print_exc()
+        return JSONResponse(
+            {
+                "llm": XAI_PROMPT_MODEL,
                 "success": False,
                 "error": str(exc),
                 "message": f"프롬프트 생성 중 예상치 못한 오류가 발생했습니다: {str(exc)}"
