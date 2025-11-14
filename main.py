@@ -12,10 +12,11 @@ import numpy as np
 import io
 import base64
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
+from openai import OpenAI
 import os
 import time
 import pymysql
@@ -39,6 +40,10 @@ from body_analysis_test.database import (
 
 # .env 파일 로드
 load_dotenv()
+
+GPT4O_MODEL_NAME = os.getenv("GPT4O_MODEL_NAME", "gpt-4o")
+GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.5-flash-image")
+GEMINI_PROMPT_MODEL = os.getenv("GEMINI_PROMPT_MODEL", "gemini-2.0-flash-exp")
 
 # FastAPI 앱 초기화
 app = FastAPI(
@@ -772,6 +777,51 @@ def preprocess_dress_image(dress_img: Image.Image, target_size: int = 1024) -> I
     
     return white_bg
 
+def _build_gpt4o_prompt_inputs(person_data_url: str, dress_data_url: str) -> List[Dict[str, Any]]:
+    return [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "You are a professional visual prompt engineer specialized in AI outfit try-on. "
+                        "Your job is to analyze two reference images: (1) a person photo, and (2) a clothing photo. "
+                        "Then, write a detailed English prompt for a generative image model (e.g., Gemini 2.5 Flash) "
+                        "that will replace only the person's outfit with the clothing from the second image. "
+                        "Rules: Keep the same person's face, body shape, pose, hairstyle, and background exactly. "
+                        "Do NOT change facial expression, body proportions, or lighting. "
+                        "Describe the new outfit (color, texture, fabric, style) based on the clothing image. "
+                        "Make it photorealistic and naturally blended, as if the person was originally photographed wearing it. "
+                        "Return ONLY the final prompt text, no explanations."
+                    ),
+                },
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": "Analyze the outfit replacement request.",
+                },
+                {"type": "input_image", "image_url": person_data_url},
+                {"type": "input_image", "image_url": dress_data_url},
+            ],
+        },
+    ]
+
+def _extract_gpt4o_prompt(response: Any) -> str:
+    try:
+        prompt_text = response.output_text  # type: ignore[attr-defined]
+    except AttributeError:
+        prompt_text = ""
+    
+    prompt_text = (prompt_text or "").strip()
+    if not prompt_text:
+        raise ValueError("GPT-4o가 유효한 프롬프트를 반환하지 않았습니다.")
+    return prompt_text
+
 async def generate_custom_prompt_from_images(person_img: Image.Image, dress_img: Image.Image, api_key: str) -> str:
     """
     이미지를 분석하여 맞춤 프롬프트를 생성합니다.
@@ -879,7 +929,7 @@ OTHER REQUIREMENTS:
 Output ONLY the final prompt text with this complete structure. Be extremely specific about which clothing items to remove and which body parts need natural skin generation."""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model=GEMINI_PROMPT_MODEL,
             contents=[person_img, dress_img, analysis_prompt]
         )
         
@@ -908,7 +958,7 @@ Output ONLY the final prompt text with this complete structure. Be extremely spe
         traceback.print_exc()
         return None
 
-@app.post("/api/generate-prompt", tags=["프롬프트 생성"])
+@app.post("/api/gemini/generate-prompt", tags=["프롬프트 생성"])
 async def generate_prompt(
     person_image: UploadFile = File(..., description="사람 이미지 파일"),
     dress_image: Optional[UploadFile] = File(None, description="드레스 이미지 파일"),
@@ -928,10 +978,11 @@ async def generate_prompt(
         JSONResponse: 생성된 프롬프트
     """
     try:
+        llm_info = {"llm": GEMINI_PROMPT_MODEL}
         # API 키 확인
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            return JSONResponse({
+            return JSONResponse({**llm_info, 
                 "success": False,
                 "error": "API key not found",
                 "message": ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
@@ -949,7 +1000,7 @@ async def generate_prompt(
         elif dress_url:
             try:
                 if not dress_url.startswith('http'):
-                    return JSONResponse({
+                    return JSONResponse({**llm_info, 
                         "success": False,
                         "error": "Invalid dress URL",
                         "message": f"유효하지 않은 드레스 URL입니다."
@@ -988,13 +1039,13 @@ async def generate_prompt(
                     
             except Exception as e:
                 print(f"드레스 이미지 다운로드 오류: {e}")
-                return JSONResponse({
+                return JSONResponse({**llm_info, 
                     "success": False,
                     "error": "Image download failed",
                     "message": f"드레스 이미지를 다운로드할 수 없습니다: {str(e)}"
                 }, status_code=400)
         else:
-            return JSONResponse({
+            return JSONResponse({**llm_info, 
                 "success": False,
                 "error": "No dress image provided",
                 "message": "드레스 이미지 파일 또는 URL이 필요합니다."
@@ -1013,7 +1064,7 @@ async def generate_prompt(
         custom_prompt = await generate_custom_prompt_from_images(person_img, dress_img, api_key)
         
         if custom_prompt:
-            return JSONResponse({
+            return JSONResponse({**llm_info, 
                 "success": True,
                 "prompt": custom_prompt,
                 "message": "프롬프트가 성공적으로 생성되었습니다."
@@ -1050,7 +1101,7 @@ MANDATORY FOOTWEAR CHANGE - THIS IS CRITICAL:
 - The heel height should be appropriate for formal wear (3-4 inches)
 - This footwear change is NON-NEGOTIABLE and must be applied"""
             
-            return JSONResponse({
+            return JSONResponse({**llm_info, 
                 "success": True,
                 "prompt": default_prompt,
                 "message": "맞춤 프롬프트 생성 실패. 기본 프롬프트를 사용하세요.",
@@ -1061,11 +1112,306 @@ MANDATORY FOOTWEAR CHANGE - THIS IS CRITICAL:
         print(f"프롬프트 생성 API 오류: {str(e)}")
         import traceback
         traceback.print_exc()
-        return JSONResponse({
+        return JSONResponse({**llm_info, 
             "success": False,
             "error": str(e),
             "message": f"프롬프트 생성 중 오류 발생: {str(e)}"
         }, status_code=500)
+
+@app.post("/api/gpt4o-gemini/generate-prompt", tags=["프롬프트 생성"])
+async def generate_gpt4o_prompt(
+    person_image: UploadFile = File(..., description="사람 이미지 파일"),
+    dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+):
+    try:
+        llm_info = {"llm": GPT4O_MODEL_NAME}
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            return JSONResponse(
+                {
+                    **llm_info,
+                    "success": False,
+                    "error": "API key not found",
+                    "message": ".env 파일에 OPENAI_API_KEY가 설정되지 않았습니다."
+                },
+                status_code=500,
+            )
+
+        person_bytes = await person_image.read()
+        dress_bytes = await dress_image.read()
+
+        if not person_bytes or not dress_bytes:
+            return JSONResponse(
+                {
+                    **llm_info,
+                    "success": False,
+                    "error": "Invalid input",
+                    "message": "사람 이미지와 드레스 이미지를 모두 업로드해주세요."
+                },
+                status_code=400,
+            )
+
+        person_b64 = base64.b64encode(person_bytes).decode("utf-8")
+        dress_b64 = base64.b64encode(dress_bytes).decode("utf-8")
+        person_mime = person_image.content_type or "image/png"
+        dress_mime = dress_image.content_type or "image/png"
+        person_data_url = f"data:{person_mime};base64,{person_b64}"
+        dress_data_url = f"data:{dress_mime};base64,{dress_b64}"
+
+        client = OpenAI(api_key=openai_api_key)
+
+        request_input = _build_gpt4o_prompt_inputs(person_data_url, dress_data_url)
+
+        try:
+            response = client.responses.create(
+                model=GPT4O_MODEL_NAME,
+                input=request_input,
+                max_output_tokens=600,
+            )
+        except Exception as exc:
+            print(f"GPT-4o API 호출 실패: {exc}")
+            traceback.print_exc()
+            return JSONResponse(
+                {
+                    **llm_info,
+                    "success": False,
+                    "error": "OpenAI call failed",
+                    "message": f"GPT-4o 호출에 실패했습니다: {str(exc)}"
+                },
+                status_code=502,
+            )
+
+        prompt_text = (response.output_text or "").strip()
+        if not prompt_text:
+            return JSONResponse(
+                {
+                    **llm_info,
+                    "success": False,
+                    "error": "Empty response",
+                    "message": "GPT-4o가 유효한 프롬프트를 반환하지 않았습니다."
+                },
+                status_code=500,
+            )
+
+        return JSONResponse({**llm_info, "success": True, "prompt": prompt_text})
+    except Exception as exc:
+        print(f"GPT-4o 프롬프트 생성 중 오류: {exc}")
+        traceback.print_exc()
+        return JSONResponse(
+            {
+                **llm_info,
+                "success": False,
+                "error": str(exc),
+                "message": f"프롬프트 생성 중 예상치 못한 오류가 발생했습니다: {str(exc)}"
+            },
+            status_code=500,
+        )
+
+@app.post("/api/gpt4o-gemini/compose", tags=["Gemini 이미지 합성"])
+async def compose_gpt4o_gemini(
+    person_image: UploadFile = File(..., description="사람 이미지 파일"),
+    dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+    prompt: str = Form(..., description="GPT-4o가 생성한 프롬프트"),
+    model_name: Optional[str] = Form(None, description="모델명"),
+):
+    start_time = time.time()
+    model_id = model_name or "gpt4o-gemini"
+    used_prompt = (prompt or "").strip()
+
+    if not used_prompt:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "Invalid prompt",
+                "message": "프롬프트가 비어 있습니다. GPT-4o로 생성한 프롬프트를 제공해주세요."
+            },
+            status_code=400,
+        )
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "API key not found",
+                "message": ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
+            },
+            status_code=500,
+        )
+
+    person_bytes = await person_image.read()
+    dress_bytes = await dress_image.read()
+
+    if not person_bytes or not dress_bytes:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "Invalid input",
+                "message": "사람 이미지와 드레스 이미지를 모두 업로드해주세요."
+            },
+            status_code=400,
+        )
+
+    try:
+        person_img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
+        dress_img = Image.open(io.BytesIO(dress_bytes)).convert("RGB")
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "Image decoding failed",
+                "message": f"업로드한 이미지를 열 수 없습니다: {str(exc)}"
+            },
+            status_code=400,
+        )
+
+    person_buffered = io.BytesIO()
+    person_img.save(person_buffered, format="PNG")
+    person_base64 = base64.b64encode(person_buffered.getvalue()).decode()
+
+    dress_buffered = io.BytesIO()
+    dress_img.save(dress_buffered, format="PNG")
+    dress_base64 = base64.b64encode(dress_buffered.getvalue()).decode()
+
+    person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+    dress_s3_url = upload_log_to_s3(dress_buffered.getvalue(), model_id, "dress") or ""
+    result_s3_url = ""
+
+    client = genai.Client(api_key=api_key)
+
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_FLASH_MODEL,
+            contents=[person_img, dress_img, used_prompt]
+        )
+    except Exception as exc:
+        run_time = time.time() - start_time
+        try:
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=dress_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+        except Exception:
+            pass
+
+        print(f"Gemini API 호출 실패: {exc}")
+        traceback.print_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "Gemini call failed",
+                "message": f"Gemini 2.5 Flash 호출에 실패했습니다: {str(exc)}"
+            },
+            status_code=502,
+        )
+
+    if not response.candidates:
+        run_time = time.time() - start_time
+        save_test_log(
+            person_url=person_s3_url or "",
+            dress_url=dress_s3_url or None,
+            result_url="",
+            model=model_id,
+            prompt=used_prompt,
+            success=False,
+            run_time=run_time
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "No response",
+                "message": "Gemini가 결과를 생성하지 못했습니다."
+            },
+            status_code=500,
+        )
+
+    candidate = response.candidates[0]
+    parts = getattr(candidate.content, "parts", None)
+    if not parts:
+        run_time = time.time() - start_time
+        save_test_log(
+            person_url=person_s3_url or "",
+            dress_url=dress_s3_url or None,
+            result_url="",
+            model=model_id,
+            prompt=used_prompt,
+            success=False,
+            run_time=run_time
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "No parts",
+                "message": "Gemini 응답에 이미지 데이터가 포함되지 않았습니다."
+            },
+            status_code=500,
+        )
+
+    image_parts: List[bytes] = []
+    result_text = ""
+    for part in parts:
+        if hasattr(part, "inline_data") and part.inline_data:
+            data = part.inline_data.data
+            if isinstance(data, bytes):
+                image_parts.append(data)
+            elif isinstance(data, str):
+                image_parts.append(base64.b64decode(data))
+        if hasattr(part, "text") and part.text:
+            result_text += part.text
+
+    if not image_parts:
+        run_time = time.time() - start_time
+        save_test_log(
+            person_url=person_s3_url or "",
+            dress_url=dress_s3_url or None,
+            result_url="",
+            model=model_id,
+            prompt=used_prompt,
+            success=False,
+            run_time=run_time
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": "No image generated",
+                "message": "Gemini가 이미지 결과를 반환하지 않았습니다."
+            },
+            status_code=500,
+        )
+
+    result_img = Image.open(io.BytesIO(image_parts[0]))
+    result_buffered = io.BytesIO()
+    result_img.save(result_buffered, format="PNG")
+    result_s3_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
+
+    run_time = time.time() - start_time
+    save_test_log(
+        person_url=person_s3_url or "",
+        dress_url=dress_s3_url or None,
+        result_url=result_s3_url or "",
+        model=model_id,
+        prompt=used_prompt,
+        success=True,
+        run_time=run_time
+    )
+
+    result_base64 = base64.b64encode(result_buffered.getvalue()).decode()
+
+    return JSONResponse(
+        {
+            "success": True,
+            "person_image": f"data:image/png;base64,{person_base64}",
+            "dress_image": f"data:image/png;base64,{dress_base64}",
+            "result_image": f"data:image/png;base64,{result_base64}",
+            "message": "이미지 합성이 완료되었습니다.",
+            "gemini_response": result_text
+        }
+    )
 
 @app.post("/api/compose-dress", tags=["Gemini 이미지 합성"])
 async def compose_dress(
@@ -3668,7 +4014,7 @@ async def get_body_analysis_log_detail(log_id: int):
             "error": str(e),
             "message": f"로그 조회 중 오류 발생: {str(e)}"
         }, status_code=500)
-
+        
 @app.get("/admin", response_class=HTMLResponse, tags=["관리자"])
 async def admin_page(request: Request):
     """
@@ -5256,10 +5602,7 @@ async def analyze_body(
         measurements = body_analysis_service.calculate_measurements(landmarks)
         body_type = body_analysis_service.classify_body_type(measurements)
 
-        # BMI 및 체형 특징은 없으므로 None으로 전달
-        gemini_analysis = await analyze_body_with_gemini(
-            image, measurements, body_type, bmi=None, height=None, body_features=None
-        )
+        gemini_analysis = await analyze_body_with_gemini(image, measurements, body_type)
 
         return JSONResponse(
             {
@@ -5289,9 +5632,477 @@ async def analyze_body(
             status_code=500,
         )
 
-# 중복 함수 제거: analyze_body_with_gemini는 2063번 라인에 이미 정의되어 있음
+
+# ===================== 3D 이미지 변환 (Meshy.ai) =====================
+
+MESHY_API_KEY = os.getenv("MESHY_API_KEY", "")
+MESHY_API_URL = "https://api.meshy.ai"
+
+def create_3d_model_meshy(image_bytes):
+    """
+    Meshy.ai API를 사용하여 이미지를 3D 모델로 변환
+    
+    Args:
+        image_bytes: 이미지 바이트 데이터
+    
+    Returns:
+        dict: 작업 정보 (task_id, status 등)
+    """
+    if not MESHY_API_KEY:
+        error_msg = (
+            "MESHY_API_KEY가 설정되지 않았습니다!\n\n"
+            "해결 방법:\n"
+            "1. final-repo-back/.env 파일 생성\n"
+            "2. 다음 줄 추가: MESHY_API_KEY=msy_your_api_key_here\n"
+            "3. https://www.meshy.ai 에서 API 키 발급\n"
+            "4. 서버 재시작"
+        )
+        print(f"[Meshy API] 오류: {error_msg}")
+        raise ValueError(error_msg)
+    
+    # 이미지를 base64 data URI로 변환
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    
+    # 이미지 포맷 감지 (파일 시그니처 기반)
+    image_format = "png"
+    if image_bytes[:2] == b'\xff\xd8':  # JPEG magic number
+        image_format = "jpeg"
+    elif image_bytes[:4] == b'\x89PNG':  # PNG magic number
+        image_format = "png"
+    
+    data_uri = f"data:image/{image_format};base64,{base64_image}"
+    
+    headers = {
+        "Authorization": f"Bearer {MESHY_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # API 요청 데이터
+    payload = {
+        "image_url": data_uri,
+        "enable_pbr": True,  # PBR 텍스처 생성
+        "should_remesh": True,  # 리메시 활성화
+        "should_texture": True,  # 텍스처 생성
+        "ai_model": "meshy-4"  # AI 모델 지정
+    }
+    
+    try:
+        print(f"[Meshy API] 요청 시작 - 이미지 크기: {len(image_bytes)} bytes")
+        print(f"[Meshy API] 엔드포인트: {MESHY_API_URL}/openapi/v1/image-to-3d")
+        print(f"[Meshy API] API 키 설정: {'O' if MESHY_API_KEY else 'X'}")
+        
+        response = requests.post(
+            f"{MESHY_API_URL}/openapi/v1/image-to-3d",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        
+        print(f"[Meshy API] 응답 상태 코드: {response.status_code}")
+        
+        # 200 (OK) 또는 202 (Accepted) 모두 성공
+        if response.status_code in [200, 202]:
+            result = response.json()
+            task_id = result.get("result")
+            print(f"[Meshy API] 성공! Task ID: {task_id}")
+            return {
+                "success": True,
+                "task_id": task_id,
+                "message": "3D 모델 생성 작업이 시작되었습니다."
+            }
+        else:
+            error_detail = response.text
+            try:
+                error_json = response.json()
+                error_detail = error_json.get("message", response.text)
+                print(f"[Meshy API] 오류 응답: {error_json}")
+            except:
+                print(f"[Meshy API] 원시 오류: {response.text}")
+            
+            return {
+                "success": False,
+                "error": f"API 오류: {response.status_code}",
+                "message": error_detail
+            }
+            
+    except requests.exceptions.Timeout:
+        print(f"[Meshy API] 타임아웃 오류")
+        return {
+            "success": False,
+            "error": "요청 시간 초과"
+        }
+    except Exception as e:
+        print(f"[Meshy API] 예외 발생: {e}")
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def check_3d_task_status(task_id):
+    """
+    Meshy.ai 3D 생성 작업 상태 확인
+    
+    Args:
+        task_id: 작업 ID
+    
+    Returns:
+        dict: 작업 상태 정보
+    """
+    if not MESHY_API_KEY:
+        return {"success": False, "error": "API 키가 없습니다."}
+    
+    headers = {
+        "Authorization": f"Bearer {MESHY_API_KEY}",
+    }
+    
+    try:
+        response = requests.get(
+            f"{MESHY_API_URL}/openapi/v1/image-to-3d/{task_id}",
+            headers=headers,
+            timeout=10
+        )
+        
+        print(f"[Meshy API] 상태 확인 - Task: {task_id}, 응답: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            status = result.get("status")
+            progress = result.get("progress", 0)
+            
+            print(f"[Meshy API] 상태: {status}, 진행률: {progress}%")
+            
+            return {
+                "success": True,
+                "status": status,
+                "progress": progress,
+                "model_urls": result.get("model_urls", {}),
+                "thumbnail_url": result.get("thumbnail_url"),
+                "texture_urls": result.get("texture_urls", []),
+                "message": f"상태: {status}"
+            }
+        else:
+            error_detail = response.text
+            try:
+                error_json = response.json()
+                error_detail = error_json.get("message", response.text)
+                print(f"[Meshy API] 상태 확인 오류: {error_json}")
+            except:
+                print(f"[Meshy API] 상태 확인 원시 오류: {response.text}")
+            
+            return {
+                "success": False,
+                "error": f"API 오류: {response.status_code}",
+                "message": error_detail
+            }
+            
+    except Exception as e:
+        print(f"[Meshy API] 상태 확인 예외: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def download_3d_model(model_url):
+    """
+    생성된 3D 모델 다운로드
+    
+    Args:
+        model_url: 모델 다운로드 URL
+    
+    Returns:
+        bytes: 모델 파일 데이터
+    """
+    try:
+        response = requests.get(model_url, timeout=30)
+        if response.status_code == 200:
+            return response.content
+        else:
+            return None
+    except Exception as e:
+        print(f"3D 모델 다운로드 실패: {e}")
+        return None
+
+def save_3d_models_to_server(task_id, model_urls, thumbnail_url=None):
+    """
+    Meshy.ai에서 생성된 3D 모델을 서버에 저장
+    
+    Args:
+        task_id: 작업 ID
+        model_urls: 모델 다운로드 URL 딕셔너리
+        thumbnail_url: 썸네일 URL (선택)
+    
+    Returns:
+        dict: 저장된 파일 경로들
+    """
+    saved_files = {}
+    save_dir = Path("3d_models") / task_id
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"[3D 저장] 저장 디렉토리: {save_dir}")
+    
+    # 각 포맷별 모델 다운로드 및 저장
+    for format_name, url in model_urls.items():
+        if not url:
+            continue
+            
+        try:
+            print(f"[3D 저장] {format_name.upper()} 다운로드 중...")
+            response = requests.get(url, timeout=60)
+            
+            if response.status_code == 200:
+                file_path = save_dir / f"model.{format_name}"
+                file_path.write_bytes(response.content)
+                
+                saved_files[format_name] = str(file_path)
+                print(f"[3D 저장] ✓ {format_name.upper()} 저장 완료: {file_path}")
+            else:
+                print(f"[3D 저장] ✗ {format_name.upper()} 다운로드 실패: {response.status_code}")
+                
+        except Exception as e:
+            print(f"[3D 저장] ✗ {format_name.upper()} 저장 오류: {e}")
+    
+    # 썸네일 저장
+    if thumbnail_url:
+        try:
+            print(f"[3D 저장] 썸네일 다운로드 중...")
+            response = requests.get(thumbnail_url, timeout=30)
+            
+            if response.status_code == 200:
+                thumbnail_path = save_dir / "thumbnail.png"
+                thumbnail_path.write_bytes(response.content)
+                
+                saved_files["thumbnail"] = str(thumbnail_path)
+                print(f"[3D 저장] ✓ 썸네일 저장 완료: {thumbnail_path}")
+                
+        except Exception as e:
+            print(f"[3D 저장] ✗ 썸네일 저장 오류: {e}")
+    
+    return saved_files
+
+@app.get("/favicon.ico")
+async def favicon():
+    """파비콘 제공"""
+    from fastapi.responses import FileResponse
+    return FileResponse("static/favicon.ico")
+
+@app.get("/3d-conversion", response_class=HTMLResponse, tags=["Web Interface"])
+async def conversion_3d_page(request: Request):
+    """3D 이미지 변환 페이지"""
+    return templates.TemplateResponse("3d_conversion.html", {"request": request})
+
+@app.post("/api/convert-to-3d", tags=["3D 변환"])
+async def convert_to_3d(
+    image: UploadFile = File(..., description="변환할 이미지")
+):
+    """
+    Meshy.ai를 사용하여 이미지를 3D 모델로 변환
+    
+    작업을 시작하고 task_id를 반환합니다.
+    생성 완료까지 2-5분 소요됩니다.
+    """
+    start_time = time.time()
+    
+    try:
+        # 이미지 읽기
+        image_bytes = await image.read()
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        # RGB 변환 및 리사이즈 (API 최적화)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # 이미지 크기 제한 (Meshy.ai 권장사항)
+        max_size = 2048
+        if max(img.size) > max_size:
+            ratio = max_size / max(img.size)
+            new_size = tuple(int(dim * ratio) for dim in img.size)
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # 이미지를 바이트로 변환
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format='PNG')
+        img_buffer.seek(0)
+        
+        # Meshy.ai API 호출
+        result = create_3d_model_meshy(img_buffer.getvalue())
+        
+        if result.get("success"):
+            return JSONResponse({
+                "success": True,
+                "task_id": result.get("task_id"),
+                "message": "3D 모델 생성 작업이 시작되었습니다. 2-5분 정도 소요됩니다.",
+                "processing_time": round(time.time() - start_time, 2)
+            })
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": result.get("error", "알 수 없는 오류"),
+                "message": result.get("message", ""),
+                "processing_time": round(time.time() - start_time, 2)
+            }, status_code=400)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "processing_time": round(time.time() - start_time, 2)
+        }, status_code=500)
+
+@app.get("/api/check-3d-status/{task_id}", tags=["3D 변환"])
+async def check_3d_status(task_id: str, save_to_server: bool = Query(False, description="서버에 자동 저장")):
+    """
+    3D 모델 생성 작업 상태 확인
+    
+    - task_id: 작업 ID
+    - save_to_server: True면 완료 시 서버에 자동 저장
+    
+    Returns:
+        - status: PENDING, IN_PROGRESS, SUCCEEDED, FAILED
+        - progress: 0-100
+        - model_urls: 완료 시 GLB, FBX 등 모델 다운로드 URL
+        - saved_files: 서버에 저장된 파일 경로들 (save_to_server=True일 때)
+    """
+    try:
+        result = check_3d_task_status(task_id)
+        
+        if result.get("success"):
+            # 완료 상태이고 서버 저장 옵션이 활성화된 경우
+            if save_to_server and result.get("status") == "SUCCEEDED":
+                model_urls = result.get("model_urls", {})
+                thumbnail_url = result.get("thumbnail_url")
+                
+                if model_urls:
+                    print(f"[API] 서버에 3D 모델 저장 시작...")
+                    saved_files = save_3d_models_to_server(task_id, model_urls, thumbnail_url)
+                    result["saved_files"] = saved_files
+                    result["saved_to_server"] = True
+                    print(f"[API] 서버 저장 완료! 파일 수: {len(saved_files)}")
+            
+            return JSONResponse(result)
+        else:
+            return JSONResponse(result, status_code=400)
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
+@app.post("/api/save-3d-model/{task_id}", tags=["3D 변환"])
+async def save_3d_model(task_id: str):
+    """
+    완료된 3D 모델을 서버에 저장
+    
+    - task_id: 저장할 작업 ID
+    
+    Returns:
+        저장된 파일 경로들
+    """
+    try:
+        # 먼저 상태 확인
+        result = check_3d_task_status(task_id)
+        
+        if not result.get("success"):
+            return JSONResponse({
+                "success": False,
+                "error": "작업 상태 확인 실패"
+            }, status_code=400)
+        
+        if result.get("status") != "SUCCEEDED":
+            return JSONResponse({
+                "success": False,
+                "error": f"작업이 완료되지 않았습니다. 현재 상태: {result.get('status')}"
+            }, status_code=400)
+        
+        # 모델 저장
+        model_urls = result.get("model_urls", {})
+        thumbnail_url = result.get("thumbnail_url")
+        
+        if not model_urls:
+            return JSONResponse({
+                "success": False,
+                "error": "다운로드 가능한 모델이 없습니다."
+            }, status_code=400)
+        
+        print(f"[API] 3D 모델 저장 요청 - Task ID: {task_id}")
+        saved_files = save_3d_models_to_server(task_id, model_urls, thumbnail_url)
+        
+        return JSONResponse({
+            "success": True,
+            "task_id": task_id,
+            "saved_files": saved_files,
+            "message": f"{len(saved_files)}개 파일이 서버에 저장되었습니다."
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
+@app.get("/api/proxy-3d-model", tags=["3D 변환"])
+async def proxy_3d_model(model_url: str = Query(..., description="다운로드할 3D 모델 URL")):
+    """
+    CORS 문제를 해결하기 위해 3D 모델 파일을 프록시하여 제공
+    
+    - model_url: Meshy.ai의 GLB/FBX 파일 URL
+    
+    Returns:
+        3D 모델 파일 (binary)
+    """
+    try:
+        print(f"[API] 3D 모델 프록시 요청: {model_url}")
+        
+        # Meshy.ai에서 파일 다운로드
+        response = requests.get(model_url, timeout=60, stream=True)
+        
+        if response.status_code == 200:
+            # CORS 헤더 추가
+            headers = {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Content-Type": response.headers.get("Content-Type", "application/octet-stream"),
+                "Content-Disposition": f'attachment; filename="model.glb"'
+            }
+            
+            return Response(
+                content=response.content,
+                headers=headers,
+                media_type=response.headers.get("Content-Type", "application/octet-stream")
+            )
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": f"파일 다운로드 실패: {response.status_code}"
+            }, status_code=response.status_code)
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
+@app.options("/api/proxy-3d-model", tags=["3D 변환"])
+async def proxy_3d_model_options():
+    """CORS preflight 요청 처리"""
+    return Response(
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
