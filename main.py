@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import csv
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from transformers import SegformerImageProcessor, AutoModelForSemanticSegmentation
+from transformers import AutoImageProcessor, AutoModelForSemanticSegmentation
 from PIL import Image
 import torch
 import torch.nn as nn
@@ -30,13 +30,7 @@ from urllib.parse import urlparse, unquote
 import traceback
 
 from body_analysis_test.body_analysis import BodyAnalysisService
-from body_analysis_test.database import (
-    get_multiple_body_definitions, 
-    format_body_type_info_for_prompt, 
-    save_body_analysis_result, 
-    get_body_logs, 
-    get_body_logs_count
-)
+from diffusers import StableDiffusionInstructPix2PixPipeline
 
 # .env 파일 로드
 load_dotenv()
@@ -94,6 +88,7 @@ segformer_b2_model = None
 rtmpose_model = None
 realesrgan_model = None
 sdxl_pipeline = None
+instruct_pix2pix_pipeline = None
 
 # 체형 분석 서비스 전역 변수
 body_analysis_service: Optional[BodyAnalysisService] = None
@@ -264,6 +259,109 @@ def detect_style_from_filename(filename: str) -> Optional[str]:
             return rule["style"]
     
     return None
+# InstructPix2Pix 모델을 Lazy Loading 방식으로 로드하는 함수
+def load_instruct_pix2pix_model():
+    """
+    InstructPix2Pix 모델을 로드합니다. (Lazy Loading)
+    이미 로드된 경우, 기존 객체를 반환합니다.
+    """
+    global instruct_pix2pix_pipeline  # 전역 변수 사용: 모델이 이미 로드되어 있는지 확인
+    if instruct_pix2pix_pipeline is None:  # 모델이 아직 로드되지 않았다면
+        print("최초 실행: InstructPix2Pix 모델을 로딩합니다...")
+        try:
+            # GPU 사용 가능 여부 확인 후 장치 설정
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            model_id = "timbrooks/instruct-pix2pix"  # Hugging Face 모델 ID
+            
+            # 모델 로드: float16으로 메모리 절약, 안전 필터는 비활성화
+            pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+                model_id,
+                torch_dtype=torch.float16,
+                safety_checker=None
+            )
+            
+            # 모델을 선택한 장치로 이동
+            pipe.to(device)
+            instruct_pix2pix_pipeline = pipe  # 전역 변수에 저장하여 재사용
+            print(f"InstructPix2Pix 모델 로딩 완료. ({device} 사용)")
+        except Exception as e:
+            print(f"InstructPix2Pix 모델 로딩 중 오류 발생: {e}")
+            # 모델 로딩 실패 시 API 중단을 위해 예외 발생
+            raise RuntimeError("InstructPix2Pix model could not be loaded.")
+            
+    # 이미 로드된 경우, 기존 모델 객체 반환
+    return instruct_pix2pix_pipeline
+
+
+# FastAPI 응답 모델 정의
+class CorrectionResponse(BaseModel):
+    """체형 보정 결과 응답 모델"""
+    corrected_image_base64: str = Field(..., description="Base64로 인코딩된 보정 후 이미지")
+    message: str = Field("Image correction successful.", description="처리 결과 메시지")
+
+
+# FastAPI POST 엔드포인트 정의
+@app.post("/correct-shape", response_model=CorrectionResponse, tags=["Image Correction"])
+async def correct_body_shape(
+    image_file: UploadFile = File(..., description="보정할 원본 이미지 파일 (가상 피팅 완료 이미지)"),
+    instruction: str = Form(..., description="이미지 수정 지시어 (예: '허리를 더 가늘게 만들어줘')")
+):
+    """
+    업로드된 이미지에 텍스트 지시어를 기반으로 체형 보정을 적용합니다.
+    """
+    start_time = time.time()  # 처리 시작 시간 기록
+    try:
+        # 1. InstructPix2Pix 모델 로드 (이미 로드되었다면 즉시 반환)
+        pipe = load_instruct_pix2pix_model()
+
+        # 2. 업로드된 이미지 처리
+        image_bytes = await image_file.read()  # 업로드된 파일 읽기
+        original_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")  # PIL 이미지 객체로 변환
+        
+        print(f"체형 보정 실행: '{instruction}'")
+
+        # 3. 모델 추론 실행 (이미지 편집)
+        # image_guidance_scale: 원본 이미지를 얼마나 유지할지 결정 (값이 높을수록 원본 유지)
+        edited_images = pipe(
+            prompt=instruction, 
+            image=original_image,
+            num_inference_steps=20,  # 추론 단계 수 (조절 가능)
+            image_guidance_scale=1.5  # 원본 이미지 가이드 스케일
+        ).images
+        
+        if not edited_images:  # 모델이 이미지를 생성하지 못한 경우
+            raise ValueError("모델이 이미지를 생성하지 못했습니다.")
+            
+        edited_image = edited_images[0]  # 첫 번째 이미지를 결과로 사용
+        
+        # 4. 결과 이미지를 Base64로 인코딩하여 반환
+        buffer = io.BytesIO()
+        edited_image.save(buffer, format="PNG")  # PNG 형식으로 저장
+        img_str = base64.b64encode(buffer.getvalue()).decode("utf-8")  # Base64 문자열로 변환
+        
+        run_time = time.time() - start_time  # 처리 시간 계산
+        print(f"체형 보정 완료. 실행 시간: {run_time:.2f}초")
+        
+        # TODO: 필요 시 S3 업로드 및 DB 로깅 로직 추가
+        # 예: result_url = upload_to_s3(edited_image, "corrected")
+        # 예: log_result_to_db(..., model="InstructPix2Pix", prompt=instruction)
+
+        # FastAPI JSON 응답 반환
+        return JSONResponse(
+            status_code=200,
+            content={
+                "corrected_image_base64": img_str,
+                "message": "Image correction successful."
+            }
+        )
+
+    except Exception as e:
+        # 에러 발생 시 상세 로그 출력 후 500 에러 반환
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"An error occurred: {str(e)}"}
+        )
 
 # Pydantic 모델
 class LabelInfo(BaseModel):
@@ -294,7 +392,7 @@ async def load_model():
     print("SegFormer 모델 로딩 중...")
     # 동기 블로킹 작업을 별도 스레드에서 실행
     loop = asyncio.get_event_loop()
-    processor = await loop.run_in_executor(None, SegformerImageProcessor.from_pretrained, "mattmdjaga/segformer_b2_clothes")
+    processor = await loop.run_in_executor(None, AutoImageProcessor.from_pretrained, "mattmdjaga/segformer_b2_clothes")
     model = await loop.run_in_executor(None, AutoModelForSemanticSegmentation.from_pretrained, "mattmdjaga/segformer_b2_clothes")
     model.eval()
     print("모델 로딩 완료!")
@@ -1856,7 +1954,24 @@ OTHER REQUIREMENTS:
             "error_detail": error_detail,
             "message": f"이미지 합성 중 오류 발생: {str(e)}"
         }, status_code=500)
-
+# FastAPI 엔드포인트 정의: 테스트용 체형 보정 페이지 제공
+@app.get("/correction-test", response_class=HTMLResponse)
+async def get_correction_page(request: Request):
+    """
+    체형 보정 테스트 페이지를 렌더링합니다.
+    
+    - 메서드: GET
+    - URL 경로: /correction-test
+    - 응답 유형: HTML
+    - 기능: correction_test.html 템플릿을 렌더링하여 웹 브라우저에서 테스트 페이지를 보여줌
+    """
+    
+    # templates.TemplateResponse 사용:
+    # - templates: Jinja2Templates 객체 (보통 'templates' 폴더 지정)
+    # - "correction_test.html": 렌더링할 HTML 템플릿 파일
+    # - {"request": request}: 템플릿 내에서 request 객체 사용 가능하도록 전달
+    return templates.TemplateResponse("correction_test.html", {"request": request})
+    
 @app.get("/gemini-test", response_class=HTMLResponse, tags=["Web Interface"])
 async def gemini_test_page(request: Request):
     """

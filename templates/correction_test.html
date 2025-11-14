@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>체형 보정 테스트</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+        .form-container {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .form-container input[type="file"], .form-container input[type="text"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .form-container button {
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .form-container button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .result-section {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-top: 30px;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .image-box {
+            flex: 1;
+            min-width: 300px;
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .image-box h3 { margin-top: 0; }
+        .image-box img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>✨ 텍스트 기반 체형 보정 테스트</h1>
+            <p>가상 피팅이 완료된 이미지를 업로드하고, 텍스트로 보정할 내용을 지시하세요.</p>
+        </header>
+
+        <main>
+            <section class="upload-section">
+                <form id="correction-form" class="form-container">
+                    <label for="image-input">1. 보정할 이미지 선택:</label>
+                    <input type="file" id="image-input" name="image_file" accept="image/*" required>
+                    
+                    <label for="instruction-input">2. 보정 지시어 입력:</label>
+                    <input type="text" id="instruction-input" name="instruction" placeholder="예: 허리를 더 가늘게 만들어줘" required>
+                    
+                    <button type="submit" id="submit-button">체형 보정 실행</button>
+                </form>
+            </section>
+
+            <div id="spinner" class="spinner"></div>
+
+            <section id="result-section" class="result-section" style="display: none;">
+                <div class="image-box">
+                    <h3>원본 이미지</h3>
+                    <img id="original-image" src="" alt="Original Image">
+                </div>
+                <div class="image-box">
+                    <h3>보정된 이미지</h3>
+                    <img id="corrected-image" src="" alt="Corrected Image">
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const form = document.getElementById('correction-form');
+        const imageInput = document.getElementById('image-input');
+        const instructionInput = document.getElementById('instruction-input');
+        const submitButton = document.getElementById('submit-button');
+        const spinner = document.getElementById('spinner');
+        const resultSection = document.getElementById('result-section');
+        const originalImage = document.getElementById('original-image');
+        const correctedImage = document.getElementById('corrected-image');
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            if (!imageInput.files[0]) {
+                alert('이미지를 선택해주세요.');
+                return;
+            }
+
+            // UI 업데이트: 로딩 시작
+            submitButton.disabled = true;
+            submitButton.textContent = '처리 중...';
+            spinner.style.display = 'block';
+            resultSection.style.display = 'none';
+
+            // FormData 객체 생성
+            const formData = new FormData();
+            formData.append('image_file', imageInput.files[0]);
+            formData.append('instruction', instructionInput.value);
+
+            // 원본 이미지 미리보기
+            originalImage.src = URL.createObjectURL(imageInput.files[0]);
+
+            try {
+                // API 호출
+                const response = await fetch('/correct-shape', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || '서버에서 오류가 발생했습니다.');
+                }
+
+                const data = await response.json();
+                
+                // 결과 이미지 표시
+                correctedImage.src = `data:image/png;base64,${data.corrected_image_base64}`;
+                resultSection.style.display = 'flex';
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`오류 발생: ${error.message}`);
+            } finally {
+                // UI 업데이트: 로딩 종료
+                submitButton.disabled = false;
+                submitButton.textContent = '체형 보정 실행';
+                spinner.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
