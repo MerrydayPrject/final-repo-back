@@ -202,3 +202,45 @@ def get_s3_image(file_name: str) -> Optional[bytes]:
         print(f"S3 이미지 다운로드 중 예상치 못한 오류: {e}")
         return None
 
+
+def get_logs_s3_image(file_name: str) -> Optional[bytes]:
+    """
+    로그용 S3에서 이미지 다운로드 (별도 S3 계정/버킷 사용)
+    
+    Args:
+        file_name: 파일명 (예: "1763098638885_gemini-compose_result.png")
+    
+    Returns:
+        이미지 바이트 데이터 또는 None (실패 시)
+    """
+    try:
+        aws_access_key = os.getenv("LOGS_AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("LOGS_AWS_SECRET_ACCESS_KEY")
+        bucket_name = os.getenv("LOGS_AWS_S3_BUCKET_NAME")
+        region = os.getenv("LOGS_AWS_REGION", "ap-northeast-2")
+        
+        if not all([aws_access_key, aws_secret_key, bucket_name]):
+            print("로그용 S3 설정이 완료되지 않았습니다. (LOGS_AWS_*)")
+            return None
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name=region
+        )
+        
+        # S3에서 파일 다운로드 (logs 폴더)
+        s3_key = f"logs/{file_name}"
+        try:
+            response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+            return response['Body'].read()
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                print(f"로그용 S3에 파일이 없습니다: {s3_key}")
+            else:
+                print(f"로그용 S3 다운로드 오류: {e}")
+            return None
+    except Exception as e:
+        print(f"로그용 S3 이미지 다운로드 중 예상치 못한 오류: {e}")
+        return None
