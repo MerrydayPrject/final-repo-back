@@ -225,6 +225,36 @@ async function runLLMTest() {
     const promptLLM = document.getElementById('prompt-llm-select').value;
     const imageLLM = document.getElementById('image-llm-select').value;
     
+    // 이미지 생성용 x.ai 선택 시 별도 처리
+    if (imageLLM === 'xai') {
+        await runXAIImageGeneration();
+        return;
+    }
+    
+    // 프롬프트 생성용 x.ai 선택 시 프롬프트 생성 플로우 실행
+    if (promptLLM === 'xai') {
+        // 사용자가 선택한 이미지 생성용 모델 찾기
+        // imageLLM에 맞는 모델 찾기 (promptLLM은 무시하고 imageLLM만 사용)
+        if (imageLLM === 'gemini') {
+            selectedModel = models.find(m => m.id === 'gemini-compose');
+        } else {
+            // 다른 이미지 생성 모델의 경우 해당 모델 찾기
+            selectedModel = models.find(model => {
+                // imageLLM과 일치하는 모델 찾기
+                return model.input_type === 'dual_image' && 
+                       model.category === 'composition' &&
+                       (!model.image_llm || model.image_llm === imageLLM);
+            });
+        }
+        // 모델을 찾지 못하면 경고
+        if (!selectedModel) {
+            alert(`선택하신 이미지 생성 모델(${imageLLM})에 맞는 모델을 찾을 수 없습니다.`);
+            return;
+        }
+        await runPromptGenerationFlow();
+        return;
+    }
+    
     selectedModel = findModelByLLMSelection(promptLLM, imageLLM);
     
     if (!selectedModel) {
@@ -274,13 +304,31 @@ async function runPromptGenerationFlow() {
         formData.append('person_image', uploadedImages.person);
         formData.append('dress_image', uploadedImages.dress);
         
+        // 프롬프트 LLM 선택 확인
+        const promptLLMSelect = document.getElementById('prompt-llm-select');
+        const promptLLM = promptLLMSelect ? promptLLMSelect.value : '';
+        
         // GPT-4o → Gemini 2.5 Flash V1 합성의 경우 GPT-4o로 프롬프트 생성
-        const promptLLM = selectedModel.prompt_llm || (selectedModel.id === 'gpt4o-gemini' ? 'gpt-4o' : '');
-        if (promptLLM) {
-            formData.append('prompt_llm', promptLLM);
+        const modelPromptLLM = selectedModel ? (selectedModel.prompt_llm || (selectedModel.id === 'gpt4o-gemini' ? 'gpt-4o' : '')) : '';
+        const finalPromptLLM = promptLLM || modelPromptLLM;
+        
+        // 프롬프트 엔드포인트 결정
+        let promptEndpoint = '/api/gemini/generate-prompt';
+        if (finalPromptLLM === 'gpt-4o-v2-short') {
+            promptEndpoint = '/api/prompt/generate-short';
+        } else if (finalPromptLLM === 'xai') {
+            promptEndpoint = '/api/xai/generate-prompt';
+        } else if (finalPromptLLM === 'gpt-4o') {
+            promptEndpoint = '/api/gpt4o-gemini/generate-prompt';
+        } else if (selectedModel && selectedModel.prompt_generation_endpoint) {
+            promptEndpoint = selectedModel.prompt_generation_endpoint;
         }
         
-        const promptEndpoint = selectedModel.prompt_generation_endpoint || '/api/gemini/generate-prompt';
+        // prompt_llm 파라미터는 x.ai와 gpt-4o-v2-short가 아닌 경우에만 추가
+        if (finalPromptLLM && finalPromptLLM !== 'xai' && finalPromptLLM !== 'gpt-4o-v2-short') {
+            formData.append('prompt_llm', finalPromptLLM);
+        }
+        
         const response = await fetch(promptEndpoint, {
             method: 'POST',
             body: formData
@@ -613,18 +661,166 @@ function closePromptConfirmModal() {
     modals.forEach(modal => modal.remove());
 }
 
+// x.ai 이미지 생성 실행
+async function runXAIImageGeneration() {
+    const loadingDiv = document.getElementById('loading');
+    const resultDiv = document.getElementById('result');
+    const runBtn = document.getElementById('run-btn');
+    const loadingText = document.getElementById('loading-text');
+    
+    try {
+        // 이미지 검증 (x.ai는 텍스트만 사용하지만, 프롬프트 생성을 위해 이미지 필요)
+        if (!uploadedImages.person || !uploadedImages.dress) {
+            alert('프롬프트 생성을 위해 사람 이미지와 드레스 이미지를 모두 업로드해주세요.');
+            return;
+        }
+        
+        loadingDiv.style.display = 'flex';
+        resultDiv.style.display = 'none';
+        runBtn.disabled = true;
+        loadingText.textContent = '프롬프트 생성 중...';
+        
+        // 1. 프롬프트 생성
+        const promptLLM = document.getElementById('prompt-llm-select').value;
+        const formData = new FormData();
+        formData.append('person_image', uploadedImages.person);
+        formData.append('dress_image', uploadedImages.dress);
+        
+        // GPT-4o-V2 short prompt 선택 시 새로운 엔드포인트 사용
+        let promptEndpoint = '/api/gemini/generate-prompt';
+        if (promptLLM === 'gpt-4o-v2-short') {
+            promptEndpoint = '/api/prompt/generate-short';
+        } else if (promptLLM) {
+            formData.append('prompt_llm', promptLLM);
+        }
+        
+        const promptResponse = await fetch(promptEndpoint, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!promptResponse.ok) {
+            const errorData = await promptResponse.json().catch(() => ({}));
+            throw new Error(errorData.message || `프롬프트 생성 실패: ${promptResponse.status}`);
+        }
+        
+        const promptData = await promptResponse.json();
+        
+        if (!promptData.success || !promptData.prompt) {
+            throw new Error(promptData.message || '프롬프트 생성에 실패했습니다');
+        }
+        
+        generatedPrompt = promptData.prompt;
+        loadingText.textContent = 'x.ai로 이미지 생성 중...';
+        
+        // 2. x.ai API 호출 (로깅을 위해 이미지와 프롬프트 LLM 정보도 함께 전달)
+        const xaiFormData = new FormData();
+        xaiFormData.append('prompt', generatedPrompt);
+        xaiFormData.append('person_image', uploadedImages.person);
+        xaiFormData.append('dress_image', uploadedImages.dress);
+        if (promptLLM) {
+            xaiFormData.append('prompt_llm', promptLLM);
+        }
+        
+        const startTime = performance.now();
+        const xaiResponse = await fetch('/api/generate-image-xai', {
+            method: 'POST',
+            body: xaiFormData
+        });
+        
+        const processingTime = ((performance.now() - startTime) / 1000).toFixed(2);
+        
+        if (!xaiResponse.ok) {
+            const errorData = await xaiResponse.json().catch(() => ({}));
+            throw new Error(errorData.message || `x.ai API 호출 실패: ${xaiResponse.status}`);
+        }
+        
+        const xaiData = await xaiResponse.json();
+        
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+        
+        if (xaiData.success) {
+            // 결과 표시 (x.ai는 단일 이미지만 반환)
+            displayXAIResult(xaiData, processingTime);
+        } else {
+            throw new Error(xaiData.message || 'x.ai 이미지 생성 실패');
+        }
+    } catch (error) {
+        console.error('x.ai 이미지 생성 오류:', error);
+        alert(`x.ai 이미지 생성 실패: ${error.message}`);
+        
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+    }
+}
+
+// x.ai 결과 표시
+function displayXAIResult(data, processingTime) {
+    const resultDiv = document.getElementById('result');
+    const resultImagesDiv = document.getElementById('result-images');
+    const timeSpan = document.getElementById('processing-time');
+    const downloadBtn = document.getElementById('download-btn');
+    
+    timeSpan.textContent = `${processingTime}초`;
+    
+    // 업로드된 이미지의 미리보기 URL 가져오기
+    const personImgSrc = document.getElementById('img-person')?.src || '';
+    const dressImgSrc = document.getElementById('img-dress')?.src || '';
+    
+    const imagesHtml = `
+        <div class="llm-result-image-item">
+            <div class="llm-result-image-label">사람 이미지</div>
+            <img src="${personImgSrc}" alt="Person">
+        </div>
+        <div class="llm-result-image-item">
+            <div class="llm-result-image-label">드레스 이미지</div>
+            <img src="${dressImgSrc}" alt="Dress">
+        </div>
+        <div class="llm-result-image-item highlight">
+            <div class="llm-result-image-label">x.ai 생성 결과 ✨</div>
+            <img src="${data.result_image || ''}" alt="Result" id="result-img">
+        </div>
+    `;
+    
+    resultImage = data.result_image;
+    
+    resultImagesDiv.innerHTML = imagesHtml;
+    resultDiv.style.display = 'block';
+    
+    if (data.result_image) {
+        downloadBtn.style.display = 'flex';
+    }
+}
+
 // 프롬프트 확인 후 이미지 합성 실행 (model-comparison.js와 동일한 방식)
 async function confirmAndRunCompose() {
     closePromptConfirmModal();
     
-    if (!selectedModel) {
-        alert('모델을 찾을 수 없습니다. 다시 시도해주세요.');
-        return;
-    }
-    
     if (!generatedPrompt) {
         alert('프롬프트를 찾을 수 없습니다. 다시 시도해주세요.');
         return;
+    }
+    
+    // selectedModel이 없으면 사용자가 선택한 이미지 생성용 모델 찾기
+    if (!selectedModel) {
+        const imageLLM = document.getElementById('image-llm-select')?.value || 'gemini';
+        // imageLLM에 맞는 모델 찾기
+        if (imageLLM === 'gemini') {
+            selectedModel = models.find(m => m.id === 'gemini-compose');
+        } else {
+            // 다른 이미지 생성 모델의 경우 해당 모델 찾기
+            selectedModel = models.find(model => {
+                // imageLLM과 일치하는 모델 찾기
+                return model.input_type === 'dual_image' && 
+                       model.category === 'composition' &&
+                       (!model.image_llm || model.image_llm === imageLLM);
+            });
+        }
+        if (!selectedModel) {
+            alert(`선택하신 이미지 생성 모델(${imageLLM})에 맞는 모델을 찾을 수 없습니다. 이미지 생성 모델을 선택해주세요.`);
+            return;
+        }
     }
     
     await runComposeDirectly();

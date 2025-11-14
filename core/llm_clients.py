@@ -5,7 +5,7 @@ from google import genai
 from openai import OpenAI
 import traceback
 
-from config.settings import GPT4O_MODEL_NAME, GEMINI_PROMPT_MODEL
+from config.settings import GPT4O_MODEL_NAME, GPT4O_V2_MODEL_NAME, GEMINI_PROMPT_MODEL
 
 
 def _build_gpt4o_prompt_inputs(person_data_url: str, dress_data_url: str) -> List[Dict[str, Any]]:
@@ -191,4 +191,88 @@ Output ONLY the final prompt text with this complete structure. Be extremely spe
         print(f"프롬프트 생성 중 오류: {str(e)}")
         traceback.print_exc()
         return None
+
+
+def _build_gpt4o_v2_short_prompt_inputs(person_data_url: str, dress_data_url: str) -> List[Dict[str, Any]]:
+    """GPT-4o-V2 short prompt 입력 생성 (x.ai 최적화)"""
+    return [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "You generate concise photorealistic image prompts optimized for x.ai image models. "
+                        "Analyze Image 1 (person) and Image 2 (dress). "
+                        "Create a single English prompt under 1024 characters describing a photorealistic image where: "
+                        "– The same person from Image 1 appears with identical face, hairstyle, body proportions, pose and background. "
+                        "– The original clothing is not present. "
+                        "– The person is wearing the dress shown in Image 2, matching color, fabric, shine, silhouette and style. "
+                        "– Natural skin appears on any exposed areas. "
+                        "– The person is wearing elegant heels that match the dress. "
+                        "Output only one compact descriptive paragraph. "
+                        "No lists, no steps, no commentary."
+                    ),
+                },
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": "Create a short photorealistic prompt for x.ai using Image 1 as the person and Image 2 as the dress reference.",
+                },
+                {"type": "input_image", "image_url": person_data_url},
+                {"type": "input_image", "image_url": dress_data_url},
+            ],
+        },
+    ]
+
+
+def call_gpt4o_v2_short_prompt(person_data_url: str, dress_data_url: str, api_key: str) -> str:
+    """
+    GPT-4o-V2를 사용하여 x.ai 최적화 short prompt 생성
+    
+    Args:
+        person_data_url: 사람 이미지 data URL
+        dress_data_url: 드레스 이미지 data URL
+        api_key: OpenAI API 키
+    
+    Returns:
+        생성된 short prompt 문자열 (최대 1024자)
+    """
+    try:
+        client = OpenAI(api_key=api_key)
+        
+        request_input = _build_gpt4o_v2_short_prompt_inputs(person_data_url, dress_data_url)
+        
+        response = client.responses.create(
+            model=GPT4O_V2_MODEL_NAME,
+            input=request_input,
+            max_output_tokens=400,  # 1024자 제한을 고려한 토큰 수
+        )
+        
+        # 응답에서 프롬프트 추출
+        prompt_text = ""
+        try:
+            prompt_text = response.output_text  # type: ignore[attr-defined]
+        except AttributeError:
+            prompt_text = ""
+        
+        prompt_text = (prompt_text or "").strip()
+        if not prompt_text:
+            raise ValueError("GPT-4o-V2가 유효한 프롬프트를 반환하지 않았습니다.")
+        
+        # 최종 1024자로 truncation (공백 포함)
+        if len(prompt_text) > 1024:
+            prompt_text = prompt_text[:1024].rsplit(' ', 1)[0]  # 단어 단위로 자르기
+        
+        print(f"GPT-4o-V2 short prompt 생성 완료 (길이: {len(prompt_text)}자)")
+        return prompt_text
+        
+    except Exception as e:
+        print(f"GPT-4o-V2 short prompt 생성 중 오류: {str(e)}")
+        traceback.print_exc()
+        raise
 

@@ -64,6 +64,8 @@
 ### 5.2 Should Have
 - 다국어 프롬프트 지원 및 자동 번역.
 - 사용자 맞춤 프롬프트 생성(`POST /api/gpt4o-gemini/generate-prompt`).
+- GPT-4o-V2 기반 x.ai 최적화 short prompt 생성(`POST /api/prompt/generate-short`, ≤1024자).
+- x.ai grok 모델 기반 이미지 분석 프롬프트 생성(`POST /api/xai/generate-prompt`).
 - 드레스 카탈로그 검색/필터(라인, 소재, 가격대 등).
 - 추천 결과에 대한 피드백 수집 및 재학습 파이프라인.
 
@@ -86,6 +88,8 @@
 - **AI 모델**
   - SegFormer B2/B0: 의상 분할, 배경 제거.
   - Gemini 2.5 Flash & GPT-4o: 프롬프트 생성, 텍스트 추천.
+  - GPT-4o-V2: x.ai 최적화 short prompt 생성 (≤1024자).
+  - x.ai grok-2-vision-1212: 이미지 분석 기반 프롬프트 생성.
   - RTMPose-s: 포즈 추정 및 체형 지표 산출.
   - Real-ESRGAN, GFPGAN, InstructPix2Pix: 이미지 품질 보정.
 - **스토리지**: AWS S3에 업로드 이미지, 합성 결과, 로그 저장.
