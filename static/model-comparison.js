@@ -37,18 +37,15 @@ function renderModelButtons() {
     
     const buttonsHtml = models.map(model => {
         const isGemini = model.id === 'gemini-compose';
-        const geminiClass = isGemini ? 'gemini-model-card' : '';
-        const geminiBadge = isGemini ? '<div class="model-badge">NEW</div>' : '';
         
         return `
-            <button class="model-button-card ${geminiClass}" onclick="openModelModal('${model.id}')">
-                <div class="model-button-icon">${isGemini ? '✨' : '🤖'}</div>
+            <button class="model-button-card" onclick="openModelModal('${model.id}')">
+                <div class="model-button-icon">🤖</div>
                 <div class="model-button-content">
                     <h3>${model.name}</h3>
                     <p>${model.description}</p>
                     <span class="model-category">${model.category === 'composition' ? '합성' : '세그멘테이션'}</span>
                 </div>
-                ${geminiBadge}
             </button>
         `;
     }).join('');
@@ -77,7 +74,7 @@ function createModelModals() {
                 <div class="model-modal-content">
                     <div class="model-modal-header">
                         <div class="model-modal-title">
-                            <div class="model-modal-icon">${model.id === 'gemini-compose' ? '✨' : '🤖'}</div>
+                            <div class="model-modal-icon">🤖</div>
                             <div>
                                 <h2>${model.name}</h2>
                                 <p>${model.description}</p>
@@ -430,7 +427,7 @@ async function runModelTest(modelId) {
     }
     
     // gemini-compose 모델인 경우: 프롬프트 생성 및 확인 프로세스
-    if (modelId === 'gemini-compose' && model.input_type === 'dual_image') {
+    if ((modelId === 'gemini-compose' || modelId === 'gpt4o-gemini') && model.input_type === 'dual_image') {
         await runGeminiComposeWithPromptCheck(modelId, model);
         return;
     }
@@ -769,7 +766,14 @@ async function runGeminiComposeWithPromptCheck(modelId, model) {
         formData.append('person_image', personFile);
         formData.append('dress_image', dressFile);
         
-        const response = await fetch('/api/generate-prompt', {
+        // GPT-4o → Gemini 2.5 Flash V1 합성의 경우 GPT-4o로 프롬프트 생성
+        const promptLLM = model.prompt_llm || (modelId === 'gpt4o-gemini' ? 'gpt-4o' : '');
+        if (promptLLM) {
+            formData.append('prompt_llm', promptLLM);
+        }
+        
+        const promptEndpoint = model.prompt_generation_endpoint || '/api/gemini/generate-prompt';
+        const response = await fetch(promptEndpoint, {
             method: 'POST',
             body: formData
         });
@@ -787,7 +791,8 @@ async function runGeminiComposeWithPromptCheck(modelId, model) {
         
         if (data.success) {
             // 2. 프롬프트 확인 모달 표시
-            showPromptConfirmModal(modelId, model, data.prompt);
+            const llmName = data.llm || data.model || data.provider || promptLLM || '알 수 없음';
+            showPromptConfirmModal(modelId, model, data.prompt, llmName);
         } else {
             throw new Error(data.message || '프롬프트 생성에 실패했습니다');
         }
@@ -801,7 +806,7 @@ async function runGeminiComposeWithPromptCheck(modelId, model) {
     }
 }
 
-function showPromptConfirmModal(modelId, model, generatedPrompt) {
+function showPromptConfirmModal(modelId, model, generatedPrompt, llmName = '알 수 없음') {
     // HTML escape 함수
     const escapeHtml = (text) => {
         const div = document.createElement('div');
@@ -823,6 +828,10 @@ function showPromptConfirmModal(modelId, model, generatedPrompt) {
             </div>
             <div class="prompt-confirm-body">
                 <div class="prompt-preview">
+                    <div class="prompt-llm-info">
+                        <span class="prompt-llm-label">프롬프트 생성 모델:</span>
+                        <span class="prompt-llm-name">${escapeHtml(llmName)}</span>
+                    </div>
                     <label>생성된 프롬프트:</label>
                     <div class="prompt-text">${escapeHtml(generatedPrompt).replace(/\n/g, '<br>')}</div>
                 </div>
@@ -857,6 +866,7 @@ function showPromptConfirmModal(modelId, model, generatedPrompt) {
         modelModals[modelId] = {};
     }
     modelModals[modelId].generatedPrompt = generatedPrompt;
+    modelModals[modelId].promptLLM = llmName;
     
     // 모달 스타일 추가
     ensurePromptModalStyles();
@@ -960,6 +970,27 @@ function ensurePromptModalStyles() {
         
         .prompt-preview {
             margin-bottom: 20px;
+        }
+
+        .prompt-llm-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+            color: #444;
+        }
+
+        .prompt-llm-label {
+            font-weight: 600;
+        }
+
+        .prompt-llm-name {
+            background: #eef2ff;
+            color: #4338ca;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-weight: 600;
         }
         
         .prompt-preview label {

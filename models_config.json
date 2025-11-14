@@ -1,12 +1,29 @@
 {
   "models": [
     {
+      "id": "gpt4o-gemini",
+      "name": "GPT-4o → Gemini 2.5 Flash V1",
+      "description": "GPT-4o가 생성한 프롬프트를 사용해 Gemini 2.5 Flash로 이미지를 합성합니다.",
+      "endpoint": "/api/gpt4o-gemini/compose",
+      "method": "POST",
+      "input_type": "dual_image",
+      "prompt_llm": "gpt-4o",
+      "inputs": [
+        {"name": "person_image", "label": "사람 이미지", "required": true},
+        {"name": "dress_image", "label": "드레스 이미지", "required": true}
+      ],
+      "category": "composition",
+      "requires_prompt_generation": true,
+      "prompt_generation_endpoint": "/api/gpt4o-gemini/generate-prompt"
+    },
+    {
       "id": "gemini-compose",
       "name": "Gemini 이미지 합성",
       "description": "사람과 드레스를 합성하여 입은 모습 생성",
       "endpoint": "/api/compose-dress",
       "method": "POST",
       "input_type": "dual_image",
+      "prompt_llm": "gemini",
       "inputs": [
         {"name": "person_image", "label": "사람 이미지", "required": true},
         {"name": "dress_image", "label": "드레스 이미지", "required": true}
@@ -21,6 +38,7 @@
       "endpoint": "/api/compose-enhanced",
       "method": "POST",
       "input_type": "dual_image",
+      "prompt_llm": "",
       "inputs": [
         {"name": "person_image", "label": "사람 이미지", "required": true},
         {"name": "dress_image", "label": "드레스 이미지", "required": true}

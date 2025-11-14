@@ -2,10 +2,23 @@
 let currentPage = 1;
 const itemsPerPage = 20;
 let currentSearchModel = null;
+let currentTab = 'synthesis'; // 'synthesis' or 'body'
+let currentBodyPage = 1;
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', () => {
     loadLogs(currentPage);
+    
+    // 탭 버튼 이벤트 리스너
+    const tabSynthesis = document.getElementById('tabSynthesis');
+    const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
+    
+    if (tabSynthesis) {
+        tabSynthesis.addEventListener('click', () => switchTab('synthesis'));
+    }
+    if (tabBodyAnalysis) {
+        tabBodyAnalysis.addEventListener('click', () => switchTab('body'));
+    }
     
     // 검색 입력 필드에 Enter 키 이벤트 추가
     const searchInput = document.getElementById('search-input');
@@ -17,6 +30,55 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// 탭 전환
+function switchTab(tab) {
+    currentTab = tab;
+    
+    const synthesisSection = document.getElementById('synthesis-logs-section');
+    const bodySection = document.getElementById('body-logs-section');
+    const tabSynthesis = document.getElementById('tabSynthesis');
+    const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
+    const sectionTitle = document.getElementById('section-title');
+    const logsCountLabel = document.getElementById('logs-count-label');
+    const searchContainer = document.querySelector('.search-container');
+    
+    if (tab === 'synthesis') {
+        if (synthesisSection) synthesisSection.style.display = 'block';
+        if (bodySection) bodySection.style.display = 'none';
+        if (tabSynthesis) {
+            tabSynthesis.classList.add('active');
+            tabSynthesis.style.background = '#007bff';
+            tabSynthesis.style.color = '#fff';
+        }
+        if (tabBodyAnalysis) {
+            tabBodyAnalysis.classList.remove('active');
+            tabBodyAnalysis.style.background = '#fff';
+            tabBodyAnalysis.style.color = '#333';
+        }
+        if (sectionTitle) sectionTitle.textContent = '📋 합성 로그 목록';
+        if (logsCountLabel) logsCountLabel.textContent = '전체 합성:';
+        if (searchContainer) searchContainer.style.display = 'block';
+        loadLogs(currentPage, currentSearchModel);
+    } else {
+        if (synthesisSection) synthesisSection.style.display = 'none';
+        if (bodySection) bodySection.style.display = 'block';
+        if (tabSynthesis) {
+            tabSynthesis.classList.remove('active');
+            tabSynthesis.style.background = '#fff';
+            tabSynthesis.style.color = '#333';
+        }
+        if (tabBodyAnalysis) {
+            tabBodyAnalysis.classList.add('active');
+            tabBodyAnalysis.style.background = '#007bff';
+            tabBodyAnalysis.style.color = '#fff';
+        }
+        if (sectionTitle) sectionTitle.textContent = '📊 분석 결과 로그 목록';
+        if (logsCountLabel) logsCountLabel.textContent = '전체 분석:';
+        if (searchContainer) searchContainer.style.display = 'none';
+        loadBodyLogs(currentBodyPage);
+    }
+}
 
 // 통계 로드
 async function loadStats() {
@@ -359,6 +421,15 @@ function formatDateTime(dateString) {
     });
 }
 
+function formatTime(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -368,6 +439,305 @@ function escapeHtml(text) {
 function showError(message) {
     // 간단한 에러 표시 (필요시 토스트 메시지 등으로 변경 가능)
     alert(message);
+}
+
+// 체형 분석 로그 목록 로드
+async function loadBodyLogs(page) {
+    try {
+        const url = `/api/admin/body-logs?page=${page}&limit=${itemsPerPage}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+            renderBodyLogs(data.data);
+            renderBodyPagination(data.pagination);
+            updateBodyLogsCount(data.pagination.total);
+            currentBodyPage = page;
+        } else {
+            showError('체형 분석 로그를 불러오는 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('체형 분석 로그 로드 오류:', error);
+        const tbody = document.getElementById('body-logs-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="7" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        }
+    }
+}
+
+// 체형 분석 로그 갯수 업데이트
+function updateBodyLogsCount(count) {
+    const logsCountElement = document.getElementById('logs-count');
+    if (logsCountElement) {
+        logsCountElement.textContent = count;
+    }
+}
+
+// 체형 분석 로그 테이블 렌더링
+function renderBodyLogs(logs) {
+    const tbody = document.getElementById('body-logs-tbody');
+    
+    if (!tbody) return;
+    
+    if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="loading">로그가 없습니다.</td></tr>';
+        return;
+    }
+    
+    // 체형 특징을 부드러운 표현으로 변환하는 함수
+    const softFeatureMap = {
+        '키가 작은 체형': '키가 작으신 체형',
+        '키가 큰 체형': '키가 크신 체형',
+        '허리가 짧은 체형': '허리 비율이 짧으신 체형',
+        '어깨가 넓은 체형': '균형잡힌 상체체형',
+        '어깨가 좁은 체형': '어깨라인이 슬림한 체형',
+        '마른 체형': '슬림한 체형',
+        '글래머러스한 체형': '곡선미가 돋보이는 체형',
+        '팔 라인이 신경 쓰이는 체형': '팔라인이 신경쓰이는 체형',
+        '복부가 신경 쓰이는 체형': '' // 표시하지 않음
+    };
+    
+    tbody.innerHTML = logs.map(log => {
+        const id = log.id !== undefined ? log.id : '-';
+        const model = log.model !== undefined ? log.model : '-';
+        const height = log.height !== undefined && log.height !== null ? log.height + ' cm' : '-';
+        const weight = log.weight !== undefined && log.weight !== null ? log.weight + ' kg' : '-';
+        const bmi = log.bmi !== undefined && log.bmi !== null ? log.bmi.toFixed(1) : '-';
+        
+        // 체형 특징 파싱 및 변환
+        let features = [];
+        if (log.characteristic) {
+            try {
+                // JSON 문자열인 경우 파싱
+                if (log.characteristic.startsWith('[') || log.characteristic.startsWith('{')) {
+                    features = JSON.parse(log.characteristic);
+                } else {
+                    // 쉼표로 구분된 문자열인 경우
+                    features = log.characteristic.split(',').map(f => f.trim()).filter(f => f);
+                }
+            } catch (e) {
+                // 파싱 실패 시 그대로 사용
+                features = [log.characteristic];
+            }
+        }
+        
+        // 부드러운 표현으로 변환
+        const softFeatures = features.map(feature => {
+            return softFeatureMap[feature] !== undefined ? softFeatureMap[feature] : feature;
+        }).filter(f => f !== ''); // 빈 문자열 제거
+        
+        const featuresDisplay = softFeatures.length > 0 ? softFeatures.join(', ') : '-';
+        const processingTime = log.processing_time || '-';
+        
+        return `
+        <tr>
+            <td>${id}</td>
+            <td>${model}</td>
+            <td>${height}</td>
+            <td>${weight}</td>
+            <td>${bmi}</td>
+            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${featuresDisplay}">${featuresDisplay}</td>
+            <td>${processingTime}</td>
+            <td>
+                <button class="btn-detail-emoji" onclick="showBodyDetail(${id})" title="상세보기">
+                    📋
+                </button>
+            </td>
+        </tr>
+    `;
+    }).join('');
+}
+
+// 체형 분석 로그 페이지네이션 렌더링
+function renderBodyPagination(pagination) {
+    const paginationDiv = document.getElementById('body-pagination');
+    
+    if (!paginationDiv) return;
+    
+    if (pagination.total_pages === 0) {
+        paginationDiv.innerHTML = '';
+        return;
+    }
+    
+    const createPageButton = (pageNum, text, disabled = false, active = false) => {
+        if (disabled) {
+            return `<button disabled>${text}</button>`;
+        }
+        const activeClass = active ? ' class="active"' : '';
+        return `<button onclick="loadBodyLogs(${pageNum})"${activeClass}>${text}</button>`;
+    };
+    
+    let html = createPageButton(1, '처음', pagination.page === 1);
+    
+    if (pagination.page > 1) {
+        html += createPageButton(pagination.page - 1, '이전');
+    }
+    
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.total_pages, pagination.page + 2);
+    
+    if (startPage > 1) {
+        html += '<button disabled>...</button>';
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += createPageButton(i, i.toString(), false, i === pagination.page);
+    }
+    
+    if (endPage < pagination.total_pages) {
+        html += '<button disabled>...</button>';
+    }
+    
+    if (pagination.page < pagination.total_pages) {
+        html += createPageButton(pagination.page + 1, '다음');
+    }
+    
+    html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
+    
+    html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
+    
+    paginationDiv.innerHTML = html;
+}
+
+// 체형 분석 로그 상세 보기
+async function showBodyDetail(logId) {
+    try {
+        const response = await fetch(`/api/admin/body-logs/${logId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            renderBodyDetailModal(data.data);
+            openModal();
+        } else {
+            alert('로그를 불러오는 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('체형 분석 상세 로그 로드 오류:', error);
+        alert('로그를 불러오는 중 오류가 발생했습니다.');
+    }
+}
+
+// 체형 분석 상세 모달 렌더링
+function renderBodyDetailModal(log) {
+    const modalBody = document.getElementById('modal-body');
+    
+    if (!modalBody) return;
+    
+    const height = log.height !== undefined && log.height !== null ? log.height + ' cm' : '-';
+    const weight = log.weight !== undefined && log.weight !== null ? log.weight + ' kg' : '-';
+    const bmi = log.bmi !== undefined && log.bmi !== null ? log.bmi.toFixed(1) : '-';
+    
+    // characteristic은 쉼표로 구분된 문자열이거나 JSON 문자열일 수 있음
+    let features = [];
+    if (log.characteristic) {
+        try {
+            // JSON 문자열인 경우 파싱
+            if (log.characteristic.startsWith('[') || log.characteristic.startsWith('{')) {
+                features = JSON.parse(log.characteristic);
+            } else {
+                // 쉼표로 구분된 문자열인 경우
+                features = log.characteristic.split(',').map(f => f.trim()).filter(f => f);
+            }
+        } catch (e) {
+            // 파싱 실패 시 그대로 사용
+            features = [log.characteristic];
+        }
+    }
+    
+    // 체형 특징을 부드러운 표현으로 변환
+    const softFeatureMap = {
+        '키가 작은 체형': '키가 작으신 체형',
+        '키가 큰 체형': '키가 크신 체형',
+        '허리가 짧은 체형': '허리 비율이 짧으신 체형',
+        '어깨가 넓은 체형': '균형잡힌 상체체형',
+        '어깨가 좁은 체형': '어깨라인이 슬림한 체형',
+        '마른 체형': '슬림한 체형',
+        '글래머러스한 체형': '곡선미가 돋보이는 체형',
+        '팔 라인이 신경 쓰이는 체형': '팔라인이 신경쓰이는 체형',
+        '복부가 신경 쓰이는 체형': '' // 표시하지 않음
+    };
+    
+    // 부드러운 표현으로 변환
+    features = features.map(feature => {
+        return softFeatureMap[feature] !== undefined ? softFeatureMap[feature] : feature;
+    }).filter(f => f !== ''); // 빈 문자열 제거
+    
+    const detailedAnalysis = log.analysis_results || '-';
+    const runTime = log.run_time !== undefined && log.run_time !== null 
+        ? (typeof log.run_time === 'number' ? log.run_time.toFixed(2) + '초' : log.run_time) 
+        : '-';
+    const createdAt = log.created_at ? formatDateTime(log.created_at) : '-';
+    const processingTime = createdAt !== '-' && runTime !== '-' 
+        ? `${createdAt} (${runTime})` 
+        : createdAt !== '-' ? createdAt : runTime;
+    
+    const imageHtml = log.image_url ? `
+        <div class="detail-item">
+            <div class="detail-label">업로드 이미지</div>
+            <div class="image-preview-single">
+                <img 
+                    src="/api/admin/s3-image-proxy?url=${encodeURIComponent(log.image_url)}" 
+                    alt="Body Analysis" 
+                    loading="lazy"
+                    onload="handleImageLoad(this);"
+                    onerror="handleImageError(this, '${escapeHtml(log.image_url)}');"
+                    style="opacity: 0; transition: opacity 0.3s; max-width: 100%;"
+                >
+                <div id="image-loading" style="text-align: center; padding: 20px; color: #666;">
+                    ⏳ 이미지를 불러오는 중...
+                </div>
+            </div>
+        </div>
+    ` : '';
+    
+    modalBody.innerHTML = `
+        <div class="detail-grid">
+            <div class="detail-item">
+                <div class="detail-label">ID</div>
+                <div class="detail-value">${log.id || '-'}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">키</div>
+                <div class="detail-value">${height}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">몸무게</div>
+                <div class="detail-value">${weight}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">BMI</div>
+                <div class="detail-value">${bmi}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">체형 특징</div>
+                <div class="detail-value">${features.join(', ') || '-'}</div>
+            </div>
+            <div class="detail-item" style="grid-column: 1 / -1;">
+                <div class="detail-label">상세 분석</div>
+                <div class="detail-value" style="white-space: pre-wrap; max-height: 300px; overflow-y: auto;">${detailedAnalysis}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">처리 시간</div>
+                <div class="detail-value">${processingTime}</div>
+            </div>
+            ${imageHtml}
+        </div>
+    `;
+    
+    if (log.image_url) {
+        setTimeout(() => {
+            const img = modalBody.querySelector('img');
+            const loading = modalBody.querySelector('#image-loading');
+            
+            if (img) {
+                if (img.complete && img.naturalHeight !== 0) {
+                    if (loading) loading.style.display = 'none';
+                    img.style.opacity = '1';
+                }
+            }
+        }, 100);
+    }
 }
 
 

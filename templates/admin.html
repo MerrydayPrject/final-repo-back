@@ -12,10 +12,18 @@
         <section class="logs-section">
             <div class="logs-header">
                 <div class="logs-header-top">
-                    <h2>📋 합성 로그 목록</h2>
+                    <div class="tab-buttons" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button id="tabSynthesis" class="tab-button active" style="padding: 10px 20px; border: 1px solid #ddd; background: #007bff; color: #fff; cursor: pointer; border-radius: 5px;">
+                            📋 합성 로그 목록
+                        </button>
+                        <button id="tabBodyAnalysis" class="tab-button" style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                            📊 분석 결과 로그 목록
+                        </button>
+                    </div>
+                    <h2 id="section-title">📋 합성 로그 목록</h2>
                     <div class="logs-header-right">
                         <div class="logs-count">
-                            <span class="logs-count-label">전체 합성:</span>
+                            <span class="logs-count-label" id="logs-count-label">전체 합성:</span>
                             <span class="logs-count-value" id="logs-count">0</span>
                         </div>
                         <a href="/" class="btn-home">🏠 홈으로</a>
@@ -40,27 +48,60 @@
                 </div>
             </div>
             
-            <div class="table-container">
-                <table class="logs-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>모델</th>
-                            <th>처리 시간</th>
-                            <th>상세보기</th>
-                        </tr>
-                    </thead>
-                    <tbody id="logs-tbody">
-                        <tr>
-                            <td colspan="4" class="loading">데이터를 불러오는 중...</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <!-- 합성 로그 목록 -->
+            <div id="synthesis-logs-section">
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>모델</th>
+                                <th>처리 시간</th>
+                                <th>상세보기</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-tbody">
+                            <tr>
+                                <td colspan="4" class="loading">데이터를 불러오는 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 페이지네이션 -->
+                <div class="pagination" id="pagination">
+                    <!-- 동적으로 생성됨 -->
+                </div>
             </div>
 
-            <!-- 페이지네이션 -->
-            <div class="pagination" id="pagination">
-                <!-- 동적으로 생성됨 -->
+            <!-- 체형 분석 로그 목록 -->
+            <div id="body-logs-section" style="display: none;">
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>모델명</th>
+                                <th>키 (cm)</th>
+                                <th>몸무게 (kg)</th>
+                                <th>BMI</th>
+                                <th>체형 특징</th>
+                                <th>걸린 시간</th>
+                                <th>상세보기</th>
+                            </tr>
+                        </thead>
+                        <tbody id="body-logs-tbody">
+                            <tr>
+                                <td colspan="8" class="loading">데이터를 불러오는 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 페이지네이션 -->
+                <div class="pagination" id="body-pagination">
+                    <!-- 동적으로 생성됨 -->
+                </div>
             </div>
         </section>
     </div>
