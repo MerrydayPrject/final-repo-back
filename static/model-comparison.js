@@ -1,10 +1,15 @@
 // 전역 변수
 let models = [];
 let modelModals = {}; // 각 모델별 모달 데이터 저장
+let promptImages = {
+    person: null,
+    dress: null
+}; // 프롬프트 비교용 이미지 저장
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', () => {
     loadModels();
+    setupPromptDragAndDrop();
 });
 
 // 모델 목록 로드
@@ -1140,4 +1145,348 @@ async function confirmAndRunCompose(modelId) {
         runBtn.disabled = false;
         runBtn.textContent = '테스트 실행';
     }
+}
+
+// ==================== 프롬프트 비교 기능 ====================
+
+// 프롬프트 이미지 업로드 처리
+function handlePromptImageUpload(event, type) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        alert('이미지 파일만 업로드 가능합니다.');
+        return;
+    }
+    
+    promptImages[type] = file;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const previewId = `prompt-preview-${type}`;
+        const imgId = `prompt-img-${type}`;
+        const contentId = `prompt-content-${type}`;
+        
+        const previewElement = document.getElementById(previewId);
+        const imgElement = document.getElementById(imgId);
+        const contentElement = document.getElementById(contentId);
+        
+        if (imgElement && previewElement && contentElement) {
+            imgElement.src = e.target.result;
+            previewElement.style.display = 'block';
+            contentElement.style.display = 'none';
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+// 프롬프트 이미지 제거
+function removePromptImage(type) {
+    const previewId = `prompt-preview-${type}`;
+    const contentId = `prompt-content-${type}`;
+    const inputId = `prompt-input-${type}`;
+    
+    document.getElementById(previewId).style.display = 'none';
+    document.getElementById(contentId).style.display = 'block';
+    document.getElementById(inputId).value = '';
+    promptImages[type] = null;
+}
+
+// 프롬프트 드래그 앤 드롭 설정
+function setupPromptDragAndDrop() {
+    ['person', 'dress'].forEach(type => {
+        const area = document.getElementById(`prompt-upload-${type}`);
+        if (!area) return;
+        
+        area.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            area.style.borderColor = '#007bff';
+        });
+        
+        area.addEventListener('dragleave', () => {
+            area.style.borderColor = '#ddd';
+        });
+        
+        area.addEventListener('drop', (e) => {
+            e.preventDefault();
+            area.style.borderColor = '#ddd';
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const input = document.getElementById(`prompt-input-${type}`);
+                if (input) {
+                    input.files = files;
+                    input.dispatchEvent(new Event('change'));
+                }
+            }
+        });
+    });
+}
+
+// 프롬프트 비교 실행
+async function runPromptComparison() {
+    // 이미지 검증
+    if (!promptImages.person || !promptImages.dress) {
+        alert('사람 이미지와 드레스 이미지를 모두 업로드해주세요.');
+        return;
+    }
+    
+    const loadingDiv = document.getElementById('prompt-loading');
+    const resultsDiv = document.getElementById('prompt-results');
+    const resultsGrid = document.getElementById('prompt-results-grid');
+    const compareBtn = document.getElementById('prompt-compare-btn');
+    
+    // UI 상태 변경
+    loadingDiv.style.display = 'block';
+    resultsDiv.style.display = 'none';
+    compareBtn.disabled = true;
+    compareBtn.textContent = '생성 중...';
+    
+    const startTime = performance.now();
+    
+    try {
+        // 세 모델의 프롬프트 생성 API를 병렬 호출
+        const formDataGemini = new FormData();
+        formDataGemini.append('person_image', promptImages.person);
+        formDataGemini.append('dress_image', promptImages.dress);
+        
+        const formDataGPT4o = new FormData();
+        formDataGPT4o.append('person_image', promptImages.person);
+        formDataGPT4o.append('dress_image', promptImages.dress);
+        
+        const formDataXAI = new FormData();
+        formDataXAI.append('person_image', promptImages.person);
+        formDataXAI.append('dress_image', promptImages.dress);
+        
+        const [geminiResponse, gpt4oResponse, xaiResponse] = await Promise.allSettled([
+            fetch('/api/gemini/generate-prompt', {
+                method: 'POST',
+                body: formDataGemini
+            }),
+            fetch('/api/gpt4o-gemini/generate-prompt', {
+                method: 'POST',
+                body: formDataGPT4o
+            }),
+            fetch('/api/xai/generate-prompt', {
+                method: 'POST',
+                body: formDataXAI
+            })
+        ]);
+        
+        const endTime = performance.now();
+        const processingTime = ((endTime - startTime) / 1000).toFixed(2);
+        
+        // 결과 처리
+        const results = [];
+        
+        // Gemini 결과
+        if (geminiResponse.status === 'fulfilled' && geminiResponse.value.ok) {
+            const data = await geminiResponse.value.json();
+            results.push({
+                model: 'Gemini',
+                prompt: data.prompt || '프롬프트 생성 실패',
+                success: data.success || false,
+                error: data.error || null,
+                llm: data.llm || 'gemini'
+            });
+        } else {
+            results.push({
+                model: 'Gemini',
+                prompt: '프롬프트 생성 실패',
+                success: false,
+                error: geminiResponse.reason?.message || '알 수 없는 오류',
+                llm: 'gemini'
+            });
+        }
+        
+        // GPT-4o 결과
+        if (gpt4oResponse.status === 'fulfilled' && gpt4oResponse.value.ok) {
+            const data = await gpt4oResponse.value.json();
+            results.push({
+                model: 'GPT-4o',
+                prompt: data.prompt || '프롬프트 생성 실패',
+                success: data.success || false,
+                error: data.error || null,
+                llm: data.llm || 'gpt-4o'
+            });
+        } else {
+            results.push({
+                model: 'GPT-4o',
+                prompt: '프롬프트 생성 실패',
+                success: false,
+                error: gpt4oResponse.reason?.message || '알 수 없는 오류',
+                llm: 'gpt-4o'
+            });
+        }
+        
+        // x.ai 결과
+        if (xaiResponse.status === 'fulfilled' && xaiResponse.value.ok) {
+            const data = await xaiResponse.value.json();
+            results.push({
+                model: 'x.ai',
+                prompt: data.prompt || '프롬프트 생성 실패',
+                success: data.success || false,
+                error: data.error || null,
+                llm: data.llm || 'xai'
+            });
+        } else {
+            results.push({
+                model: 'x.ai',
+                prompt: '프롬프트 생성 실패',
+                success: false,
+                error: xaiResponse.reason?.message || '알 수 없는 오류',
+                llm: 'xai'
+            });
+        }
+        
+        // 결과 표시 (프롬프트만 먼저 표시)
+        displayPromptResults(results, processingTime);
+        
+        // 각 프롬프트로 Gemini 이미지 합성 실행
+        await generateImagesWithPrompts(results);
+        
+    } catch (error) {
+        console.error('프롬프트 비교 오류:', error);
+        alert(`프롬프트 비교 중 오류 발생: ${error.message}`);
+    } finally {
+        loadingDiv.style.display = 'none';
+        compareBtn.disabled = false;
+        compareBtn.textContent = '🚀 프롬프트 비교 실행';
+    }
+}
+
+// 프롬프트 결과 표시
+function displayPromptResults(results, processingTime) {
+    const resultsDiv = document.getElementById('prompt-results');
+    const resultsGrid = document.getElementById('prompt-results-grid');
+    
+    const resultsHtml = results.map((result, index) => {
+        const statusClass = result.success ? 'success' : 'error';
+        const statusText = result.success ? '✅ 성공' : '❌ 실패';
+        
+        return `
+            <div class="prompt-result-card" id="prompt-card-${index}" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">${result.model}</h3>
+                    <span style="padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; background: ${result.success ? '#d4edda' : '#f8d7da'}; color: ${result.success ? '#155724' : '#721c24'};">
+                        ${statusText}
+                    </span>
+                </div>
+                <div style="margin-bottom: 10px; font-size: 12px; color: #666;">
+                    모델: ${result.llm}
+                </div>
+                ${result.error ? `
+                    <div style="padding: 10px; background: #f8d7da; border-radius: 4px; margin-bottom: 15px; color: #721c24; font-size: 14px;">
+                        오류: ${result.error}
+                    </div>
+                ` : ''}
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; max-height: 400px; overflow-y: auto; margin-bottom: 15px;">
+                    <div style="font-size: 12px; color: #666; margin-bottom: 8px;">생성된 프롬프트:</div>
+                    <div style="white-space: pre-wrap; word-wrap: break-word; font-size: 14px; line-height: 1.6; color: #333;">
+                        ${result.prompt}
+                    </div>
+                </div>
+                <div style="margin-bottom: 15px; font-size: 12px; color: #666;">
+                    길이: ${result.prompt.length}자
+                </div>
+                <div id="image-result-${index}" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6;">
+                    <div style="font-size: 12px; color: #666; margin-bottom: 10px; font-weight: bold;">Gemini 이미지 합성 결과:</div>
+                    <div id="image-loading-${index}" style="text-align: center; padding: 20px;">
+                        <div style="display: inline-block; width: 30px; height: 30px; border: 3px solid #f3f3f3; border-top: 3px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                        <p style="margin-top: 10px; font-size: 12px; color: #666;">이미지 생성 중...</p>
+                    </div>
+                    <div id="image-content-${index}" style="display: none;">
+                        <!-- 이미지 결과가 여기에 표시됨 -->
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    resultsGrid.innerHTML = resultsHtml + `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 15px; background: #e9ecef; border-radius: 4px; margin-top: 10px;">
+            <span style="color: #666;">프롬프트 생성 시간: ${processingTime}초</span>
+        </div>
+    `;
+    
+    resultsDiv.style.display = 'block';
+}
+
+// 각 프롬프트로 Gemini 이미지 합성 실행
+async function generateImagesWithPrompts(results) {
+    const imagePromises = results.map(async (result, index) => {
+        // 프롬프트 생성 실패한 경우 이미지 합성 건너뛰기
+        if (!result.success || !result.prompt) {
+            const loadingDiv = document.getElementById(`image-loading-${index}`);
+            const contentDiv = document.getElementById(`image-content-${index}`);
+            if (loadingDiv) loadingDiv.style.display = 'none';
+            if (contentDiv) {
+                contentDiv.innerHTML = '<div style="padding: 10px; background: #f8d7da; border-radius: 4px; color: #721c24; font-size: 14px;">프롬프트 생성 실패로 이미지 합성을 건너뜁니다.</div>';
+                contentDiv.style.display = 'block';
+            }
+            return;
+        }
+        
+        try {
+            const formData = new FormData();
+            formData.append('person_image', promptImages.person);
+            formData.append('dress_image', promptImages.dress);
+            formData.append('prompt', result.prompt);
+            formData.append('model_name', `prompt-comparison-${result.llm}`);
+            
+            const startTime = performance.now();
+            const response = await fetch('/api/compose-dress', {
+                method: 'POST',
+                body: formData
+            });
+            const endTime = performance.now();
+            const imageTime = ((endTime - startTime) / 1000).toFixed(2);
+            
+            const loadingDiv = document.getElementById(`image-loading-${index}`);
+            const contentDiv = document.getElementById(`image-content-${index}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.success && data.result_image) {
+                    if (loadingDiv) loadingDiv.style.display = 'none';
+                    if (contentDiv) {
+                        contentDiv.innerHTML = `
+                            <div style="text-align: center;">
+                                <img src="${data.result_image}" alt="Generated Image" style="max-width: 100%; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                                    생성 시간: ${imageTime}초
+                                </div>
+                            </div>
+                        `;
+                        contentDiv.style.display = 'block';
+                    }
+                } else {
+                    if (loadingDiv) loadingDiv.style.display = 'none';
+                    if (contentDiv) {
+                        contentDiv.innerHTML = `<div style="padding: 10px; background: #f8d7da; border-radius: 4px; color: #721c24; font-size: 14px;">이미지 생성 실패: ${data.message || data.error || '알 수 없는 오류'}</div>`;
+                        contentDiv.style.display = 'block';
+                    }
+                }
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                if (loadingDiv) loadingDiv.style.display = 'none';
+                if (contentDiv) {
+                    contentDiv.innerHTML = `<div style="padding: 10px; background: #f8d7da; border-radius: 4px; color: #721c24; font-size: 14px;">이미지 생성 실패: ${errorData.message || errorData.error || `HTTP ${response.status}`}</div>`;
+                    contentDiv.style.display = 'block';
+                }
+            }
+        } catch (error) {
+            console.error(`${result.model} 이미지 생성 오류:`, error);
+            const loadingDiv = document.getElementById(`image-loading-${index}`);
+            const contentDiv = document.getElementById(`image-content-${index}`);
+            if (loadingDiv) loadingDiv.style.display = 'none';
+            if (contentDiv) {
+                contentDiv.innerHTML = `<div style="padding: 10px; background: #f8d7da; border-radius: 4px; color: #721c24; font-size: 14px;">이미지 생성 중 오류 발생: ${error.message}</div>`;
+                contentDiv.style.display = 'block';
+            }
+        }
+    });
+    
+    // 모든 이미지 생성이 완료될 때까지 대기
+    await Promise.allSettled(imagePromises);
 }
