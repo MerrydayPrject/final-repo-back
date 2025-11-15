@@ -544,20 +544,43 @@ function displayModelResult(modelId, model, data, processingTime) {
     let imagesHtml = '';
     
     if (model.input_type === 'dual_image') {
-        imagesHtml = `
-            <div class="model-result-image-item">
-                <div class="model-result-image-label">사람 이미지</div>
-                <img src="${data.person_image || ''}" alt="Person">
-            </div>
-            <div class="model-result-image-item">
-                <div class="model-result-image-label">드레스 이미지</div>
-                <img src="${data.dress_image || ''}" alt="Dress">
-            </div>
-            <div class="model-result-image-item highlight">
-                <div class="model-result-image-label">합성 결과 ✨</div>
-                <img src="${data.result_image || ''}" alt="Result" id="result-img-${modelId}">
-            </div>
-        `;
+        // 통합 트라이온 엔드포인트는 person_image, dress_image를 반환하지 않을 수 있음
+        if (data.person_image && data.dress_image) {
+            imagesHtml = `
+                <div class="model-result-image-item">
+                    <div class="model-result-image-label">사람 이미지</div>
+                    <img src="${data.person_image}" alt="Person">
+                </div>
+                <div class="model-result-image-item">
+                    <div class="model-result-image-label">드레스 이미지</div>
+                    <img src="${data.dress_image}" alt="Dress">
+                </div>
+                <div class="model-result-image-item highlight">
+                    <div class="model-result-image-label">합성 결과 ✨</div>
+                    <img src="${data.result_image || ''}" alt="Result" id="result-img-${modelId}">
+                </div>
+            `;
+        } else {
+            // 통합 트라이온 엔드포인트의 경우: 프롬프트와 결과만 표시
+            imagesHtml = `
+                <div class="model-result-image-item highlight" style="grid-column: 1 / -1;">
+                    <div class="model-result-image-label">합성 결과 ✨</div>
+                    <img src="${data.result_image || ''}" alt="Result" id="result-img-${modelId}">
+                </div>
+            `;
+            // 프롬프트가 있으면 표시
+            if (data.prompt) {
+                imagesHtml = `
+                    <div style="grid-column: 1 / -1; margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+                        <h4 style="margin: 0 0 10px 0; color: #555;">생성된 프롬프트:</h4>
+                        <div style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; max-height: 200px; overflow-y: auto;">
+                            ${data.prompt}
+                        </div>
+                    </div>
+                    ${imagesHtml}
+                `;
+            }
+        }
     } else {
         imagesHtml = `
             <div class="model-result-image-item">
