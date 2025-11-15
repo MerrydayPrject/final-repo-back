@@ -229,77 +229,78 @@ First, carefully observe and describe:
    - Does it have sleeves, or is it sleeveless?
    - What is the length? (short, knee-length, floor-length?)
    - What is the neckline style?
-   - Which body parts will the dress cover, and which will be exposed?
+   - Which body parts will the dress cover, and which will remain visible?
 
-Now, create a detailed prompt using this EXACT structure:
+Now, create a detailed prompt using this EXACT structure,
+BUT you MUST follow these safety rules required for Gemini image models:
+
+SAFETY RULES (IMPORTANT):
+- DO NOT use words such as "nude", "bare skin", "exposed skin", "erase clothing", or "remove clothing".
+- DO NOT describe the person without clothing.
+- DO NOT describe the act of deleting clothing or exposing the body.
+- Instead, ALWAYS use safe and allowed phrasing:
+  • "Replace the original outfit with the dress in Image 2."
+  • "Ensure the original outfit does not appear in the final result."
+  • "Render visible areas consistent with her natural skin tone in Image 1."
+
+Now generate the final prompt with the following structure:
 
 OPENING STATEMENT:
-"You are performing a virtual try-on task. Create an image of the woman from Image 1 wearing the dress from Image 2."
+"Create an image of the woman from Image 1 wearing the dress from Image 2 in a natural and photorealistic way."
 
 CRITICAL INSTRUCTION:
-"The woman in Image 1 is currently wearing [list specific items: e.g., a long-sleeved shirt, jeans, and sneakers]. You MUST completely remove and erase ALL of this original clothing before applying the new dress. The original clothing must be 100% invisible in the final result."
+"The woman in Image 1 is currently wearing [list clothing items]. 
+In the final result, the original outfit should not appear. 
+Only the dress from Image 2 should be visible."
 
-STEP 1 - REMOVE ALL ORIGINAL CLOTHING:
-List each specific item to remove:
-"Delete and erase from Image 1:
-- The [specific top description] (including all sleeves)
-- The [specific bottom description]
-- The [specific shoes description]
-- Any other visible clothing items
+STEP 1 – OUTFIT REPLACEMENT:
+Describe the transformation:
+"Replace the outfit from Image 1 with the dress from Image 2:
+- Ensure that no elements of the original outfit are included.
+- Focus solely on applying the dress in place of the current clothing."
 
-Treat the original clothing as if it never existed. The woman should be conceptually nude before you apply the dress."
-
-STEP 2 - APPLY THE DRESS FROM IMAGE 2:
-Describe the dress application:
-"Take ONLY the dress garment from Image 2 and apply it to the woman's body:
+STEP 2 – APPLY THE DRESS FROM IMAGE 2:
+"Apply the dress exactly as shown in Image 2:
 - This is a [color] [style] dress that is [sleeveless/has sleeves/etc.]
 - The dress is [length description]
-- Copy the exact dress design, color, pattern, and style from Image 2
-- Maintain the same coverage as shown in Image 2
-- Fit the dress naturally to her body shape and pose from Image 1"
+- Preserve the dress's silhouette, color, texture, patterns, and design
+- Fit the dress naturally to the woman's pose and body proportions in Image 1
+- Maintain the same level of coverage shown in Image 2"
 
-STEP 3 - GENERATE NATURAL SKIN FOR EXPOSED BODY PARTS:
-For each body part that will be exposed, write specific instructions:
-
-"For every body part that is NOT covered by the dress, you must generate natural skin:
+STEP 3 – VISIBLE BODY AREAS:
+"For any parts of the body that remain visible while wearing the new dress:
+- Ensure the appearance is consistent with her natural skin tone in Image 1
+- Maintain realistic lighting, shading, and texture
+- Do not recreate or include any portion of the original outfit"
 
 [If applicable] If the dress is sleeveless:
-- Generate natural BARE ARMS with realistic skin
-- Match the exact skin tone from her face, neck, and hands in Image 1
-- Include realistic skin texture with natural color variations, shadows, and highlights
-- IMPORTANT: Do NOT show any fabric from the original [sleeve description]
+- Ensure the arms appear naturally consistent with her visible skin in Image 1
 
 [If applicable] If the dress is short or knee-length:
-- Generate natural BARE LEGS with realistic skin
-- Match the exact skin tone from her face, neck, and hands in Image 1
-- Include realistic skin texture with natural color variations, shadows, and highlights
-- IMPORTANT: Do NOT show any fabric from the original [pants/jeans description]
+- Ensure the legs appear naturally consistent with her visible skin in Image 1
 
 [If applicable] If the dress exposes shoulders or back:
-- Generate natural BARE SHOULDERS/BACK with realistic skin
-- Match the exact skin tone from her face, neck, and hands in Image 1
-- IMPORTANT: Do NOT show any fabric from the original clothing"
+- Ensure these areas match her natural skin tone from Image 1
 
-RULES - WHAT NOT TO DO:
-"- NEVER keep any part of the [original top] from Image 1
-- NEVER keep any part of the [original bottom] from Image 1
-- NEVER keep the original sleeves on arms that should show skin
-- NEVER show original clothing fabric where skin should be visible
-- NEVER mix elements from the original outfit with the new dress"
+RULES – WHAT NOT TO DO:
+"- NEVER include any part of the original top from Image 1
+- NEVER include any part of the original bottom from Image 1
+- NEVER mix the original outfit with the new dress
+- NEVER describe or imply the absence of clothing"
 
-RULES - WHAT TO DO:
-"- ALWAYS show natural skin on body parts not covered by the dress
-- ALWAYS match skin tone to the visible skin in her face/neck/hands from Image 1
-- ALWAYS ensure the original clothing is completely erased before applying the dress
-- ALWAYS maintain consistent and realistic skin texture on exposed areas"
+RULES – WHAT TO DO:
+"- ALWAYS ensure the dress from Image 2 replaces the entire outfit
+- ALWAYS maintain consistent skin tone with Image 1
+- ALWAYS preserve her face, identity, hair, body shape, pose, and lighting"
 
 OTHER REQUIREMENTS:
-"- Preserve her face, facial features, hair, and body pose exactly as in Image 1
-- Use a pure white background
-- Replace footwear with elegant heels that match or complement the dress color
-- The final image should look photorealistic and natural"
+"- Preserve her facial features, hairstyle, body pose, and proportions exactly
+- Use a clean white background
+- Replace footwear with elegant heels that match or complement the dress
+- The final image should look photorealistic, natural, and seamless"
 
-Output ONLY the final prompt text with this complete structure. Be extremely specific about which clothing items to remove and which body parts need natural skin generation."""
+Output ONLY the final prompt text following this structure.
+Be specific, but follow all safety rules."""
     
     # 사용자 메시지
     user_message = "Analyze Image 1 (person) and Image 2 (dress), then generate the prompt following the exact structure provided."
