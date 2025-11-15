@@ -6,6 +6,7 @@ from openai import OpenAI
 import traceback
 
 from config.settings import GPT4O_MODEL_NAME, GPT4O_V2_MODEL_NAME, GEMINI_PROMPT_MODEL
+from config.prompts import COMMON_PROMPT_REQUIREMENT
 
 
 def _build_gpt4o_prompt_inputs(person_data_url: str, dress_data_url: str) -> List[Dict[str, Any]]:
@@ -17,15 +18,83 @@ def _build_gpt4o_prompt_inputs(person_data_url: str, dress_data_url: str) -> Lis
                 {
                     "type": "input_text",
                     "text": (
-                        "You are a professional visual prompt engineer specialized in AI outfit try-on. "
-                        "Your job is to analyze two reference images: (1) a person photo, and (2) a clothing photo. "
-                        "Then, write a detailed English prompt for a generative image model (e.g., Gemini 2.5 Flash) "
-                        "that will replace only the person's outfit with the clothing from the second image. "
-                        "Rules: Keep the same person's face, body shape, pose, hairstyle, and background exactly. "
-                        "Do NOT change facial expression, body proportions, or lighting. "
-                        "Describe the new outfit (color, texture, fabric, style) based on the clothing image. "
-                        "Make it photorealistic and naturally blended, as if the person was originally photographed wearing it. "
-                        "Return ONLY the final prompt text, no explanations."
+                        "You are creating a detailed instruction prompt for a virtual try-on task.\n\n"
+                        "COMMON REQUIREMENT (MUST FOLLOW):\n"
+                        + COMMON_PROMPT_REQUIREMENT +
+                        "\n\n"
+                        "Analyze these two images:\n"
+                        "Image 1 (Person): A woman in her current outfit\n"
+                        "Image 2 (Dress): A formal dress/gown that will replace her current outfit\n\n"
+                        "First, carefully observe and describe:\n"
+                        "1. Image 1 - List ALL clothing items she is wearing:\n"
+                        "   - What type of top/shirt? (long sleeves, short sleeves, or sleeveless?)\n"
+                        "   - What type of bottom? (pants, jeans, skirt, shorts?)\n"
+                        "   - What shoes is she wearing?\n"
+                        "   - Which body parts are currently covered by clothing?\n\n"
+                        "2. Image 2 - Describe the dress in detail:\n"
+                        "   - What color and style is the dress?\n"
+                        "   - Does it have sleeves, or is it sleeveless?\n"
+                        "   - What is the length? (short, knee-length, floor-length?)\n"
+                        "   - What is the neckline style?\n"
+                        "   - Which body parts will the dress cover, and which will be exposed?\n\n"
+                        "Now, create a detailed prompt using this EXACT structure:\n\n"
+                        "OPENING STATEMENT:\n"
+                        "\"You are performing a virtual try-on task. Create an image of the woman from Image 1 wearing the dress from Image 2.\"\n\n"
+                        "CRITICAL INSTRUCTION:\n"
+                        "\"The woman in Image 1 is currently wearing [list specific items: e.g., a long-sleeved shirt, jeans, and sneakers]. "
+                        "You MUST completely remove and erase ALL of this original clothing before applying the new dress. "
+                        "The original clothing must be 100% invisible in the final result.\"\n\n"
+                        "STEP 1 - REMOVE ALL ORIGINAL CLOTHING:\n"
+                        "List each specific item to remove:\n"
+                        "\"Delete and erase from Image 1:\n"
+                        "- The [specific top description] (including all sleeves)\n"
+                        "- The [specific bottom description]\n"
+                        "- The [specific shoes description]\n"
+                        "- Any other visible clothing items\n\n"
+                        "Treat the original clothing as if it never existed. The woman should be conceptually nude before you apply the dress.\"\n\n"
+                        "STEP 2 - APPLY THE DRESS FROM IMAGE 2:\n"
+                        "Describe the dress application:\n"
+                        "\"Take ONLY the dress garment from Image 2 and apply it to the woman's body:\n"
+                        "- This is a [color] [style] dress that is [sleeveless/has sleeves/etc.]\n"
+                        "- The dress is [length description]\n"
+                        "- Copy the exact dress design, color, pattern, and style from Image 2\n"
+                        "- Maintain the same coverage as shown in Image 2\n"
+                        "- Fit the dress naturally to her body shape and pose from Image 1\"\n\n"
+                        "STEP 3 - GENERATE NATURAL SKIN FOR EXPOSED BODY PARTS:\n"
+                        "For each body part that will be exposed, write specific instructions:\n\n"
+                        "\"For every body part that is NOT covered by the dress, you must generate natural skin:\n\n"
+                        "[If applicable] If the dress is sleeveless:\n"
+                        "- Generate natural BARE ARMS with realistic skin\n"
+                        "- Match the exact skin tone from her face, neck, and hands in Image 1\n"
+                        "- Include realistic skin texture with natural color variations, shadows, and highlights\n"
+                        "- IMPORTANT: Do NOT show any fabric from the original [sleeve description]\n\n"
+                        "[If applicable] If the dress is short or knee-length:\n"
+                        "- Generate natural BARE LEGS with realistic skin\n"
+                        "- Match the exact skin tone from her face, neck, and hands in Image 1\n"
+                        "- Include realistic skin texture with natural color variations, shadows, and highlights\n"
+                        "- IMPORTANT: Do NOT show any fabric from the original [pants/jeans description]\n\n"
+                        "[If applicable] If the dress exposes shoulders or back:\n"
+                        "- Generate natural BARE SHOULDERS/BACK with realistic skin\n"
+                        "- Match the exact skin tone from her face, neck, and hands in Image 1\n"
+                        "- IMPORTANT: Do NOT show any fabric from the original clothing\"\n\n"
+                        "RULES - WHAT NOT TO DO:\n"
+                        "\"- NEVER keep any part of the [original top] from Image 1\n"
+                        "- NEVER keep any part of the [original bottom] from Image 1\n"
+                        "- NEVER keep the original sleeves on arms that should show skin\n"
+                        "- NEVER show original clothing fabric where skin should be visible\n"
+                        "- NEVER mix elements from the original outfit with the new dress\"\n\n"
+                        "RULES - WHAT TO DO:\n"
+                        "\"- ALWAYS show natural skin on body parts not covered by the dress\n"
+                        "- ALWAYS match skin tone to the visible skin in her face/neck/hands from Image 1\n"
+                        "- ALWAYS ensure the original clothing is completely erased before applying the dress\n"
+                        "- ALWAYS maintain consistent and realistic skin texture on exposed areas\"\n\n"
+                        "OTHER REQUIREMENTS:\n"
+                        "\"- Preserve her face, facial features, hair, and body pose exactly as in Image 1\n"
+                        "- Use a pure white background\n"
+                        "- Replace footwear with elegant heels that match or complement the dress color\n"
+                        "- The final image should look photorealistic and natural\"\n\n"
+                        "Output ONLY the final prompt text with this complete structure. "
+                        "Be extremely specific about which clothing items to remove and which body parts need natural skin generation."
                     ),
                 },
             ],
@@ -35,7 +104,7 @@ def _build_gpt4o_prompt_inputs(person_data_url: str, dress_data_url: str) -> Lis
             "content": [
                 {
                     "type": "input_text",
-                    "text": "Analyze the outfit replacement request.",
+                    "text": "Analyze Image 1 (person) and Image 2 (dress), then generate the prompt following the exact structure provided.",
                 },
                 {"type": "input_image", "image_url": person_data_url},
                 {"type": "input_image", "image_url": dress_data_url},
@@ -73,7 +142,10 @@ async def generate_custom_prompt_from_images(person_img: Image.Image, dress_img:
         print("이미지 분석 시작...")
         client = genai.Client(api_key=api_key)
         
-        analysis_prompt = """You are creating a detailed instruction prompt for a virtual try-on task.
+        analysis_prompt = f"""You are creating a detailed instruction prompt for a virtual try-on task.
+
+COMMON REQUIREMENT (MUST FOLLOW):
+{COMMON_PROMPT_REQUIREMENT}
 
 Analyze these two images:
 Image 1 (Person): A woman in her current outfit

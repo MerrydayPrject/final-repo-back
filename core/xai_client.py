@@ -8,6 +8,7 @@ from io import BytesIO
 from PIL import Image
 
 from config.settings import XAI_API_KEY, XAI_API_BASE_URL, XAI_IMAGE_MODEL, XAI_PROMPT_MODEL
+from config.prompts import COMMON_PROMPT_REQUIREMENT
 
 
 def generate_image_from_text(
@@ -207,38 +208,101 @@ def generate_prompt_from_images(
     dress_data_url = f"data:image/png;base64,{dress_b64}"
     
     # 시스템 프롬프트
-    system_prompt = """You are a professional prompt engineer for image generation. 
-Analyze Image 1 (person) and Image 2 (dress), then generate a detailed prompt following this exact template:
+    system_prompt = f"""You are creating a detailed instruction prompt for a virtual try-on task.
 
-Generate a photorealistic image by keeping the person in Image 1 exactly the same:
-- same face and facial expression
-- same body shape and proportions
-- same pose and gesture
-- same lighting and background
+COMMON REQUIREMENT (MUST FOLLOW):
+{COMMON_PROMPT_REQUIREMENT}
 
-Replace only the outfit with the dress from Image 2.
+Analyze these two images:
+Image 1 (Person): A woman in her current outfit
+Image 2 (Dress): A formal dress/gown that will replace her current outfit
 
-Dress requirements:
-- replicate the exact design from Image 2
-- match silhouette: [analyze and describe the silhouette from Image 2]
-- fabric and texture: [analyze and describe the fabric and texture from Image 2]
-- color tone: [analyze and describe the color tone from Image 2]
-- neckline and structure: [analyze and describe the neckline and structure from Image 2]
-- details and decorations: [analyze and describe any details and decorations from Image 2]
-- preserve fabric physics such as folds, volume, and highlights
+First, carefully observe and describe:
+1. Image 1 - List ALL clothing items she is wearing:
+   - What type of top/shirt? (long sleeves, short sleeves, or sleeveless?)
+   - What type of bottom? (pants, jeans, skirt, shorts?)
+   - What shoes is she wearing?
+   - Which body parts are currently covered by clothing?
 
-Ensure the dress naturally fits the body from Image 1 without changing the pose.
+2. Image 2 - Describe the dress in detail:
+   - What color and style is the dress?
+   - Does it have sleeves, or is it sleeveless?
+   - What is the length? (short, knee-length, floor-length?)
+   - What is the neckline style?
+   - Which body parts will the dress cover, and which will be exposed?
 
-Add shoes that harmonize with the dress design:
-- color and material that complement the dress
-- elegant style suitable for the outfit
+Now, create a detailed prompt using this EXACT structure:
 
-Keep the final output realistic, clean, and seamless.
+OPENING STATEMENT:
+"You are performing a virtual try-on task. Create an image of the woman from Image 1 wearing the dress from Image 2."
 
-Output ONLY the final prompt text. Fill in all the bracketed placeholders with specific details from Image 2. No explanations, no commentary."""
+CRITICAL INSTRUCTION:
+"The woman in Image 1 is currently wearing [list specific items: e.g., a long-sleeved shirt, jeans, and sneakers]. You MUST completely remove and erase ALL of this original clothing before applying the new dress. The original clothing must be 100% invisible in the final result."
+
+STEP 1 - REMOVE ALL ORIGINAL CLOTHING:
+List each specific item to remove:
+"Delete and erase from Image 1:
+- The [specific top description] (including all sleeves)
+- The [specific bottom description]
+- The [specific shoes description]
+- Any other visible clothing items
+
+Treat the original clothing as if it never existed. The woman should be conceptually nude before you apply the dress."
+
+STEP 2 - APPLY THE DRESS FROM IMAGE 2:
+Describe the dress application:
+"Take ONLY the dress garment from Image 2 and apply it to the woman's body:
+- This is a [color] [style] dress that is [sleeveless/has sleeves/etc.]
+- The dress is [length description]
+- Copy the exact dress design, color, pattern, and style from Image 2
+- Maintain the same coverage as shown in Image 2
+- Fit the dress naturally to her body shape and pose from Image 1"
+
+STEP 3 - GENERATE NATURAL SKIN FOR EXPOSED BODY PARTS:
+For each body part that will be exposed, write specific instructions:
+
+"For every body part that is NOT covered by the dress, you must generate natural skin:
+
+[If applicable] If the dress is sleeveless:
+- Generate natural BARE ARMS with realistic skin
+- Match the exact skin tone from her face, neck, and hands in Image 1
+- Include realistic skin texture with natural color variations, shadows, and highlights
+- IMPORTANT: Do NOT show any fabric from the original [sleeve description]
+
+[If applicable] If the dress is short or knee-length:
+- Generate natural BARE LEGS with realistic skin
+- Match the exact skin tone from her face, neck, and hands in Image 1
+- Include realistic skin texture with natural color variations, shadows, and highlights
+- IMPORTANT: Do NOT show any fabric from the original [pants/jeans description]
+
+[If applicable] If the dress exposes shoulders or back:
+- Generate natural BARE SHOULDERS/BACK with realistic skin
+- Match the exact skin tone from her face, neck, and hands in Image 1
+- IMPORTANT: Do NOT show any fabric from the original clothing"
+
+RULES - WHAT NOT TO DO:
+"- NEVER keep any part of the [original top] from Image 1
+- NEVER keep any part of the [original bottom] from Image 1
+- NEVER keep the original sleeves on arms that should show skin
+- NEVER show original clothing fabric where skin should be visible
+- NEVER mix elements from the original outfit with the new dress"
+
+RULES - WHAT TO DO:
+"- ALWAYS show natural skin on body parts not covered by the dress
+- ALWAYS match skin tone to the visible skin in her face/neck/hands from Image 1
+- ALWAYS ensure the original clothing is completely erased before applying the dress
+- ALWAYS maintain consistent and realistic skin texture on exposed areas"
+
+OTHER REQUIREMENTS:
+"- Preserve her face, facial features, hair, and body pose exactly as in Image 1
+- Use a pure white background
+- Replace footwear with elegant heels that match or complement the dress color
+- The final image should look photorealistic and natural"
+
+Output ONLY the final prompt text with this complete structure. Be extremely specific about which clothing items to remove and which body parts need natural skin generation."""
     
     # 사용자 메시지
-    user_message = "Analyze Image 1 (person) and Image 2 (dress), then generate the prompt following the template."
+    user_message = "Analyze Image 1 (person) and Image 2 (dress), then generate the prompt following the exact structure provided."
     
     # API 요청 데이터 (OpenAI 스타일의 chat completions 형식)
     payload = {
@@ -274,8 +338,8 @@ Output ONLY the final prompt text. Fill in all the bracketed placeholders with s
                 ]
             }
         ],
-        "max_tokens": 1000,
-        "temperature": 0.7
+        "max_tokens": 2000,
+        "temperature": 0.3
     }
     
     try:
