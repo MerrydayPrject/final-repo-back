@@ -400,17 +400,70 @@ python test_body_analysis.py 8002
 - X.AI 프롬프트 생성과 Gemini 이미지 합성을 순차적으로 실행
 - 단일 API 호출로 프롬프트 생성부터 최종 합성 이미지까지 완료
 
-**통합 파이프라인** (`/api/tryon/unified`):
+**통합 파이프라인 V1** (`/api/tryon/unified`):
 1. 이미지 전처리 (person, dress, background)
 2. X.AI grok-2-vision-1212 모델로 프롬프트 생성
 3. 생성된 프롬프트와 이미지들(인물, 드레스, 배경)로 Gemini 2.5 Flash 이미지 합성
 4. 결과 이미지 base64 인코딩 및 S3 업로드
 5. 테스트 로그 저장
 
+**통합 파이프라인 V2** (`/api/compose_xai_gemini_v2`):
+V2는 SegFormer B2 Garment Parsing을 추가하여 더 정확한 의상 추출을 수행합니다.
+1. 의상 이미지 전처리
+2. **SegFormer B2 Human Parsing** → garment_only 이미지 추출
+   - **HuggingFace Inference API 사용** (`yolo12138/segformer-b2-human-parse-24` 모델)
+   - API 엔드포인트: `https://router.huggingface.co/hf-inference/models/yolo12138/segformer-b2-human-parse-24`
+   - Human Parsing을 통해 의상 영역 자동 추출
+   - garment_mask.png, garment_only.png 생성
+   - API 호출만으로 동작 (로컬 모델 다운로드 불필요)
+   - 인터넷 연결 필요
+3. X.AI grok-2-vision-1212 모델로 프롬프트 생성 (person_image, garment_only_image 사용)
+4. 생성된 프롬프트와 이미지들(인물, garment_only, 배경)로 Gemini 2.5 Flash 이미지 합성
+   - V2는 배경 이미지를 포함하여 합성 (person_image, garment_image, background_image 사용)
+5. 결과 이미지 base64 인코딩 및 S3 업로드
+6. 테스트 로그 저장
+
+**V1 vs V2 비교**:
+- **V1**: 배경 이미지 필요, 원본 드레스 이미지를 XAI에 전달
+- **V2**: 배경 이미지 필요, SegFormer B2 Parsing으로 추출한 garment_only 이미지를 XAI에 전달
+- **V2 장점**: SegFormer B2 Human Parsing을 통해 의상만 정확히 추출하여 더 나은 프롬프트 생성 및 합성 품질 기대
+
+**환경 변수 설정** (필수):
+V2 기능을 사용하려면 `.env` 파일에 다음 환경 변수를 추가해야 합니다:
+- `HUGGINGFACE_API_KEY`: HuggingFace Inference API 토큰 (필수)
+  - https://huggingface.co/settings/tokens 에서 API 키 발급
+  - "Make calls to Inference Providers" 권한 필요
+
+**선택적 환경 변수**:
+- `HUGGINGFACE_API_BASE_URL`: API 베이스 URL (기본값: "https://router.huggingface.co/hf-inference/models")
+- `SEGFORMER_API_TIMEOUT`: API 요청 타임아웃 (초, 기본값: 60)
+
+**API 사용 예시**:
+```bash
+curl -X POST "http://localhost:8000/api/compose_xai_gemini_v2" \
+  -F "person_image=@person.jpg" \
+  -F "garment_image=@dress.jpg" \
+  -F "background_image=@background.jpg"
+
+# 응답:
+# {
+#   "success": true,
+#   "prompt": "생성된 프롬프트...",
+#   "result_image": "data:image/png;base64,...",
+#   "message": "통합 트라이온 파이프라인 V2가 성공적으로 완료되었습니다.",
+#   "llm": "segformer-b2-parsing+grok-2-vision-1212+gemini-2.5-flash-image"
+# }
+```
+
 **입력**:
-- `person_image`: 사람 이미지 파일 (필수)
-- `dress_image`: 드레스 이미지 파일 (필수)
-- `background_image`: 배경 이미지 파일 (필수)
+- **V1** (`/api/tryon/unified`):
+  - `person_image`: 사람 이미지 파일 (필수)
+  - `dress_image`: 드레스 이미지 파일 (필수)
+  - `background_image`: 배경 이미지 파일 (필수)
+- **V2** (`/api/compose_xai_gemini_v2`):
+  - `person_image`: 사람 이미지 파일 (필수)
+  - `garment_image`: 의상 이미지 파일 (필수)
+  - `background_image`: 배경 이미지 파일 (필수)
 
 **배경 합성 기능**:
 - 배경 이미지를 인물 이미지 크기에 맞춰 자동 조정

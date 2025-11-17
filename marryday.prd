@@ -66,7 +66,12 @@
 - 사용자 맞춤 프롬프트 생성(`POST /api/gpt4o-gemini/generate-prompt`).
 - GPT-4o-V2 기반 x.ai 최적화 short prompt 생성(`POST /api/prompt/generate-short`, ≤1024자).
 - x.ai grok 모델 기반 이미지 분석 프롬프트 생성(`POST /api/xai/generate-prompt`).
-- 통합 트라이온 파이프라인(`POST /api/tryon/unified`): X.AI 프롬프트 생성과 Gemini 2.5 Flash 이미지 합성을 단일 API 호출로 통합.
+- 통합 트라이온 파이프라인 V1 (`POST /api/tryon/unified`): X.AI 프롬프트 생성과 Gemini 2.5 Flash 이미지 합성을 단일 API 호출로 통합 (배경 이미지 포함).
+- 통합 트라이온 파이프라인 V2 (`POST /api/compose_xai_gemini_v2`): SegFormer B2 Garment Parsing + X.AI 프롬프트 생성 + Gemini 2.5 Flash 이미지 합성 (배경 이미지 포함).
+  - SegFormer B2 Human Parsing을 사용하여 의상만 정확히 추출 (garment_only 이미지)
+  - HuggingFace Inference API를 통한 SegFormer B2 모델 호출 (로컬 모델 다운로드 불필요)
+  - 추출된 garment_only 이미지로 더 정확한 프롬프트 생성 및 합성 품질 향상
+  - 배경 이미지를 포함하여 자연스러운 합성 결과 생성
 - 드레스 카탈로그 검색/필터(라인, 소재, 가격대 등).
 - 추천 결과에 대한 피드백 수집 및 재학습 파이프라인.
 
@@ -91,6 +96,7 @@
   - Gemini 2.5 Flash & GPT-4o: 프롬프트 생성, 텍스트 추천.
   - GPT-4o-V2: x.ai 최적화 short prompt 생성 (≤1024자).
   - x.ai grok-2-vision-1212: 이미지 분석 기반 프롬프트 생성.
+  - SegFormer B2 Human Parsing (`yolo12138/segformer-b2-human-parse-24`): HuggingFace Inference API를 통한 의상 추출 (garment_only 이미지 생성).
   - RTMPose-s: 포즈 추정 및 체형 지표 산출.
   - Real-ESRGAN, GFPGAN, InstructPix2Pix: 이미지 품질 보정.
 - **스토리지**: AWS S3에 업로드 이미지, 합성 결과, 로그 저장.
