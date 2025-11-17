@@ -253,6 +253,12 @@ python test_body_analysis.py 8002
 | POST | `/api/prompt/generate-short` | GPT-4o-V2로 x.ai 최적화 short prompt 생성 (≤1024자) |
 | POST | `/api/xai/generate-prompt` | x.ai grok 모델로 이미지 기반 프롬프트 생성 |
 
+### 6.5.1 통합 트라이온 (tryon_router.py)
+
+| 메서드 | 엔드포인트 | 설명 |
+|--------|-----------|------|
+| POST | `/api/tryon/unified` | X.AI 프롬프트 생성 + Gemini 2.5 Flash 이미지 합성 통합 파이프라인 |
+
 ### 6.6 이미지 처리 (image_processing.py)
 
 | 메서드 | 엔드포인트 | 설명 |
@@ -384,6 +390,33 @@ python test_body_analysis.py 8002
 - GPT-4o-V2를 사용한 x.ai 최적화 short prompt 생성 (≤1024자)
 - x.ai grok 모델을 사용한 이미지 분석 기반 프롬프트 생성
 - 사람 이미지와 드레스 이미지를 분석하여 맞춤 프롬프트 생성
+
+### 7.5.1 tryon_router.py - 통합 트라이온 파이프라인
+
+**역할**: X.AI 프롬프트 생성과 Gemini 2.5 Flash 이미지 합성을 통합한 단일 파이프라인
+
+**주요 기능**:
+- 통합 트라이온 엔드포인트 (`/api/tryon/unified`)
+- X.AI 프롬프트 생성과 Gemini 이미지 합성을 순차적으로 실행
+- 단일 API 호출로 프롬프트 생성부터 최종 합성 이미지까지 완료
+
+**통합 파이프라인** (`/api/tryon/unified`):
+1. 이미지 전처리 (person, dress)
+2. X.AI grok-2-vision-1212 모델로 프롬프트 생성
+3. 생성된 프롬프트와 이미지로 Gemini 2.5 Flash 이미지 합성
+4. 결과 이미지 base64 인코딩 및 S3 업로드
+5. 테스트 로그 저장
+
+**입력**:
+- `person_image`: 사람 이미지 파일 (필수)
+- `dress_image`: 드레스 이미지 파일 (필수)
+
+**출력**:
+- `success`: 성공 여부
+- `prompt`: 생성된 프롬프트
+- `result_image`: 합성된 이미지 (base64 data URL)
+- `message`: 응답 메시지
+- `llm`: 사용된 LLM 정보 (예: "grok-2-vision-1212+gemini-2.5-flash-image")
 
 **Short Prompt 파이프라인** (`/api/prompt/generate-short`):
 - GPT-4o-V2 모델을 사용하여 x.ai 이미지 생성을 위한 최적화된 short prompt 생성

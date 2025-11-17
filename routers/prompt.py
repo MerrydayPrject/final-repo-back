@@ -230,7 +230,7 @@ async def generate_gpt4o_prompt(
             response = client.responses.create(
                 model=GPT4O_MODEL_NAME,
                 input=request_input,
-                max_output_tokens=600,
+                max_output_tokens=2000,
             )
         except Exception as exc:
             print(f"GPT-4o API 호출 실패: {exc}")

@@ -66,6 +66,7 @@
 - 사용자 맞춤 프롬프트 생성(`POST /api/gpt4o-gemini/generate-prompt`).
 - GPT-4o-V2 기반 x.ai 최적화 short prompt 생성(`POST /api/prompt/generate-short`, ≤1024자).
 - x.ai grok 모델 기반 이미지 분석 프롬프트 생성(`POST /api/xai/generate-prompt`).
+- 통합 트라이온 파이프라인(`POST /api/tryon/unified`): X.AI 프롬프트 생성과 Gemini 2.5 Flash 이미지 합성을 단일 API 호출로 통합.
 - 드레스 카탈로그 검색/필터(라인, 소재, 가격대 등).
 - 추천 결과에 대한 피드백 수집 및 재학습 파이프라인.
 

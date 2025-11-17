@@ -8,6 +8,7 @@ from io import BytesIO
 from PIL import Image
 
 from config.settings import XAI_API_KEY, XAI_API_BASE_URL, XAI_IMAGE_MODEL, XAI_PROMPT_MODEL
+from config.prompts import COMMON_PROMPT_REQUIREMENT
 
 
 def generate_image_from_text(
@@ -207,38 +208,102 @@ def generate_prompt_from_images(
     dress_data_url = f"data:image/png;base64,{dress_b64}"
     
     # 시스템 프롬프트
-    system_prompt = """You are a professional prompt engineer for image generation. 
-Analyze Image 1 (person) and Image 2 (dress), then generate a detailed prompt following this exact template:
+    system_prompt = f"""You are creating a detailed instruction prompt for a virtual try-on task.
 
-Generate a photorealistic image by keeping the person in Image 1 exactly the same:
-- same face and facial expression
-- same body shape and proportions
-- same pose and gesture
-- same lighting and background
+COMMON REQUIREMENT (MUST FOLLOW):
+{COMMON_PROMPT_REQUIREMENT}
 
-Replace only the outfit with the dress from Image 2.
+Analyze these two images:
+Image 1 (Person): A woman in her current outfit
+Image 2 (Dress): A formal dress/gown that will replace her current outfit
 
-Dress requirements:
-- replicate the exact design from Image 2
-- match silhouette: [analyze and describe the silhouette from Image 2]
-- fabric and texture: [analyze and describe the fabric and texture from Image 2]
-- color tone: [analyze and describe the color tone from Image 2]
-- neckline and structure: [analyze and describe the neckline and structure from Image 2]
-- details and decorations: [analyze and describe any details and decorations from Image 2]
-- preserve fabric physics such as folds, volume, and highlights
+First, carefully observe and describe:
+1. Image 1 - List ALL clothing items she is wearing:
+   - What type of top/shirt? (long sleeves, short sleeves, or sleeveless?)
+   - What type of bottom? (pants, jeans, skirt, shorts?)
+   - What shoes is she wearing?
+   - Which body parts are currently covered by clothing?
 
-Ensure the dress naturally fits the body from Image 1 without changing the pose.
+2. Image 2 - Describe the dress in detail:
+   - What color and style is the dress?
+   - Does it have sleeves, or is it sleeveless?
+   - What is the length? (short, knee-length, floor-length?)
+   - What is the neckline style?
+   - Which body parts will the dress cover, and which will remain visible?
 
-Add shoes that harmonize with the dress design:
-- color and material that complement the dress
-- elegant style suitable for the outfit
+Now, create a detailed prompt using this EXACT structure,
+BUT you MUST follow these safety rules required for Gemini image models:
 
-Keep the final output realistic, clean, and seamless.
+SAFETY RULES (IMPORTANT):
+- DO NOT use words such as "nude", "bare skin", "exposed skin", "erase clothing", or "remove clothing".
+- DO NOT describe the person without clothing.
+- DO NOT describe the act of deleting clothing or exposing the body.
+- Instead, ALWAYS use safe and allowed phrasing:
+  • "Replace the original outfit with the dress in Image 2."
+  • "Ensure the original outfit does not appear in the final result."
+  • "Render visible areas consistent with her natural skin tone in Image 1."
 
-Output ONLY the final prompt text. Fill in all the bracketed placeholders with specific details from Image 2. No explanations, no commentary."""
+Now generate the final prompt with the following structure:
+
+OPENING STATEMENT:
+"Create an image of the woman from Image 1 wearing the dress from Image 2 in a natural and photorealistic way."
+
+CRITICAL INSTRUCTION:
+"The woman in Image 1 is currently wearing [list clothing items]. 
+In the final result, the original outfit should not appear. 
+Only the dress from Image 2 should be visible."
+
+STEP 1 – OUTFIT REPLACEMENT:
+Describe the transformation:
+"Replace the outfit from Image 1 with the dress from Image 2:
+- Ensure that no elements of the original outfit are included.
+- Focus solely on applying the dress in place of the current clothing."
+
+STEP 2 – APPLY THE DRESS FROM IMAGE 2:
+"Apply the dress exactly as shown in Image 2:
+- This is a [color] [style] dress that is [sleeveless/has sleeves/etc.]
+- The dress is [length description]
+- Preserve the dress's silhouette, color, texture, patterns, and design
+- Fit the dress naturally to the woman's pose and body proportions in Image 1
+- Maintain the same level of coverage shown in Image 2"
+
+STEP 3 – VISIBLE BODY AREAS:
+"For any parts of the body that remain visible while wearing the new dress:
+- Ensure the appearance is consistent with her natural skin tone in Image 1
+- Maintain realistic lighting, shading, and texture
+- Do not recreate or include any portion of the original outfit"
+
+[If applicable] If the dress is sleeveless:
+- Ensure the arms appear naturally consistent with her visible skin in Image 1
+
+[If applicable] If the dress is short or knee-length:
+- Ensure the legs appear naturally consistent with her visible skin in Image 1
+
+[If applicable] If the dress exposes shoulders or back:
+- Ensure these areas match her natural skin tone from Image 1
+
+RULES – WHAT NOT TO DO:
+"- NEVER include any part of the original top from Image 1
+- NEVER include any part of the original bottom from Image 1
+- NEVER mix the original outfit with the new dress
+- NEVER describe or imply the absence of clothing"
+
+RULES – WHAT TO DO:
+"- ALWAYS ensure the dress from Image 2 replaces the entire outfit
+- ALWAYS maintain consistent skin tone with Image 1
+- ALWAYS preserve her face, identity, hair, body shape, pose, and lighting"
+
+OTHER REQUIREMENTS:
+"- Preserve her facial features, hairstyle, body pose, and proportions exactly
+- Use a clean white background
+- Replace footwear with elegant heels that match or complement the dress
+- The final image should look photorealistic, natural, and seamless"
+
+Output ONLY the final prompt text following this structure.
+Be specific, but follow all safety rules."""
     
     # 사용자 메시지
-    user_message = "Analyze Image 1 (person) and Image 2 (dress), then generate the prompt following the template."
+    user_message = "Analyze Image 1 (person) and Image 2 (dress), then generate the prompt following the exact structure provided."
     
     # API 요청 데이터 (OpenAI 스타일의 chat completions 형식)
     payload = {
@@ -274,8 +339,8 @@ Output ONLY the final prompt text. Fill in all the bracketed placeholders with s
                 ]
             }
         ],
-        "max_tokens": 1000,
-        "temperature": 0.7
+        "max_tokens": 2000,
+        "temperature": 0.3
     }
     
     try:

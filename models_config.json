@@ -59,6 +59,19 @@
           "required": false
         }
       }
+    },
+    {
+      "id": "xai-gemini-unified",
+      "name": "XAI + Gemini 2.5 Flash V1",
+      "description": "X.AI 프롬프트 생성과 Gemini 2.5 Flash 이미지 합성을 통합한 단일 파이프라인",
+      "endpoint": "/api/tryon/unified",
+      "method": "POST",
+      "input_type": "dual_image",
+      "inputs": [
+        {"name": "person_image", "label": "사람 이미지", "required": true},
+        {"name": "dress_image", "label": "드레스 이미지", "required": true}
+      ],
+      "category": "composition"
     }
   ]
 }

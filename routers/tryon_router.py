@@ -1,0 +1,74 @@
+"""통합 트라이온 라우터"""
+import io
+from fastapi import APIRouter, File, UploadFile
+from fastapi.responses import JSONResponse
+from PIL import Image
+
+from services.tryon_service import generate_unified_tryon
+from schemas.tryon_schema import UnifiedTryonResponse
+
+router = APIRouter()
+
+
+@router.post("/api/tryon/unified", tags=["통합 트라이온"], response_model=UnifiedTryonResponse)
+async def unified_tryon(
+    person_image: UploadFile = File(..., description="사람 이미지 파일"),
+    dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+):
+    """
+    통합 트라이온 파이프라인: X.AI 프롬프트 생성 + Gemini 2.5 Flash 이미지 합성
+    
+    이 엔드포인트는 다음 단계를 수행합니다:
+    1. X.AI를 사용하여 person_image와 dress_image로부터 프롬프트 생성
+    2. 생성된 프롬프트와 이미지들을 사용하여 Gemini 2.5 Flash로 최종 합성 이미지 생성
+    
+    Returns:
+        UnifiedTryonResponse: 생성된 프롬프트와 합성 이미지 (base64)
+    """
+    try:
+        # 이미지 읽기
+        person_bytes = await person_image.read()
+        dress_bytes = await dress_image.read()
+        
+        if not person_bytes or not dress_bytes:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "prompt": "",
+                    "result_image": "",
+                    "message": "사람 이미지와 드레스 이미지를 모두 업로드해주세요.",
+                    "llm": None
+                },
+                status_code=400,
+            )
+        
+        # PIL Image로 변환
+        person_img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
+        dress_img = Image.open(io.BytesIO(dress_bytes)).convert("RGB")
+        
+        # 통합 트라이온 서비스 호출
+        result = generate_unified_tryon(person_img, dress_img)
+        
+        if result["success"]:
+            return JSONResponse(result)
+        else:
+            status_code = 500 if "error" in result else 400
+            return JSONResponse(result, status_code=status_code)
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"통합 트라이온 엔드포인트 오류: {e}")
+        print(error_detail)
+        
+        return JSONResponse(
+            {
+                "success": False,
+                "prompt": "",
+                "result_image": "",
+                "message": f"통합 트라이온 처리 중 오류가 발생했습니다: {str(e)}",
+                "llm": None
+            },
+            status_code=500,
+        )
+

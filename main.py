@@ -49,7 +49,7 @@ templates = Jinja2Templates(directory="templates")
 from routers import (
     info, web, segmentation, composition, prompt, 
     body_analysis, admin, dress_management, image_processing,
-    proxy, models
+    proxy, models, tryon_router
 )
 # conversion_3d는 숫자로 시작하므로 importlib 사용
 import importlib
@@ -67,6 +67,7 @@ app.include_router(image_processing.router)
 app.include_router(conversion_3d_router.router)
 app.include_router(proxy.router)
 app.include_router(models.router)
+app.include_router(tryon_router.router)
 
 # Startup 이벤트
 @app.on_event("startup")

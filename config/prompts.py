@@ -1,5 +1,13 @@
 """프롬프트 템플릿"""
 
+# 공통 프롬프트 요구사항 (모든 모델에 공통 적용)
+COMMON_PROMPT_REQUIREMENT = (
+    "Keep the person's face exactly as it is in the portrait photo. "
+    "Make the dress image as similar as possible to the reference dress. "
+    "Generate shoes that match and complement the dress. "
+    "Match the dress length accurately."
+)
+
 # 기본 드레스 합성 프롬프트
 GEMINI_DEFAULT_COMPOSITION_PROMPT = """You are performing a virtual try-on task. Create an image of the woman from Image 1 wearing the dress from Image 2.
 
