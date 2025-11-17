@@ -18,14 +18,16 @@ from config.settings import GEMINI_FLASH_MODEL, XAI_PROMPT_MODEL
 def generate_unified_tryon(
     person_img: Image.Image,
     dress_img: Image.Image,
+    background_img: Image.Image,
     model_id: str = "xai-gemini-unified"
 ) -> Dict:
     """
-    통합 트라이온 파이프라인: X.AI 프롬프트 생성 + Gemini 2.5 Flash 이미지 합성
+    통합 트라이온 파이프라인: X.AI 프롬프트 생성 + Gemini 2.5 Flash 이미지 합성 (배경 포함)
     
     Args:
         person_img: 사람 이미지 (PIL Image)
         dress_img: 드레스 이미지 (PIL Image)
+        background_img: 배경 이미지 (PIL Image)
         model_id: 모델 ID (기본값: "xai-gemini-unified")
     
     Returns:
@@ -41,6 +43,7 @@ def generate_unified_tryon(
     start_time = time.time()
     person_s3_url = ""
     dress_s3_url = ""
+    background_s3_url = ""
     result_s3_url = ""
     used_prompt = ""
     
@@ -59,6 +62,11 @@ def generate_unified_tryon(
         dress_img_processed = dress_img_processed.resize(person_size, Image.Resampling.LANCZOS)
         print(f"드레스 이미지 크기 조정 완료: {dress_img_processed.size[0]}x{dress_img_processed.size[1]}")
         
+        # 배경 이미지는 원본 그대로 유지 (변형 방지)
+        background_img_processed = background_img
+        background_size = background_img.size
+        print(f"배경 이미지 원본 유지: {background_size[0]}x{background_size[1]} (변형 없음)")
+        
         # S3에 입력 이미지 업로드
         person_buffered = io.BytesIO()
         person_img.save(person_buffered, format="PNG")
@@ -67,6 +75,10 @@ def generate_unified_tryon(
         dress_buffered = io.BytesIO()
         dress_img_processed.save(dress_buffered, format="PNG")
         dress_s3_url = upload_log_to_s3(dress_buffered.getvalue(), model_id, "dress") or ""
+        
+        background_buffered = io.BytesIO()
+        background_img_processed.save(background_buffered, format="PNG")
+        background_s3_url = upload_log_to_s3(background_buffered.getvalue(), model_id, "background") or ""
         
         # 2. X.AI 프롬프트 생성
         print("\n" + "="*80)
@@ -133,18 +145,33 @@ def generate_unified_tryon(
         client = genai.Client(api_key=api_key)
         
         print("\n" + "="*80)
-        print("Gemini 2.5 Flash Image로 이미지 합성 시작")
+        print("Gemini 2.5 Flash Image로 이미지 합성 시작 (배경 포함)")
         print("="*80)
         print("합성에 사용되는 최종 프롬프트:")
         print("-"*80)
         print(used_prompt)
         print("="*80 + "\n")
         
-        # Gemini API 호출 (person(Image 1), dress(Image 2), text 순서)
+        # 배경 관련 지시사항을 프롬프트에 추가
+        enhanced_prompt = f"""{used_prompt}
+
+CRITICAL BACKGROUND REQUIREMENTS:
+1. PRESERVE BACKGROUND ORIGINAL: The third image is the background. DO NOT stretch, distort, resize, crop, or modify the background image in ANY way. Keep the background EXACTLY as it appears in the original image - same dimensions, same aspect ratio, same quality, same resolution, same details. The background must remain completely unchanged.
+2. NO BACKGROUND TRANSFORMATION: Do not resize, warp, or transform the background. Use the background image as-is without any geometric transformations or distortions.
+3. NATURAL INTEGRATION: Place the person wearing the dress into this background scene naturally and seamlessly. The person should appear as if they were originally photographed in this background. Adjust ONLY the person to fit the background, not the other way around.
+4. LIGHTING MATCHING: Adjust the person's lighting, shadows, and color tones to perfectly match the background environment. The person should look naturally lit by the same light source as the background.
+5. PERSPECTIVE ALIGNMENT: Ensure the person's perspective, scale, and position match the background's perspective and depth. The person should appear at the correct distance and angle relative to the background.
+6. SHADOW CONSISTENCY: Create realistic shadows for the person that match the background's lighting direction and intensity. Shadows should be cast on the ground or surfaces in the background.
+7. COLOR HARMONY: Blend the person's colors with the background's color palette to create a cohesive, natural-looking composition.
+8. EDGE BLENDING: Smoothly blend the edges of the person with the background to avoid any visible seams or artifacts.
+
+ABSOLUTE RULE: The background image must remain 100% unchanged - no stretching, no distortion, no resizing, no cropping, no transformation of any kind. Only integrate the person into the existing background without modifying the background itself."""
+        
+        # Gemini API 호출 (person(Image 1), dress(Image 2), background(Image 3), text 순서)
         try:
             response = client.models.generate_content(
                 model=GEMINI_FLASH_MODEL,
-                contents=[person_img, dress_img_processed, used_prompt]
+                contents=[person_img, dress_img_processed, background_img_processed, enhanced_prompt]
             )
         except Exception as exc:
             run_time = time.time() - start_time

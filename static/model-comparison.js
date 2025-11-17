@@ -134,6 +134,33 @@ function createModelModals() {
 // 입력 필드 생성
 function generateInputFields(model) {
     if (model.input_type === 'dual_image') {
+        // xai-gemini-unified 모델인 경우 배경 이미지도 추가
+        const hasBackground = model.id === 'xai-gemini-unified' && model.inputs.some(input => input.name === 'background_image');
+        
+        let backgroundField = '';
+        if (hasBackground) {
+            backgroundField = `
+                <div class="model-upload-item">
+                    <label class="model-upload-label">
+                        <span class="upload-icon">🖼️</span>
+                        배경 이미지
+                    </label>
+                    <div class="model-upload-area" id="upload-${model.id}-background">
+                        <input type="file" id="input-${model.id}-background" accept="image/*" style="display: none;" onchange="handleModelImageUpload(event, '${model.id}', 'background')">
+                        <div class="model-upload-content">
+                            <div class="model-upload-icon">📁</div>
+                            <p>이미지를 드래그하거나 클릭</p>
+                            <button class="model-upload-btn" onclick="document.getElementById('input-${model.id}-background').click()">파일 선택</button>
+                        </div>
+                        <div class="model-preview-container" id="preview-${model.id}-background" style="display: none;">
+                            <img id="img-${model.id}-background" alt="Background Preview">
+                            <button class="model-remove-btn" onclick="removeModelImage('${model.id}', 'background')">&times;</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
         return `
             <div class="model-upload-row">
                 <div class="model-upload-item">
@@ -172,6 +199,7 @@ function generateInputFields(model) {
                         </div>
                     </div>
                 </div>
+                ${backgroundField}
             </div>
         `;
     } else {
@@ -272,7 +300,13 @@ function closeModelModal(modelId) {
 // 드래그 앤 드롭 설정
 function setupModalDragAndDrop(model) {
     if (model.input_type === 'dual_image') {
-        ['person', 'dress'].forEach(type => {
+        const types = ['person', 'dress'];
+        // xai-gemini-unified 모델인 경우 배경 이미지도 추가
+        if (model.id === 'xai-gemini-unified' && model.inputs.some(input => input.name === 'background_image')) {
+            types.push('background');
+        }
+        
+        types.forEach(type => {
             const area = document.getElementById(`upload-${model.id}-${type}`);
             if (!area) return;
             
@@ -402,14 +436,28 @@ async function runModelTest(modelId) {
         const personFile = modelModals[modelId]?.person;
         const dressFile = modelModals[modelId]?.dress;
         
+        // xai-gemini-unified 모델인 경우 배경 이미지도 검증
+        const hasBackground = modelId === 'xai-gemini-unified' && model.inputs.some(input => input.name === 'background_image');
+        const backgroundFile = hasBackground ? modelModals[modelId]?.background : null;
+        
         if (!personFile || !dressFile) {
             alert('사람 이미지와 드레스 이미지를 모두 업로드해주세요.');
+            return;
+        }
+        
+        if (hasBackground && !backgroundFile) {
+            alert('배경 이미지를 업로드해주세요.');
             return;
         }
         
         // 파일이 실제로 존재하는지 확인
         if (!(personFile instanceof File) || !(dressFile instanceof File)) {
             alert('이미지 파일이 올바르지 않습니다. 다시 업로드해주세요.');
+            return;
+        }
+        
+        if (hasBackground && !(backgroundFile instanceof File)) {
+            alert('배경 이미지 파일이 올바르지 않습니다. 다시 업로드해주세요.');
             return;
         }
     } else {
@@ -455,7 +503,11 @@ async function runModelTest(modelId) {
             const personFile = modelModals[modelId]['person'];
             const dressFile = modelModals[modelId]['dress'];
             
-            console.log('이미지 파일 확인:', { personFile, dressFile, modelModals: modelModals[modelId] });
+            // xai-gemini-unified 모델인 경우 배경 이미지도 추가
+            const hasBackground = modelId === 'xai-gemini-unified' && model.inputs.some(input => input.name === 'background_image');
+            const backgroundFile = hasBackground ? modelModals[modelId]['background'] : null;
+            
+            console.log('이미지 파일 확인:', { personFile, dressFile, backgroundFile, modelModals: modelModals[modelId] });
             
             if (!personFile || !dressFile) {
                 console.error('이미지 파일이 없습니다:', { personFile, dressFile });
@@ -465,9 +517,20 @@ async function runModelTest(modelId) {
                 return;
             }
             
+            if (hasBackground && !backgroundFile) {
+                console.error('배경 이미지 파일이 없습니다:', backgroundFile);
+                alert('배경 이미지를 업로드해주세요.');
+                loadingDiv.style.display = 'none';
+                runBtn.disabled = false;
+                return;
+            }
+            
             formData.append(model.inputs[0].name, personFile);
             formData.append(model.inputs[1].name, dressFile);
-            console.log(`FormData에 이미지 추가: ${model.inputs[0].name}, ${model.inputs[1].name}`);
+            if (hasBackground && backgroundFile) {
+                formData.append(model.inputs[2].name, backgroundFile);
+            }
+            console.log(`FormData에 이미지 추가: ${model.inputs[0].name}, ${model.inputs[1].name}${hasBackground ? `, ${model.inputs[2].name}` : ''}`);
         } else {
             const singleFile = modelModals[modelId]['single'];
             if (!singleFile) {

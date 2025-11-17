@@ -14,13 +14,14 @@ router = APIRouter()
 async def unified_tryon(
     person_image: UploadFile = File(..., description="사람 이미지 파일"),
     dress_image: UploadFile = File(..., description="드레스 이미지 파일"),
+    background_image: UploadFile = File(..., description="배경 이미지 파일"),
 ):
     """
-    통합 트라이온 파이프라인: X.AI 프롬프트 생성 + Gemini 2.5 Flash 이미지 합성
+    통합 트라이온 파이프라인: X.AI 프롬프트 생성 + Gemini 2.5 Flash 이미지 합성 (배경 포함)
     
     이 엔드포인트는 다음 단계를 수행합니다:
     1. X.AI를 사용하여 person_image와 dress_image로부터 프롬프트 생성
-    2. 생성된 프롬프트와 이미지들을 사용하여 Gemini 2.5 Flash로 최종 합성 이미지 생성
+    2. 생성된 프롬프트와 이미지들(인물, 드레스, 배경)을 사용하여 Gemini 2.5 Flash로 최종 합성 이미지 생성
     
     Returns:
         UnifiedTryonResponse: 생성된 프롬프트와 합성 이미지 (base64)
@@ -29,14 +30,15 @@ async def unified_tryon(
         # 이미지 읽기
         person_bytes = await person_image.read()
         dress_bytes = await dress_image.read()
+        background_bytes = await background_image.read()
         
-        if not person_bytes or not dress_bytes:
+        if not person_bytes or not dress_bytes or not background_bytes:
             return JSONResponse(
                 {
                     "success": False,
                     "prompt": "",
                     "result_image": "",
-                    "message": "사람 이미지와 드레스 이미지를 모두 업로드해주세요.",
+                    "message": "사람 이미지, 드레스 이미지, 배경 이미지를 모두 업로드해주세요.",
                     "llm": None
                 },
                 status_code=400,
@@ -45,9 +47,10 @@ async def unified_tryon(
         # PIL Image로 변환
         person_img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
         dress_img = Image.open(io.BytesIO(dress_bytes)).convert("RGB")
+        background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
         
         # 통합 트라이온 서비스 호출
-        result = generate_unified_tryon(person_img, dress_img)
+        result = generate_unified_tryon(person_img, dress_img, background_img)
         
         if result["success"]:
             return JSONResponse(result)
