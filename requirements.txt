@@ -1,6 +1,6 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-transformers==4.35.2
+transformers>=4.38.0
 torch>=2.2.0
 torchvision>=0.17.0
 pillow>=10.0.0
@@ -15,11 +15,17 @@ sqlalchemy>=2.0.23
 cryptography>=41.0.0
 boto3>=1.34.0
 google-genai>=0.2.0  # Gemini API 사용 시 필요 (선택 사항)
+
 # 새로 추가된 모델 의존성
-mmpose>=0.31.0  # RTMPose-s 포즈 인식
-mmengine>=0.10.0  # mmpose 의존성
-diffusers>=0.21.0  # SDXL-LoRA 구두 생성
-basicsr>=1.4.0  # Real-ESRGAN 의존성
-realesrgan>=0.3.0  # Real-ESRGAN 해상도 향상
-opencv-python>=4.8.0  # TPS Warp, Color Harmonization
-scipy>=1.11.0  # TPS Warp
+mmpose>=0.31.0
+mmengine>=0.10.0
+diffusers>=0.21.0
+basicsr>=1.4.0
+realesrgan>=0.3.0
+opencv-python>=4.8.0
+scipy>=1.11.0
+
+# AI 체형 보정 및 가상 피팅용 라이브러리
+mediapipe>=0.10.9
+transformers>=4.38.0   # 기존 최신 버전 유지
+accelerate>=0.25.0

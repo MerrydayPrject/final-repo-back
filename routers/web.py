@@ -17,6 +17,18 @@ async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+# <<< 추가된 부분 시작 >>>
+@router.get("/vton-test", response_class=HTMLResponse, tags=["Web Interface"])
+async def vton_test_page(request: Request):
+    """
+    가상 피팅 (VTON) 테스트 페이지
+    
+    인물 이미지와 프롬프트를 사용하여 새로운 의상을 생성하는 VTON 기능을 테스트하는 페이지를 반환합니다.
+    """
+    return templates.TemplateResponse("vton_test.html", {"request": request})
+# <<< 추가된 부분 끝 >>>
+
+
 @router.get("/nukki", response_class=HTMLResponse, tags=["Web Interface"])
 async def nukki_service(request: Request):
     """
@@ -99,8 +111,7 @@ async def dress_manage_page(request: Request):
     return templates.TemplateResponse("dress_manage.html", {"request": request})
 
 
-@router.get("/favicon.ico")
+@router.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """파비콘 제공"""
     return FileResponse("static/favicon.ico")
-

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTON 테스트 페이지</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .container { max-width: 1200px; }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            align-items: start;
+        }
+        .input-section, .result-section {
+            background-color: #f9f9f9;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+        .input-group input[type="file"] {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .input-group textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1.1rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover { background-color: #0056b3; }
+        .result-image-container { text-align: center; }
+        .result-image-container img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+        .loader {
+            display: none; /* 평소에는 숨김 */
+            margin: 20px auto;
+            border: 8px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 8px solid #3498db;
+            width: 60px;
+            height: 60px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>👕 가상 피팅 (VTON) 테스트</h1>
+            <p>인물 이미지와 텍스트 프롬프트를 이용해 새로운 의상을 생성합니다.</p>
+            <a href="/" style="display: inline-block; margin-top: 1rem;">← 테스트 페이지 목록으로 돌아가기</a>
+        </header>
+
+        <main>
+            <div class="grid-container">
+                <!-- 입력 섹션 -->
+                <section class="input-section">
+                    <h2>1. 입력 정보</h2>
+                    <div class="input-group">
+                        <label for="person-image">인물 이미지 업로드</label>
+                        <input type="file" id="person-image" accept="image/*">
+                        <img id="image-preview" src="#" alt="이미지 미리보기" style="max-width: 100%; margin-top: 10px; display: none;">
+                    </div>
+                    <div class="input-group">
+                        <label for="prompt">의상 프롬프트</label>
+                        <textarea id="prompt" placeholder="예시: a man wearing a blue denim jacket, high quality photo"></textarea>
+                    </div>
+                    <button id="generate-btn">이미지 생성</button>
+                </section>
+
+                <!-- 결과 섹션 -->
+                <section class="result-section">
+                    <h2>2. 생성 결과</h2>
+                    <div class="loader" id="loader"></div>
+                    <div class="result-image-container">
+                        <img id="result-image" src="/static/placeholder.png" alt="생성된 이미지">
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const personImageInput = document.getElementById('person-image');
+        const imagePreview = document.getElementById('image-preview');
+        const promptInput = document.getElementById('prompt');
+        const generateBtn = document.getElementById('generate-btn');
+        const loader = document.getElementById('loader');
+        const resultImage = document.getElementById('result-image');
+
+        // 이미지 업로드 시 미리보기 기능
+        personImageInput.addEventListener('change', () => {
+            const file = personImageInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 생성 버튼 클릭 이벤트
+        generateBtn.addEventListener('click', async () => {
+            const file = personImageInput.files[0];
+            const prompt = promptInput.value.trim();
+
+            if (!file || !prompt) {
+                alert('인물 이미지와 프롬프트를 모두 입력해주세요.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('source_image_file', file);
+            formData.append('prompt', prompt);
+
+            // 로딩 시작
+            loader.style.display = 'block';
+            resultImage.style.display = 'none';
+
+            try {
+                // 이전 단계에서 만든 통합 API 엔드포인트 호출
+                const response = await fetch('/generation/generate-from-source-image', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '이미지 생성에 실패했습니다.');
+                }
+
+                const imageBlob = await response.blob();
+                const imageUrl = URL.createObjectURL(imageBlob);
+                resultImage.src = imageUrl;
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`오류가 발생했습니다: ${error.message}`);
+                resultImage.src = '/static/placeholder.png'; // 에러 시 기본 이미지로
+            } finally {
+                // 로딩 종료
+                loader.style.display = 'none';
+                resultImage.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

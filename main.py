@@ -4,9 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
+import importlib
 
 from config.cors import CORS_ORIGINS, CORS_CREDENTIALS, CORS_METHODS, CORS_HEADERS
-from core.model_loader import load_models
+from core.model_loader import load_models  # startup용 비동기 모델 로드
 
 # 디렉토리 생성
 Path("static").mkdir(exist_ok=True)
@@ -14,17 +15,9 @@ Path("templates").mkdir(exist_ok=True)
 
 # FastAPI 앱 초기화
 app = FastAPI(
-    title="의류 세그멘테이션 API",
-    description="SegFormer 모델을 사용한 고급 의류 세그멘테이션 서비스. 웨딩드레스를 포함한 다양한 의류 항목을 감지하고 배경을 제거할 수 있습니다.",
-    version="1.0.0",
-    contact={
-        "name": "API Support",
-        "url": "https://github.com",
-    },
-    license_info={
-        "name": "MIT",
-        "url": "https://opensource.org/licenses/MIT",
-    },
+    title="의류 세그멘테이션 및 생성 API",
+    description="SegFormer, Stable Diffusion, ControlNet을 사용한 고급 의류 관련 서비스",
+    version="1.1.0",
 )
 
 # CORS 설정
@@ -49,10 +42,9 @@ templates = Jinja2Templates(directory="templates")
 from routers import (
     info, web, segmentation, composition, prompt, 
     body_analysis, admin, dress_management, image_processing,
-    proxy, models
+    proxy, models, generation
 )
-# conversion_3d는 숫자로 시작하므로 importlib 사용
-import importlib
+
 conversion_3d_router = importlib.import_module('routers.conversion_3d')
 
 app.include_router(info.router)
@@ -67,9 +59,12 @@ app.include_router(image_processing.router)
 app.include_router(conversion_3d_router.router)
 app.include_router(proxy.router)
 app.include_router(models.router)
+app.include_router(generation.router)
 
 # Startup 이벤트
 @app.on_event("startup")
 async def startup_event():
     """애플리케이션 시작 시 모델 로드"""
-    await load_models()
+    print("애플리케이션 시작 - 모델 로딩 중...")
+    await load_models()  # 비동기 모델 로드 호출
+    print("모든 모델 로딩 완료!")
