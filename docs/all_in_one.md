@@ -438,6 +438,37 @@ V2 기능을 사용하려면 `.env` 파일에 다음 환경 변수를 추가해�
 - `HUGGINGFACE_API_BASE_URL`: API 베이스 URL (기본값: "https://router.huggingface.co/hf-inference/models")
 - `SEGFORMER_API_TIMEOUT`: API 요청 타임아웃 (초, 기본값: 60)
 
+**통합 파이프라인 V2.5** (`/fit/v2.5/compose`):
+V2.5는 인물 전처리 파이프라인을 추가하여 더욱 정교한 합성 결과를 생성합니다.
+1. 의상 이미지 전처리
+2. **SegFormer B2 Garment Parsing** → garment_only 이미지 추출
+3. **(옵션) 인물 전처리 파이프라인 (1~5단계)**:
+   - **Step 1**: SegFormer B2 Human Parsing으로 인물 이미지 파싱
+     - face_mask: 레이블 {11(face), 18(skin), 2(hair)}
+     - cloth_mask: 레이블 {4(upper), 5(skirt), 6(pants), 7(dress), 8(belt), 16(bag), 17(scarf)}
+     - body_mask: 레이블 {12(left-leg), 13(right-leg), 14(left-arm), 15(right-arm)}
+   - **Step 2**: face_patch 추출 (face_mask + hair_mask 영역)
+   - **Step 3**: base_img 생성 (cloth_mask 영역을 neutral_color(128,128,128)로 덮기)
+   - **Step 4**: inpaint_mask 생성 (body_mask - face_mask)
+   - **Step 5**: face_patch, base_img, inpaint_mask를 base64(PNG)로 변환
+4. X.AI grok-2-vision-1212 모델로 프롬프트 생성 (person_image, garment_only_image 사용)
+5. 생성된 프롬프트와 이미지들(base_img 또는 person_image, garment_only, 배경)로 Gemini 2.5 Flash 이미지 합성
+6. **(옵션) face_patch 합성 및 경계 블렌딩**: Gemini 생성 이미지에 face_patch를 합성하고 경계 블렌딩 수행
+7. 결과 이미지 base64 인코딩 및 S3 업로드
+8. 테스트 로그 저장
+
+**V1 vs V2 vs V2.5 비교**:
+- **V1**: 배경 이미지 필요, 원본 드레스 이미지를 XAI에 전달
+- **V2**: 배경 이미지 필요, SegFormer B2 Parsing으로 추출한 garment_only 이미지를 XAI에 전달
+- **V2.5**: 배경 이미지 필요, 인물 전처리 파이프라인 추가로 base_img 사용 및 face_patch 합성
+  - 인물 전처리로 의상 영역을 중립색으로 덮어 더 정확한 합성
+  - face_patch 합성으로 얼굴 보존 품질 향상
+  - 경계 블렌딩으로 자연스러운 합성 결과
+
+**인물 전처리 전용 엔드포인트** (`/fit/v2.5/preprocess-person`):
+- 인물 이미지만 업로드하여 face_mask, face_patch, base_img, inpaint_mask를 추출
+- 디버깅 및 테스트용으로 사용 가능
+
 **API 사용 예시**:
 ```bash
 curl -X POST "http://localhost:8000/api/compose_xai_gemini_v2" \
