@@ -19,380 +19,87 @@ from core.s3_client import upload_log_to_s3
 from core.model_loader import _load_segformer_b2_models, _load_rtmpose_model, _load_realesrgan_model
 from services.image_service import preprocess_dress_image
 from services.log_service import save_test_log
+from services.tryon_service import generate_custom_tryon_v2
 from config.settings import GEMINI_FLASH_MODEL
 from config.prompts import GEMINI_DEFAULT_COMPOSITION_PROMPT
 
 router = APIRouter()
 
 
-@router.post("/api/compose-dress", tags=["Gemini 이미지 합성"])
+@router.post("/api/compose-dress", tags=["커스텀 피팅 V2"])
 async def compose_dress(
-    person_image: UploadFile = File(..., description="사람 이미지 파일"),
-    dress_image: Optional[UploadFile] = File(None, description="드레스 이미지 파일"),
-    dress_url: Optional[str] = Form(None, description="드레스 이미지 URL (S3 또는 로컬)"),
-    model_name: Optional[str] = Form(None, description="모델명"),
-    prompt: Optional[str] = Form(None, description="AI 명령어 (프롬프트)")
+    person_image: UploadFile = File(..., description="전신사진 이미지 파일"),
+    dress_image: UploadFile = File(..., description="드레스 이미지 파일")
 ):
     """
-    Gemini API를 사용한 사람과 드레스 이미지 합성
+    커스텀 피팅 API: X.AI 프롬프트 생성 + Gemini 2.5 Flash V2 이미지 합성
     
-    사람 이미지와 드레스 이미지를 받아서 Gemini API를 통해
-    사람이 드레스를 입은 것처럼 합성된 이미지를 생성합니다.
+    SegFormer B2 Garment Parsing + X.AI 프롬프트 생성 + Gemini 2.5 Flash V2를 사용하여
+    전신사진과 드레스 이미지를 합성합니다. 배경 이미지는 사용하지 않습니다.
+    
+    Returns:
+        JSONResponse: {
+            "success": bool,
+            "prompt": str,
+            "result_image": str (base64),
+            "message": str,
+            "llm": str
+        }
     """
-    start_time = time.time()
-    model_id = model_name or "gemini-compose"
-    
-    # 기본 프롬프트
-    default_prompt = GEMINI_DEFAULT_COMPOSITION_PROMPT
-    
-    # text_input과 used_prompt는 이미지 분석 후 설정됨
-    success = False
-    person_s3_url = ""
-    dress_s3_url = ""
-    result_s3_url = ""
-    used_prompt = ""
-    
     try:
-        # .env에서 API 키 가져오기
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            error_msg = ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
-            return JSONResponse({
-                "success": False,
-                "error": "API key not found",
-                "message": error_msg
-            }, status_code=500)
-        
-        # 사람 이미지 읽기
+        # 이미지 읽기
         person_contents = await person_image.read()
-        person_img = Image.open(io.BytesIO(person_contents))
+        dress_contents = await dress_image.read()
         
-        # 드레스 이미지 처리: 파일 또는 URL
-        dress_img = None
-        if dress_image:
-            # 파일로 업로드된 경우
-            dress_contents = await dress_image.read()
-            dress_img = Image.open(io.BytesIO(dress_contents))
-        elif dress_url:
-            # S3 URL에서 드레스 이미지 다운로드 (AWS 자격 증명 사용)
-            try:
-                if not dress_url.startswith('http'):
-                    return JSONResponse({
-                        "success": False,
-                        "error": "Invalid dress URL",
-                        "message": f"유효하지 않은 드레스 URL입니다. HTTP(S) URL이 필요합니다: {dress_url}"
-                    }, status_code=400)
-                
-                # S3 URL 파싱하여 bucket과 key 추출
-                parsed_url = urlparse(dress_url)
-                
-                # AWS S3 클라이언트 생성
-                aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
-                aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-                region = os.getenv("AWS_REGION", "ap-northeast-2")
-                
-                if not all([aws_access_key, aws_secret_key]):
-                    # AWS 자격 증명이 없으면 일반 HTTP 요청 시도 (퍼블릭 버킷용)
-                    print(f"AWS 자격 증명 없음, HTTP 요청 시도: {dress_url}")
-                    response = requests.get(dress_url, timeout=10)
-                    response.raise_for_status()
-                    dress_img = Image.open(io.BytesIO(response.content))
-                else:
-                    # boto3를 사용하여 S3에서 다운로드
-                    s3_client = boto3.client(
-                        's3',
-                        aws_access_key_id=aws_access_key,
-                        aws_secret_access_key=aws_secret_key,
-                        region_name=region
-                    )
-                    
-                    # URL에서 bucket과 key 추출
-                    if '.s3.' in parsed_url.netloc or '.s3-' in parsed_url.netloc:
-                        bucket_name = parsed_url.netloc.split('.')[0]
-                        s3_key = parsed_url.path.lstrip('/')
-                    else:
-                        path_parts = parsed_url.path.lstrip('/').split('/', 1)
-                        if len(path_parts) == 2:
-                            bucket_name, s3_key = path_parts
-                        else:
-                            raise ValueError(f"S3 URL 형식을 파싱할 수 없습니다: {dress_url}")
-                    
-                    print(f"S3 다운로드 시도: bucket={bucket_name}, key={s3_key}")
-                    
-                    # S3에서 객체 가져오기
-                    s3_response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
-                    image_data = s3_response['Body'].read()
-                    dress_img = Image.open(io.BytesIO(image_data))
-                    print(f"S3 URL에서 드레스 이미지 다운로드 성공: {dress_url}")
-                
-            except ClientError as e:
-                error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-                print(f"S3 ClientError ({error_code}): {e}")
-                return JSONResponse({
-                    "success": False,
-                    "error": f"S3 access denied ({error_code})",
-                    "message": f"S3 접근 권한 오류: {str(e)}"
-                }, status_code=400)
-            except requests.exceptions.RequestException as e:
-                print(f"S3 HTTP 다운로드 오류: {e}")
-                return JSONResponse({
-                    "success": False,
-                    "error": "S3 download failed",
-                    "message": f"S3에서 드레스 이미지를 다운로드할 수 없습니다: {str(e)}"
-                }, status_code=400)
-            except Exception as e:
-                print(f"드레스 이미지 처리 오류: {e}")
-                traceback.print_exc()
-                return JSONResponse({
-                    "success": False,
-                    "error": "Image processing failed",
-                    "message": f"드레스 이미지를 처리할 수 없습니다: {str(e)}"
-                }, status_code=400)
-        else:
+        if not person_contents or not dress_contents:
             return JSONResponse({
                 "success": False,
-                "error": "No dress image provided",
-                "message": "드레스 이미지 파일 또는 URL이 필요합니다."
+                "prompt": "",
+                "result_image": "",
+                "message": "전신사진과 드레스 이미지를 모두 업로드해주세요.",
+                "llm": None
             }, status_code=400)
         
-        # 원본 인물 이미지 크기 저장
-        person_size = person_img.size
-        print(f"인물 이미지 크기: {person_size[0]}x{person_size[1]}")
+        # PIL Image로 변환
+        person_img = Image.open(io.BytesIO(person_contents)).convert("RGB")
+        dress_img = Image.open(io.BytesIO(dress_contents)).convert("RGB")
         
-        # 드레스 이미지 전처리 (배경 정보 제거 및 중앙 정렬)
-        print("드레스 이미지 전처리 시작...")
-        dress_img = preprocess_dress_image(dress_img, target_size=1024)
-        print("드레스 이미지 전처리 완료")
+        # 커스텀 트라이온 V2 서비스 호출
+        result = generate_custom_tryon_v2(person_img, dress_img)
         
-        # 드레스 이미지를 인물 이미지 크기로 조정 (결과 이미지 크기 맞추기 위함)
-        print(f"드레스 이미지를 인물 크기({person_size[0]}x{person_size[1]})로 조정...")
-        dress_img = dress_img.resize(person_size, Image.Resampling.LANCZOS)
-        print(f"드레스 이미지 크기 조정 완료: {dress_img.size[0]}x{dress_img.size[1]}")
-        
-        # 프롬프트가 없으면 이미지 분석을 통해 맞춤 프롬프트 생성
-        if not prompt:
-            print("\n" + "="*80)
-            print("프롬프트가 제공되지 않음 - 자동 프롬프트 생성 시작")
-            print("="*80)
-            
-            # 이미지 분석을 통한 맞춤 프롬프트 생성
-            custom_prompt = await generate_custom_prompt_from_images(person_img, dress_img, api_key)
-            
-            if custom_prompt:
-                text_input = custom_prompt
-                used_prompt = custom_prompt
-                print("맞춤 프롬프트가 생성되어 합성에 사용됩니다.")
-                print("="*80 + "\n")
-            else:
-                # 프롬프트 생성 실패 시 기본 프롬프트 사용
-                text_input = default_prompt
-                used_prompt = default_prompt
-                print("\n맞춤 프롬프트 생성 실패 - 기본 프롬프트 사용")
-                print("\n" + "="*80)
-                print("사용될 기본 프롬프트:")
-                print("="*80)
-                print(default_prompt)
-                print("="*80 + "\n")
-        else:
-            # 사용자 제공 프롬프트 사용
-            text_input = prompt
-            used_prompt = prompt
-            print("\n" + "="*80)
-            print("사용자 제공 프롬프트 사용")
-            print("="*80)
-            print("사용될 프롬프트:")
-            print("="*80)
-            print(prompt)
-            print("="*80 + "\n")
-        
-        # S3에 입력 이미지 업로드 (로컬 저장 없이 S3에만 업로드)
-        person_buffered = io.BytesIO()
-        person_img.save(person_buffered, format="PNG")
-        person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
-        
-        dress_buffered = io.BytesIO()
-        dress_img.save(dress_buffered, format="PNG")
-        dress_s3_url = upload_log_to_s3(dress_buffered.getvalue(), model_id, "dress") or ""
-        
-        # 원본 이미지들을 base64로 변환
-        person_base64 = base64.b64encode(person_buffered.getvalue()).decode()
-        dress_base64 = base64.b64encode(dress_buffered.getvalue()).decode()
-        
-        # Gemini Client 생성 (공식 문서와 동일한 방식)
-        client = genai.Client(api_key=api_key)
-        
-        # 이미지 합성 시작 알림
-        print("\n" + "="*80)
-        print("Gemini 2.5 Flash Image로 이미지 합성 시작")
-        print("="*80)
-        print("합성에 사용되는 최종 프롬프트:")
-        print("-"*80)
-        print(text_input)
-        print("="*80 + "\n")
-        
-        # Gemini API 호출 (person(Image 1), dress(Image 2), text 순서)
-        response = client.models.generate_content(
-            model=GEMINI_FLASH_MODEL,
-            contents=[person_img, dress_img, text_input]
-        )
-        
-        # 응답 확인 (더 안전한 처리)
-        if not response.candidates or len(response.candidates) == 0:
-            error_msg = "Gemini API가 응답을 생성하지 못했습니다. 이미지가 안전 정책에 위배되거나 모델이 이미지를 생성할 수 없습니다."
-            run_time = time.time() - start_time
-            
-            # 실패 로그 저장
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=dress_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-            
-            return JSONResponse({
-                "success": False,
-                "error": "No response",
-                "message": error_msg
-            }, status_code=500)
-        
-        # content와 parts가 있는지 확인
-        candidate = response.candidates[0]
-        if not hasattr(candidate, 'content') or candidate.content is None:
-            error_msg = "Gemini API 응답에 content가 없습니다."
-            print(f"{error_msg}")
-            print(f"Candidate: {candidate}")
-            run_time = time.time() - start_time
-            
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=dress_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-            
-            return JSONResponse({
-                "success": False,
-                "error": "No content",
-                "message": error_msg
-            }, status_code=500)
-        
-        if not hasattr(candidate.content, 'parts') or candidate.content.parts is None:
-            error_msg = "Gemini API 응답에 parts가 없습니다."
-            print(f"{error_msg}")
-            print(f"Content: {candidate.content}")
-            run_time = time.time() - start_time
-            
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=dress_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-            
-            return JSONResponse({
-                "success": False,
-                "error": "No parts",
-                "message": error_msg
-            }, status_code=500)
-        
-        # 응답에서 이미지 추출 (안전한 방식)
-        image_parts = [
-            part.inline_data.data
-            for part in candidate.content.parts
-            if hasattr(part, 'inline_data') and part.inline_data
-        ]
-        
-        # 텍스트 응답도 추출
-        result_text = ""
-        for part in candidate.content.parts:
-            if hasattr(part, 'text') and part.text:
-                result_text += part.text
-        
-        if image_parts:
-            # 첫 번째 이미지를 base64로 인코딩
-            result_image_base64 = base64.b64encode(image_parts[0]).decode()
-            
-            # S3에 결과 이미지 업로드 (로컬 저장 없이 S3에만 업로드)
-            result_img = Image.open(io.BytesIO(image_parts[0]))
-            result_buffered = io.BytesIO()
-            result_img.save(result_buffered, format="PNG")
-            result_s3_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
-            
-            success = True
-            run_time = time.time() - start_time
-            
-            # 성공 로그 저장
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=dress_s3_url or None,
-                result_url=result_s3_url or "",
-                model=model_id,
-                prompt=used_prompt,
-                success=True,
-                run_time=run_time
-            )
-            
+        # 응답 형식 맞추기 (기존 API와 호환)
+        if result["success"]:
             return JSONResponse({
                 "success": True,
-                "person_image": f"data:image/png;base64,{person_base64}",
-                "dress_image": f"data:image/png;base64,{dress_base64}",
-                "result_image": f"data:image/png;base64,{result_image_base64}",
-                "message": "이미지 합성이 완료되었습니다.",
-                "gemini_response": result_text
+                "result_image": result.get("result_image", ""),
+                "message": result.get("message", "이미지 합성이 완료되었습니다."),
+                "prompt": result.get("prompt", ""),
+                "llm": result.get("llm", "")
             })
         else:
-            run_time = time.time() - start_time
-            
-            # 실패 로그 저장
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=dress_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-            
+            status_code = 500 if "error" in result else 400
             return JSONResponse({
                 "success": False,
-                "error": "No image generated",
-                "message": "Gemini API가 이미지를 생성하지 못했습니다. 응답: " + result_text,
-                "gemini_response": result_text
-            }, status_code=500)
-        
+                "result_image": "",
+                "message": result.get("message", "이미지 합성에 실패했습니다."),
+                "prompt": result.get("prompt", ""),
+                "llm": result.get("llm", ""),
+                "error": result.get("error", "")
+            }, status_code=status_code)
+            
     except Exception as e:
+        import traceback
         error_detail = traceback.format_exc()
-        run_time = time.time() - start_time
-        
-        # 오류 로그 저장
-        try:
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=dress_s3_url or None,
-                result_url=result_s3_url or "",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-        except:
-            pass  # 로그 저장 실패해도 계속 진행
+        print(f"커스텀 피팅 API 오류: {e}")
+        print(error_detail)
         
         return JSONResponse({
             "success": False,
-            "error": str(e),
-            "error_detail": error_detail,
-            "message": f"이미지 합성 중 오류 발생: {str(e)}"
+            "result_image": "",
+            "message": f"커스텀 피팅 처리 중 오류가 발생했습니다: {str(e)}",
+            "prompt": "",
+            "llm": None,
+            "error": str(e)
         }, status_code=500)
 
 
