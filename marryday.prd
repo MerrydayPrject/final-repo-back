@@ -72,6 +72,17 @@
   - HuggingFace Inference API를 통한 SegFormer B2 모델 호출 (로컬 모델 다운로드 불필요)
   - 추출된 garment_only 이미지로 더 정확한 프롬프트 생성 및 합성 품질 향상
   - 배경 이미지를 포함하여 자연스러운 합성 결과 생성
+- 통합 트라이온 파이프라인 V2.5 (`POST /fit/v2.5/compose`): 인물 전처리 + SegFormer B2 Garment Parsing + X.AI 프롬프트 생성 + Gemini 2.5 Flash 이미지 합성 (배경 이미지 포함).
+  - 인물 전처리 파이프라인 (1~5단계):
+    - Step 1: SegFormer B2 Human Parsing으로 face_mask, cloth_mask, body_mask 생성
+    - Step 2: face_patch 추출 (face_mask + hair_mask)
+    - Step 3: base_img 생성 (cloth_mask 영역을 neutral_color(128,128,128)로 덮기)
+    - Step 4: inpaint_mask 생성 (body_mask - face_mask)
+    - Step 5: face_patch, base_img, inpaint_mask를 base64(PNG)로 변환
+  - base_img를 Gemini에 전달하여 더 정확한 합성
+  - Gemini 생성 이미지에 face_patch를 합성하고 경계 블렌딩 수행
+  - 얼굴 보존 품질 향상 및 자연스러운 합성 결과
+- 인물 전처리 전용 엔드포인트 (`POST /fit/v2.5/preprocess-person`): 인물 이미지만 업로드하여 face_mask, face_patch, base_img, inpaint_mask 추출 (디버깅 및 테스트용)
 - 드레스 카탈로그 검색/필터(라인, 소재, 가격대 등).
 - 추천 결과에 대한 피드백 수집 및 재학습 파이프라인.
 - 체형 생성 기능(`POST /api/body-generation`): 얼굴이 포함된 이미지에서 얼굴+목을 보존하고 기본 체형을 생성하여 전신 이미지로 변환.
