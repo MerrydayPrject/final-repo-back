@@ -69,7 +69,8 @@
       "input_type": "dual_image",
       "inputs": [
         {"name": "person_image", "label": "사람 이미지", "required": true},
-        {"name": "dress_image", "label": "드레스 이미지", "required": true}
+        {"name": "dress_image", "label": "드레스 이미지", "required": true},
+        {"name": "background_image", "label": "배경 이미지", "required": true}
       ],
       "category": "composition"
     }

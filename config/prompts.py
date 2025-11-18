@@ -2,10 +2,12 @@
 
 # 공통 프롬프트 요구사항 (모든 모델에 공통 적용)
 COMMON_PROMPT_REQUIREMENT = (
-    "Keep the person's face exactly as it is in the portrait photo. "
-    "Make the dress image as similar as possible to the reference dress. "
-    "Generate shoes that match and complement the dress. "
-    "Match the dress length accurately."
+    "Keep the person's face exactly as it appears in Image 1 with absolutely no changes. "
+    "Do NOT alter, modify, re-render, replace, or reshape the face in any way. "
+    "The final output MUST use the same face.\n\n"
+    "Ensure the outfit from Image 2 is applied accurately and faithfully, preserving its color, texture, length, and silhouette.\n\n"
+    "Generate footwear that matches and complements the outfit.\n\n"
+    "Match the outfit length exactly as shown in Image 2."
 )
 
 # 기본 드레스 합성 프롬프트
