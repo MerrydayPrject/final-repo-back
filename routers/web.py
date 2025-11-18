@@ -81,6 +81,16 @@ async def llm_model_page(request: Request):
     return templates.TemplateResponse("llm_model.html", {"request": request})
 
 
+@router.get("/image-filter-sticker", response_class=HTMLResponse, tags=["Web Interface"])
+async def image_filter_sticker_page(request: Request):
+    """
+    이미지 필터 & 프레임 페이지
+    
+    이미지에 필터와 프레임을 적용하여 꾸밀 수 있는 페이지
+    """
+    return templates.TemplateResponse("image_filter_frame.html", {"request": request})
+
+
 @router.get("/admin", response_class=HTMLResponse, tags=["관리자"])
 async def admin_page(request: Request):
     """

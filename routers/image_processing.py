@@ -4,8 +4,8 @@ import io
 import base64
 import traceback
 import numpy as np
-from typing import Optional
-from fastapi import APIRouter, File, UploadFile, Form
+from typing import Optional, List
+from fastapi import APIRouter, File, UploadFile, Form, Request
 from fastapi.responses import JSONResponse
 from PIL import Image
 import torch
@@ -19,6 +19,13 @@ from core.xai_client import generate_image_from_text
 from config.settings import GEMINI_FLASH_MODEL
 from services.log_service import save_test_log
 from core.s3_client import upload_log_to_s3
+from services.image_filter_service import (
+    apply_filter_preset,
+    apply_frame,
+    apply_frame_preset,
+    apply_sticker,
+    process_image_with_filters_and_stickers
+)
 import time
 
 router = APIRouter()
@@ -626,6 +633,346 @@ async def pose_estimation(file: UploadFile = File(..., description="포즈 인�
             "error": "mmpose 라이브러리 미설치",
             "message": "mmpose를 설치하세요: pip install mmpose>=0.31.0"
         }, status_code=500)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"처리 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.post("/api/apply-image-filters", tags=["이미지 필터"])
+async def apply_image_filters(
+    file: UploadFile = File(..., description="필터를 적용할 이미지 파일"),
+    filter_preset: str = Form(..., description="필터 프리셋 (none, grayscale, vintage, warm, cool, high_contrast)")
+):
+    """
+    이미지에 필터 프리셋 적용
+    
+    미리 정의된 필터 프리셋을 이미지에 적용합니다.
+    """
+    try:
+        # 이미지 읽기
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        # 원본 이미지를 base64로 인코딩
+        buffered_original = io.BytesIO()
+        image.save(buffered_original, format="PNG")
+        original_base64 = base64.b64encode(buffered_original.getvalue()).decode()
+        
+        # 필터 적용
+        result_img = apply_filter_preset(image, filter_preset)
+        
+        # 결과 이미지를 base64로 인코딩
+        buffered_result = io.BytesIO()
+        result_img.save(buffered_result, format="PNG")
+        result_base64 = base64.b64encode(buffered_result.getvalue()).decode()
+        
+        return JSONResponse({
+            "success": True,
+            "original_image": f"data:image/png;base64,{original_base64}",
+            "result_image": f"data:image/png;base64,{result_base64}",
+            "filter_preset": filter_preset,
+            "message": f"필터 적용 완료 ({filter_preset})"
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"처리 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.post("/api/apply-filter-and-frame", tags=["이미지 필터 & 프레임"])
+async def apply_filter_and_frame(
+    file: UploadFile = File(..., description="기본 이미지 파일"),
+    filter_preset: str = Form("none", description="필터 프리셋 (none, grayscale, vintage, warm, cool, high_contrast)"),
+    frame_type: str = Form("none", description="프레임 타입 (none, solid, decorative)"),
+    frame_color: str = Form("#000000", description="프레임 색상 (hex 코드)"),
+    frame_width: int = Form(10, description="프레임 두께")
+):
+    """
+    필터와 프레임만 빠르게 적용 (스티커 없음)
+    
+    필터 프리셋과 프레임만 적용하여 빠른 응답을 제공합니다.
+    """
+    try:
+        # 이미지 읽기
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        # 필터 적용
+        result_img = apply_filter_preset(image, filter_preset)
+        
+        # 프레임 적용 (프레임 프리셋 사용)
+        if frame_type != "none":
+            # 프레임 프리셋 이름 결정 (색상 기반)
+            frame_preset_name = "none"
+            if frame_color == "#000000" and frame_width == 15:
+                frame_preset_name = "black"
+            elif frame_color == "#FFFFFF" and frame_width == 15:
+                frame_preset_name = "white"
+            elif frame_color == "#FFD700" and frame_width == 20:
+                frame_preset_name = "gold"
+            elif frame_color == "#FF0000" and frame_width == 15:
+                frame_preset_name = "red"
+            elif frame_color == "#0066FF" and frame_width == 15:
+                frame_preset_name = "blue"
+            
+            if frame_preset_name != "none":
+                result_img = apply_frame_preset(result_img, frame_preset_name)
+            else:
+                # 커스텀 프레임
+                result_img = apply_frame(
+                    result_img,
+                    frame_type,
+                    frame_color,
+                    frame_width,
+                    None
+                )
+        
+        # 결과 이미지를 base64로 인코딩
+        buffered_result = io.BytesIO()
+        result_img.save(buffered_result, format="PNG")
+        result_base64 = base64.b64encode(buffered_result.getvalue()).decode()
+        
+        return JSONResponse({
+            "success": True,
+            "result_image": f"data:image/png;base64,{result_base64}",
+            "filter_preset": filter_preset,
+            "message": "필터 및 프레임 적용 완료"
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"처리 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.post("/api/add-sticker", tags=["스티커"])
+async def add_sticker(
+    file: UploadFile = File(..., description="기본 이미지 파일"),
+    sticker_file: UploadFile = File(..., description="스티커 이미지 파일"),
+    x: int = Form(-1, description="X 좌표 (-1이면 중앙)"),
+    y: int = Form(-1, description="Y 좌표 (-1이면 중앙)"),
+    width: Optional[int] = Form(None, description="스티커 너비"),
+    height: Optional[int] = Form(None, description="스티커 높이"),
+    opacity: float = Form(1.0, description="투명도 (0.0 ~ 1.0)"),
+    rotation: float = Form(0.0, description="회전 각도 (0 ~ 360)")
+):
+    """
+    이미지에 스티커 추가
+    
+    스티커 이미지를 기본 이미지에 오버레이합니다.
+    """
+    try:
+        # 이미지 읽기
+        contents = await file.read()
+        base_image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        sticker_contents = await sticker_file.read()
+        sticker_image = Image.open(io.BytesIO(sticker_contents))
+        
+        # 원본 이미지를 base64로 인코딩
+        buffered_original = io.BytesIO()
+        base_image.save(buffered_original, format="PNG")
+        original_base64 = base64.b64encode(buffered_original.getvalue()).decode()
+        
+        # 스티커 적용
+        result_img = apply_sticker(
+            base_image,
+            sticker_image,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            opacity=opacity,
+            rotation=rotation
+        )
+        
+        # 결과 이미지를 base64로 인코딩
+        buffered_result = io.BytesIO()
+        result_img.save(buffered_result, format="PNG")
+        result_base64 = base64.b64encode(buffered_result.getvalue()).decode()
+        
+        return JSONResponse({
+            "success": True,
+            "original_image": f"data:image/png;base64,{original_base64}",
+            "result_image": f"data:image/png;base64,{result_base64}",
+            "message": "스티커 추가 완료"
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"처리 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.post("/api/apply-filters-and-stickers", tags=["이미지 필터 & 스티커"])
+async def apply_filters_and_stickers(
+    request: Request,
+    file: UploadFile = File(..., description="기본 이미지 파일"),
+    filter_preset: str = Form("none", description="필터 프리셋 (none, grayscale, vintage, warm, cool, high_contrast)"),
+    frame_type: str = Form("none", description="프레임 타입 (none, solid, decorative)"),
+    frame_color: str = Form("#000000", description="프레임 색상 (hex 코드)"),
+    frame_width: int = Form(10, description="프레임 두께"),
+    frame_image: Optional[UploadFile] = File(None, description="장식 프레임 이미지")
+):
+    """
+    필터와 스티커를 동시에 적용
+    
+    필터 프리셋, 프레임, 그리고 여러 개의 스티커를 한 번에 적용할 수 있습니다.
+    """
+    try:
+        # FormData에서 스티커 관련 데이터 추출
+        form = await request.form()
+        sticker_files_list = form.getlist("sticker_files")
+        
+        # float 값을 int로 변환 (좌표는 float일 수 있음)
+        sticker_x_list = []
+        for x in form.getlist("sticker_x"):
+            try:
+                sticker_x_list.append(int(float(x)))
+            except (ValueError, TypeError):
+                sticker_x_list.append(-1)
+        
+        sticker_y_list = []
+        for y in form.getlist("sticker_y"):
+            try:
+                sticker_y_list.append(int(float(y)))
+            except (ValueError, TypeError):
+                sticker_y_list.append(-1)
+        
+        sticker_width_list = []
+        for w in form.getlist("sticker_width"):
+            try:
+                width_val = int(float(w))
+                if width_val <= 0 or width_val == -1:
+                    continue  # 유효하지 않은 값은 건너뜀
+                sticker_width_list.append(width_val)
+            except (ValueError, TypeError):
+                continue
+        
+        sticker_height_list = []
+        for h in form.getlist("sticker_height"):
+            try:
+                height_val = int(float(h))
+                if height_val <= 0 or height_val == -1:
+                    continue  # 유효하지 않은 값은 건너뜀
+                sticker_height_list.append(height_val)
+            except (ValueError, TypeError):
+                continue
+        
+        sticker_opacity_list = []
+        for o in form.getlist("sticker_opacity"):
+            try:
+                sticker_opacity_list.append(float(o))
+            except (ValueError, TypeError):
+                sticker_opacity_list.append(1.0)
+        
+        sticker_rotation_list = []
+        for r in form.getlist("sticker_rotation"):
+            try:
+                sticker_rotation_list.append(float(r))
+            except (ValueError, TypeError):
+                sticker_rotation_list.append(0.0)
+        
+        # 이미지 읽기
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        # 원본 이미지를 base64로 인코딩
+        buffered_original = io.BytesIO()
+        image.save(buffered_original, format="PNG")
+        original_base64 = base64.b64encode(buffered_original.getvalue()).decode()
+        
+        # 프레임 옵션 준비
+        frame_options = None
+        if frame_type != "none":
+            frame_image_obj = None
+            if frame_image:
+                frame_contents = await frame_image.read()
+                frame_image_obj = Image.open(io.BytesIO(frame_contents))
+            
+            frame_options = {
+                "frame_type": frame_type,
+                "frame_color": frame_color,
+                "frame_width": frame_width,
+                "frame_image": frame_image_obj
+            }
+        
+        # 스티커 옵션 준비
+        stickers = []
+        if sticker_files_list:
+            for i, sticker_file in enumerate(sticker_files_list):
+                sticker_contents = await sticker_file.read()
+                sticker_img = Image.open(io.BytesIO(sticker_contents))
+                
+                # width와 height는 값이 있을 때만 사용
+                # width_list와 height_list는 유효한 값만 포함하므로 인덱스가 다를 수 있음
+                # 대신 원본 FormData에서 해당 인덱스의 값을 직접 확인
+                width_val = None
+                if i < len(form.getlist("sticker_width")):
+                    try:
+                        w = form.getlist("sticker_width")[i]
+                        width_val = int(float(w))
+                        if width_val <= 0 or width_val == -1:
+                            width_val = None
+                    except (ValueError, TypeError, IndexError):
+                        width_val = None
+                
+                height_val = None
+                if i < len(form.getlist("sticker_height")):
+                    try:
+                        h = form.getlist("sticker_height")[i]
+                        height_val = int(float(h))
+                        if height_val <= 0 or height_val == -1:
+                            height_val = None
+                    except (ValueError, TypeError, IndexError):
+                        height_val = None
+                
+                sticker_data = {
+                    "sticker_image": sticker_img,
+                    "x": sticker_x_list[i] if sticker_x_list and i < len(sticker_x_list) else -1,
+                    "y": sticker_y_list[i] if sticker_y_list and i < len(sticker_y_list) else -1,
+                    "width": width_val,
+                    "height": height_val,
+                    "opacity": sticker_opacity_list[i] if sticker_opacity_list and i < len(sticker_opacity_list) else 1.0,
+                    "rotation": sticker_rotation_list[i] if sticker_rotation_list and i < len(sticker_rotation_list) else 0.0
+                }
+                stickers.append(sticker_data)
+        
+        # 통합 처리
+        result_img = process_image_with_filters_and_stickers(
+            image,
+            filter_preset=filter_preset,
+            frame_options=frame_options,
+            stickers=stickers
+        )
+        
+        # 결과 이미지를 base64로 인코딩
+        buffered_result = io.BytesIO()
+        result_img.save(buffered_result, format="PNG")
+        result_base64 = base64.b64encode(buffered_result.getvalue()).decode()
+        
+        return JSONResponse({
+            "success": True,
+            "original_image": f"data:image/png;base64,{original_base64}",
+            "result_image": f"data:image/png;base64,{result_base64}",
+            "filter_preset": filter_preset,
+            "message": "필터 및 스티커 적용 완료"
+        })
+        
     except Exception as e:
         traceback.print_exc()
         return JSONResponse({
