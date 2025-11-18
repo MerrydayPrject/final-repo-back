@@ -201,21 +201,40 @@ async def get_admin_log_detail(log_id: int):
         
         try:
             with connection.cursor() as cursor:
-                # 모든 필드 조회 (created_at은 선택적)
-                cursor.execute("""
-                    SELECT 
-                        idx as id,
-                        person_url,
-                        dress_url,
-                        result_url,
-                        model,
-                        prompt,
-                        success,
-                        run_time,
-                        created_at
-                    FROM result_logs
-                    WHERE idx = %s
-                """, (log_id,))
+                # 먼저 테이블 구조 확인 (created_at 컬럼 존재 여부)
+                cursor.execute("SHOW COLUMNS FROM result_logs LIKE 'created_at'")
+                has_created_at = cursor.fetchone() is not None
+                
+                # created_at 컬럼이 있으면 포함, 없으면 제외
+                if has_created_at:
+                    cursor.execute("""
+                        SELECT 
+                            idx as id,
+                            person_url,
+                            dress_url,
+                            result_url,
+                            model,
+                            prompt,
+                            success,
+                            run_time,
+                            created_at
+                        FROM result_logs
+                        WHERE idx = %s
+                    """, (log_id,))
+                else:
+                    cursor.execute("""
+                        SELECT 
+                            idx as id,
+                            person_url,
+                            dress_url,
+                            result_url,
+                            model,
+                            prompt,
+                            success,
+                            run_time
+                        FROM result_logs
+                        WHERE idx = %s
+                    """, (log_id,))
                 
                 log = cursor.fetchone()
                 
@@ -232,6 +251,19 @@ async def get_admin_log_detail(log_id: int):
                     created_at = created_at.isoformat()
                 elif created_at:
                     created_at = str(created_at)
+                else:
+                    created_at = None
+                
+                # run_time 안전하게 처리
+                run_time = log.get('run_time')
+                if run_time is not None:
+                    try:
+                        run_time_float = float(run_time)
+                        processing_time = f"{run_time_float:.2f}초"
+                    except (ValueError, TypeError):
+                        processing_time = str(run_time) if run_time else "-"
+                else:
+                    processing_time = "-"
                 
                 return JSONResponse({
                     "success": True,
@@ -243,7 +275,7 @@ async def get_admin_log_detail(log_id: int):
                         "model": log.get('model'),
                         "prompt": log.get('prompt'),
                         "success": log.get('success'),
-                        "processing_time": f"{log.get('run_time', 0):.2f}초",
+                        "processing_time": processing_time,
                         "created_at": created_at
                     }
                 })
@@ -252,10 +284,12 @@ async def get_admin_log_detail(log_id: int):
             
     except Exception as e:
         import traceback
-        print(f"로그 상세 조회 오류: {traceback.format_exc()}")
+        error_detail = traceback.format_exc()
+        print(f"로그 상세 조회 오류: {error_detail}")
         return JSONResponse({
             "success": False,
             "error": str(e),
+            "error_detail": error_detail,
             "message": f"로그 상세 조회 중 오류 발생: {str(e)}"
         }, status_code=500)
 
