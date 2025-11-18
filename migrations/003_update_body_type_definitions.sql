@@ -32,3 +32,4 @@ FROM body_type_definitions
 WHERE body_feature IN ('키가 작은 체형', '허리가 짧은 체형', '키가 큰 체형')
 ORDER BY body_feature;
 
+

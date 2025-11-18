@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>문서용로그</title>
+    <link rel="stylesheet" href="/static/document_logs.css">
+</head>
+<body>
+    <div class="admin-container">
+        <!-- 로그 목록 -->
+        <section class="logs-section">
+            <div class="logs-header">
+                <div class="logs-header-top">
+                    <h2>📋 문서용로그</h2>
+                    <div class="logs-header-right">
+                        <div class="logs-count">
+                            <span class="logs-count-label">전체 합성:</span>
+                            <span class="logs-count-value" id="logs-count">0</span>
+                        </div>
+                        <a href="/" class="btn-home">🏠 홈으로</a>
+                    </div>
+                </div>
+                <div class="search-container">
+                    <div class="search-box">
+                        <input 
+                            type="text" 
+                            id="search-input" 
+                            class="search-input" 
+                            placeholder="모델명으로 검색..."
+                            autocomplete="off"
+                        >
+                        <button class="search-button" id="search-button" onclick="handleSearch()">
+                            🔍 검색
+                        </button>
+                        <button class="search-clear-button" id="search-clear-button" onclick="clearSearch()" style="display: none;">
+                            ✕ 초기화
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 로그 목록 -->
+            <div id="logs-section">
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>모델</th>
+                                <th>인물사진</th>
+                                <th>의상사진</th>
+                                <th>결과</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-tbody">
+                            <tr>
+                                <td colspan="4" class="loading">데이터를 불러오는 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 페이지네이션 -->
+                <div class="pagination" id="pagination">
+                    <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 로그 상세 모달 -->
+    <div class="modal" id="detail-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📝 로그 상세 정보</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- 동적으로 생성됨 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/document_logs.js"></script>
+</body>
+</html>
+

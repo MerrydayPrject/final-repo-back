@@ -208,102 +208,89 @@ def generate_prompt_from_images(
     dress_data_url = f"data:image/png;base64,{dress_b64}"
     
     # 시스템 프롬프트
-    system_prompt = f"""You are creating a detailed instruction prompt for a virtual try-on task.
+    system_prompt = f"""IDENTITY PRESERVATION (MUST FOLLOW):
+The person in Image 1 must remain EXACTLY the same individual in the final result.
+Do NOT alter, modify, re-render, or replace the person's face, identity, expression, or head shape.
+The final output MUST keep the exact same face from Image 1.
 
 COMMON REQUIREMENT (MUST FOLLOW):
 {COMMON_PROMPT_REQUIREMENT}
 
+You are creating a detailed instruction prompt for a virtual try-on task.
+
 Analyze these two images:
-Image 1 (Person): A woman in her current outfit
-Image 2 (Dress): A formal dress/gown that will replace her current outfit
+Image 1 (Person): A person in their current outfit.
+Image 2 (Outfit): An outfit that will replace their current clothing.
 
 First, carefully observe and describe:
-1. Image 1 - List ALL clothing items she is wearing:
-   - What type of top/shirt? (long sleeves, short sleeves, or sleeveless?)
-   - What type of bottom? (pants, jeans, skirt, shorts?)
-   - What shoes is she wearing?
-   - Which body parts are currently covered by clothing?
 
-2. Image 2 - Describe the dress in detail:
-   - What color and style is the dress?
-   - Does it have sleeves, or is it sleeveless?
-   - What is the length? (short, knee-length, floor-length?)
-   - What is the neckline style?
-   - Which body parts will the dress cover, and which will remain visible?
+1. Image 1 — The person's current outfit:
+   - What type of top/shirt?
+   - What type of bottom?
+   - What shoes?
+   - Which body parts are covered?
 
-Now, create a detailed prompt using this EXACT structure,
-BUT you MUST follow these safety rules required for Gemini image models:
+2. Image 2 — The outfit:
+   - Color, material, and style
+   - Sleeve type or sleeveless
+   - Length
+   - Neckline
+   - Which areas it covers or leaves visible
 
-SAFETY RULES (IMPORTANT):
-- DO NOT use words such as "nude", "bare skin", "exposed skin", "erase clothing", or "remove clothing".
-- DO NOT describe the person without clothing.
-- DO NOT describe the act of deleting clothing or exposing the body.
-- Instead, ALWAYS use safe and allowed phrasing:
-  • "Replace the original outfit with the dress in Image 2."
+SAFETY RULES:
+- Do NOT use words such as "nude", "bare skin", "remove clothing".
+- Do NOT describe the person without clothing.
+- Use only safe phrasing like:
+  • "Replace the original outfit with the outfit in Image 2."
   • "Ensure the original outfit does not appear in the final result."
-  • "Render visible areas consistent with her natural skin tone in Image 1."
 
-Now generate the final prompt with the following structure:
+Now create the final prompt using this structure:
 
 OPENING STATEMENT:
-"Create an image of the woman from Image 1 wearing the dress from Image 2 in a natural and photorealistic way."
+"Create an image of the person from Image 1 wearing the outfit from Image 2 in a natural and photorealistic way."
 
 CRITICAL INSTRUCTION:
-"The woman in Image 1 is currently wearing [list clothing items]. 
+"The person in Image 1 is currently wearing [list clothing items]. 
 In the final result, the original outfit should not appear. 
-Only the dress from Image 2 should be visible."
+Only the outfit from Image 2 should be visible."
 
 STEP 1 – OUTFIT REPLACEMENT:
-Describe the transformation:
-"Replace the outfit from Image 1 with the dress from Image 2:
-- Ensure that no elements of the original outfit are included.
-- Focus solely on applying the dress in place of the current clothing."
+"Replace the person's outfit with the outfit from Image 2:
+- Ensure that no elements of the original outfit are visible."
 
-STEP 2 – APPLY THE DRESS FROM IMAGE 2:
-"Apply the dress exactly as shown in Image 2:
-- This is a [color] [style] dress that is [sleeveless/has sleeves/etc.]
-- The dress is [length description]
-- Preserve the dress's silhouette, color, texture, patterns, and design
-- Fit the dress naturally to the woman's pose and body proportions in Image 1
-- Maintain the same level of coverage shown in Image 2"
+STEP 2 – APPLY THE OUTFIT FROM IMAGE 2:
+"Apply the outfit exactly as shown in Image 2:
+- This is a [color/style] outfit with [sleeve/sleeveless].
+- The outfit is [length description].
+- Preserve its silhouette, color, texture, material, and design.
+- Apply the outfit onto the person while keeping their original face and head intact.
+- Maintain the same level of coverage shown in Image 2 without altering the body shape unnecessarily."
 
 STEP 3 – VISIBLE BODY AREAS:
-"For any parts of the body that remain visible while wearing the new dress:
-- Ensure the appearance is consistent with her natural skin tone in Image 1
-- Maintain realistic lighting, shading, and texture
-- Do not recreate or include any portion of the original outfit"
-
-[If applicable] If the dress is sleeveless:
-- Ensure the arms appear naturally consistent with her visible skin in Image 1
-
-[If applicable] If the dress is short or knee-length:
-- Ensure the legs appear naturally consistent with her visible skin in Image 1
-
-[If applicable] If the dress exposes shoulders or back:
-- Ensure these areas match her natural skin tone from Image 1
+"For visible body areas:
+- Match the person's natural skin tone.
+- Maintain realistic lighting and shading."
 
 RULES – WHAT NOT TO DO:
-"- NEVER include any part of the original top from Image 1
-- NEVER include any part of the original bottom from Image 1
-- NEVER mix the original outfit with the new dress
-- NEVER describe or imply the absence of clothing"
+"- NEVER include the original top.
+- NEVER include the original bottom.
+- NEVER mix outfits.
+- NEVER change the person's face or identity."
 
 RULES – WHAT TO DO:
-"- ALWAYS ensure the dress from Image 2 replaces the entire outfit
-- ALWAYS maintain consistent skin tone with Image 1
-- ALWAYS preserve her face, identity, hair, body shape, pose, and lighting"
+"- ALWAYS keep the original face intact.
+- ALWAYS match natural lighting and skin tone."
 
 OTHER REQUIREMENTS:
-"- Preserve her facial features, hairstyle, body pose, and proportions exactly
-- Use a clean white background
-- Replace footwear with elegant heels that match or complement the dress
-- The final image should look photorealistic, natural, and seamless"
+"- Preserve hairstyle, pose, and proportions.
+- Replace footwear with shoes that complement the outfit.
+- Ensure the final image looks photorealistic."
 
 Output ONLY the final prompt text following this structure.
 Be specific, but follow all safety rules."""
     
     # 사용자 메시지
-    user_message = "Analyze Image 1 (person) and Image 2 (dress), then generate the prompt following the exact structure provided."
+    user_message = "Analyze Image 1 (person) and Image 2 (outfit), then generate the prompt following the exact structure provided."
     
     # API 요청 데이터 (OpenAI 스타일의 chat completions 형식)
     payload = {
