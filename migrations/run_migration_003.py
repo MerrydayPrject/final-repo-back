@@ -148,3 +148,4 @@ finally:
         connection.close()
         print("\n[데이터베이스 연결 종료]")
 
+

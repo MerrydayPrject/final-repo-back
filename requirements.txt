@@ -23,3 +23,6 @@ basicsr>=1.4.0  # Real-ESRGAN 의존성
 realesrgan>=0.3.0  # Real-ESRGAN 해상도 향상
 opencv-python>=4.8.0  # TPS Warp, Color Harmonization
 scipy>=1.11.0  # TPS Warp
+mediapipe>=0.10.0  # 얼굴 감지 (체형 생성 기능)
+insightface>=0.7.3  # 페이스스왑 (InsightFace + INSwapper)
+onnxruntime>=1.16.0  # InsightFace 의존성
