@@ -144,7 +144,9 @@ async def get_admin_logs(
                         idx as id,
                         model,
                         run_time,
-                        result_url
+                        result_url,
+                        person_url,
+                        dress_url
                     FROM result_logs
                     {where_clause}
                     ORDER BY idx DESC

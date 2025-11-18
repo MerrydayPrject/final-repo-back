@@ -99,6 +99,16 @@ async def dress_manage_page(request: Request):
     return templates.TemplateResponse("dress_manage.html", {"request": request})
 
 
+@router.get("/document-logs", response_class=HTMLResponse, tags=["관리자"])
+async def document_logs_page(request: Request):
+    """
+    문서용로그 페이지
+    
+    합성 결과를 이미지로 확인할 수 있는 문서용 로그 페이지
+    """
+    return templates.TemplateResponse("document_logs.html", {"request": request})
+
+
 @router.get("/favicon.ico")
 async def favicon():
     """파비콘 제공"""
