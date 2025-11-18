@@ -230,10 +230,17 @@ async def get_body_analysis_log_detail(log_id: int):
                         "message": f"로그 ID {log_id}를 찾을 수 없습니다."
                     }, status_code=404)
                 
+                # 안전하게 필드 접근
+                created_at = log.get('created_at')
+                if created_at and hasattr(created_at, 'isoformat'):
+                    created_at = created_at.isoformat()
+                elif created_at:
+                    created_at = str(created_at)
+                
                 return JSONResponse({
                     "success": True,
                     "data": {
-                        "id": log['idx'],
+                        "id": log.get('idx'),
                         "model": log.get('model', 'body_analysis'),
                         "processing_time": f"{log.get('run_time', 0):.2f}초",
                         "height": log.get('height'),
@@ -241,7 +248,8 @@ async def get_body_analysis_log_detail(log_id: int):
                         "bmi": log.get('bmi'),
                         "characteristic": log.get('characteristic'),
                         "analysis_results": log.get('analysis_results'),
-                        "created_at": log.get('created_at')
+                        "prompt": log.get('prompt'),
+                        "created_at": created_at
                     }
                 })
         finally:

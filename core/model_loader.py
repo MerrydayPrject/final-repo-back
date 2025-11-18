@@ -169,3 +169,7 @@ def get_body_analysis_service():
     """전역 body_analysis_service 반환"""
     return body_analysis_service
 
+
+def get_segformer_model():
+    """전역 SegFormer 모델과 프로세서 반환 (튜플)"""
+    return model, processor

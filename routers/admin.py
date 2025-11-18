@@ -201,37 +201,21 @@ async def get_admin_log_detail(log_id: int):
         
         try:
             with connection.cursor() as cursor:
-                # created_at 필드 포함해서 쿼리 시도 (없으면 제외)
-                try:
-                    cursor.execute("""
-                        SELECT 
-                            idx as id,
-                            person_url,
-                            dress_url,
-                            result_url,
-                            model,
-                            prompt,
-                            success,
-                            run_time,
-                            created_at
-                        FROM result_logs
-                        WHERE idx = %s
-                    """, (log_id,))
-                except Exception:
-                    # created_at 필드가 없으면 제외하고 조회
-                    cursor.execute("""
-                        SELECT 
-                            idx as id,
-                            person_url,
-                            dress_url,
-                            result_url,
-                            model,
-                            prompt,
-                            success,
-                            run_time
-                        FROM result_logs
-                        WHERE idx = %s
-                    """, (log_id,))
+                # 모든 필드 조회 (created_at은 선택적)
+                cursor.execute("""
+                    SELECT 
+                        idx as id,
+                        person_url,
+                        dress_url,
+                        result_url,
+                        model,
+                        prompt,
+                        success,
+                        run_time,
+                        created_at
+                    FROM result_logs
+                    WHERE idx = %s
+                """, (log_id,))
                 
                 log = cursor.fetchone()
                 
@@ -242,10 +226,17 @@ async def get_admin_log_detail(log_id: int):
                         "message": f"로그 ID {log_id}를 찾을 수 없습니다."
                     }, status_code=404)
                 
+                # 안전하게 필드 접근
+                created_at = log.get('created_at')
+                if created_at and hasattr(created_at, 'isoformat'):
+                    created_at = created_at.isoformat()
+                elif created_at:
+                    created_at = str(created_at)
+                
                 return JSONResponse({
                     "success": True,
                     "data": {
-                        "id": log['id'],
+                        "id": log.get('id') or log.get('idx'),
                         "person_url": log.get('person_url'),
                         "dress_url": log.get('dress_url'),
                         "result_url": log.get('result_url'),
@@ -253,7 +244,7 @@ async def get_admin_log_detail(log_id: int):
                         "prompt": log.get('prompt'),
                         "success": log.get('success'),
                         "processing_time": f"{log.get('run_time', 0):.2f}초",
-                        "created_at": log.get('created_at')
+                        "created_at": created_at
                     }
                 })
         finally:

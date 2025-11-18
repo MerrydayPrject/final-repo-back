@@ -35,6 +35,16 @@ async def body_analysis_page(request: Request):
     return templates.TemplateResponse("body_analysis.html", {"request": request})
 
 
+@router.get("/body-generation", response_class=HTMLResponse, tags=["Web Interface"])
+async def body_generation_page(request: Request):
+    """
+    체형 생성 웹 페이지
+    
+    얼굴이 포함된 이미지에서 얼굴+목을 보존하고 기본 체형을 생성하여 전신 이미지로 변환하는 페이지
+    """
+    return templates.TemplateResponse("body_generation.html", {"request": request})
+
+
 @router.get("/gemini-test", response_class=HTMLResponse, tags=["Web Interface"])
 async def gemini_test_page(request: Request):
     """
