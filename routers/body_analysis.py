@@ -112,8 +112,6 @@ async def analyze_body(
             "success": True,
             "body_analysis": {
                 "body_type": body_type.get('type', 'unknown'),
-                "bmi": bmi,
-                "height": height,
                 "body_features": body_features,
                 "measurements": measurements
             },

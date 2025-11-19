@@ -481,6 +481,40 @@ body {
     font-weight: 600;
 }
 
+/* 형광펜 하이라이트 - 노란색 통일, 중간 강조 */
+.highlight {
+    background: linear-gradient(120deg, rgba(255, 235, 59, 0.5) 0%, rgba(255, 235, 59, 0.5) 100%);
+    background-repeat: no-repeat;
+    background-size: 100% 0.6em;
+    background-position: 0 85%;
+    padding: 1px 3px;
+    font-weight: 500;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+
+.highlight-positive {
+    background: linear-gradient(120deg, rgba(255, 235, 59, 0.5) 0%, rgba(255, 235, 59, 0.5) 100%);
+    background-repeat: no-repeat;
+    background-size: 100% 0.6em;
+    background-position: 0 85%;
+    padding: 1px 3px;
+    font-weight: 500;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+
+.highlight-style {
+    background: linear-gradient(120deg, rgba(255, 235, 59, 0.5) 0%, rgba(255, 235, 59, 0.5) 100%);
+    background-repeat: no-repeat;
+    background-size: 100% 0.6em;
+    background-position: 0 85%;
+    padding: 1px 3px;
+    font-weight: 500;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+
 /* 빈 줄 제거 */
 .analysis-text p:empty {
     display: none;
