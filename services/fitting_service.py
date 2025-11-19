@@ -14,6 +14,8 @@ from core.segformer_person_parser import parse_person_image
 from core.segformer_garment_parser import parse_garment_image
 from core.xai_client import generate_prompt_from_images
 from core.s3_client import upload_log_to_s3
+from core.face.face_pipeline import preserve_face_pipeline
+from core.preprocess.background_cleaner import remove_background
 from services.image_service import preprocess_dress_image
 from services.log_service import save_test_log
 from config.settings import GEMINI_FLASH_MODEL, XAI_PROMPT_MODEL
@@ -397,6 +399,18 @@ def compose_v2_5(
         if base_img.size != person_size:
             base_img = base_img.resize(person_size, Image.Resampling.LANCZOS)
         
+        # 투명 베이스 이미지 생성 (Background Lock용)
+        print("\n" + "="*80)
+        print("[BG] 투명 베이스 이미지 생성 시작")
+        print("="*80)
+        if use_person_preprocess and parsing_mask is not None:
+            transparent_base_img = remove_background(base_img, parsing_mask)
+            print(f"[BG] 투명 베이스 이미지 생성 완료: {transparent_base_img.size[0]}x{transparent_base_img.size[1]} (RGBA)")
+        else:
+            # use_person_preprocess가 False인 경우, base_img를 RGBA로 변환 (fallback)
+            print("[BG] use_person_preprocess=False 또는 parsing_mask 없음 - base_img를 RGBA로 변환")
+            transparent_base_img = base_img.convert("RGBA")
+        
         # 배경 이미지는 원본 그대로 유지
         background_img_processed = background_img
         background_size = background_img.size
@@ -491,27 +505,41 @@ def compose_v2_5(
         print(used_prompt)
         print("="*80 + "\n")
         
-        # 배경 관련 지시사항을 프롬프트에 추가
-        enhanced_prompt = f"""IDENTITY PRESERVATION RULES:
-- The person in Image 1 must remain the same individual.
-- Do NOT modify the person's face, identity, head shape, or expression.
-- NEVER generate a new face.
+        # Identity Lock 규칙
+        identity_lock_rules = """IDENTITY RULES:
+Use the exact same face as Image 1.
+Do not change facial identity, structure, or expression.
+No beautification. No relighting on the face."""
 
-{used_prompt}
+        # Background Lock 규칙 추가
+        background_lock_rules = """BACKGROUND RULES:
+Use Image 3 exactly as the final background.
+Replace the ENTIRE background of Image 1 with Image 3.
+Do NOT keep any pixel of the original background from Image 1.
+Do NOT retain sky, floor, walls, plants, or any part of the old scene.
+Only Image 3 must appear as the final background."""
 
-BACKGROUND RULES:
-1. Do NOT modify the background image (Image 3).
-2. Do NOT stretch, crop, distort, or resize the background.
-3. Insert the person naturally into the background.
-4. Match lighting and perspective.
-5. Do NOT modify the face.
-6. Only apply the outfit and integrate with shadows."""
+        # 프롬프트 조합
+        enhanced_prompt = f"""{identity_lock_rules}
+
+{background_lock_rules}
+
+{used_prompt}"""
         
-        # Gemini API 호출 (base_img(Image 1), garment_only(Image 2), background(Image 3), text 순서)
+        print("[Prompt] Background-Lock + Identity-Lock rules injected")
+        
+        # Gemini API 호출
+        # 이미지 순서: transparent_base_img (Image 1), garment_only (Image 2), background_img (Image 3)
         try:
+            gemini_images = [transparent_base_img, garment_only_img, background_img_processed]
+            print("\n[Stage5] Gemini Inputs:")
+            print("  - transparent_base_img: OK (Image 1, RGBA)")
+            print("  - garment_only_img: OK (Image 2)")
+            print("  - background_img: OK (Image 3)")
+            
             response = client.models.generate_content(
                 model=GEMINI_FLASH_MODEL,
-                contents=[base_img, garment_only_img, background_img_processed, enhanced_prompt]
+                contents=gemini_images + [enhanced_prompt]
             )
         except Exception as exc:
             run_time = time.time() - start_time
@@ -637,18 +665,26 @@ BACKGROUND RULES:
                 "error": "no_image_generated"
             }
         
-        # 5. Gemini 생성 이미지에 face_patch 합성 및 경계 블렌딩
-        generated_img = Image.open(io.BytesIO(image_parts[0]))
+        # 5. Stage 6: Identity Lock 방식 - 얼굴 추출/정렬/블렌딩 없이 Gemini 출력을 그대로 사용
+        print("\n" + "="*80)
+        print("NEW STAGE 6: No Face Extract / No Alignment / No Blending")
+        print("="*80)
+        print("• 얼굴 추출 X")
+        print("• 얼굴 패치 X")
+        print("• 색보정 X")
+        print("• 이미지 합성 뒤 얼굴 복원 X")
+        print("")
+        print("→ 투명 베이스 이미지로 배경 완전 교체")
+        print("→ Prompt에 \"Identity Lock Rules\" 자동 삽입")
+        print("→ Prompt에 \"Background Lock Rules\" 자동 삽입")
+        print("")
+        print("결과: 얼굴이 절대 바뀌지 않고 배경이 완전히 교체된 자연스러운 Try-On")
+        print("="*80)
         
-        if use_person_preprocess and face_patch is not None and face_mask_array is not None:
-            print("\n" + "="*80)
-            print("face_patch 합성 및 경계 블렌딩 시작")
-            print("="*80)
-            
-            final_img = blend_face_patch(generated_img, face_patch, face_mask_array)
-            print("face_patch 합성 및 경계 블렌딩 완료")
-        else:
-            final_img = generated_img
+        # Gemini 출력을 그대로 최종 결과로 사용
+        final_img = Image.open(io.BytesIO(image_parts[0]))
+        print("[FacePreserve] Using Identity Lock (no face extraction)")
+        print("[FacePreserve] Gemini 출력을 최종 결과로 사용 (Identity Lock + Background Lock)")
         
         # 6. 결과 이미지 처리 및 S3 업로드
         result_image_base64 = base64.b64encode(image_parts[0]).decode()
