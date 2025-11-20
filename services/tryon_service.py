@@ -1193,3 +1193,729 @@ BACKGROUND RULES:
             "llm": f"segformer-b2-parsing+{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
             "error": str(e)
         }
+
+
+# ============================================================
+# V3 파이프라인 헬퍼 함수
+# ============================================================
+
+def decode_base64_to_image(image_data: bytes) -> Image.Image:
+    """
+    Gemini API 응답에서 이미지 데이터를 추출하여 PIL Image로 변환합니다.
+    
+    Args:
+        image_data: Gemini API 응답의 이미지 바이너리 데이터
+    
+    Returns:
+        Image.Image: 변환된 PIL Image
+    """
+    return Image.open(io.BytesIO(image_data))
+
+
+def load_v3_stage2_prompt(xai_prompt: str) -> str:
+    """
+    V3 Stage 2 프롬프트 템플릿을 로드하고,
+    상단에는 강한 규칙(template),
+    하단에는 X.AI가 생성한 분석 프롬프트(used_prompt)를
+    '추가 컨텍스트'로 붙여준다.
+    템플릿의 RULES가 항상 우선이며, X.AI 문장은 규칙을 보완하는 설명 역할만 한다.
+    
+    Args:
+        xai_prompt: X.AI가 생성한 프롬프트
+    
+    Returns:
+        str: Stage 2 프롬프트 (템플릿 + X.AI 분석)
+    """
+    prompt_path = os.path.join(
+        os.path.dirname(__file__), "..", "prompts", "v3", "prompt_stage2_outfit.txt"
+    )
+
+    try:
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            template = f.read().strip()
+
+        combined = (
+            template
+            + "\n\nCONTEXT FROM X.AI ANALYSIS (DO NOT OVERRIDE RULES ABOVE):\n"
+            + xai_prompt
+        )
+
+        return combined
+
+    except FileNotFoundError:
+        print(f"[V3] WARNING: Stage 2 프롬프트 템플릿을 찾을 수 없습니다: {prompt_path}")
+        # Fallback: 기본 프롬프트 반환
+        return f"""STAGE 2 — STRICT OUTFIT REPLACEMENT
+THIS STAGE MUST REMOVE THE ORIGINAL OUTFIT COMPLETELY.
+THIS STAGE MUST APPLY THE OUTFIT FROM IMAGE 2 EXACTLY.
+
+DO NOT MODIFY:
+- face
+- head shape
+- expression
+- hairstyle
+- body shape
+- pose
+- background
+- lighting
+
+TASK (MUST FOLLOW):
+Replace ALL of the person's original clothing with the outfit from Image 2.
+The original clothing MUST NOT appear in the final image.
+
+CONTEXT FROM X.AI ANALYSIS (DO NOT OVERRIDE RULES ABOVE):
+{xai_prompt}"""
+    except Exception as e:
+        print(f"[V3] ERROR: Stage 2 프롬프트 로드 실패: {e}")
+        return f"""STAGE 2 — STRICT OUTFIT REPLACEMENT
+Replace the person's outfit from Image 2. Keep face unchanged.
+
+CONTEXT FROM X.AI ANALYSIS (DO NOT OVERRIDE RULES ABOVE):
+{xai_prompt}"""
+
+
+def load_v3_stage3_prompt() -> str:
+    """
+    V3 Stage 3 프롬프트 템플릿을 로드합니다.
+    
+    Returns:
+        str: Stage 3 프롬프트
+    """
+    prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "v3", "prompt_stage3_background_lighting.txt")
+    
+    try:
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"[V3] WARNING: Stage 3 프롬프트 템플릿을 찾을 수 없습니다: {prompt_path}")
+        # Fallback: 기본 프롬프트 반환
+        return """LIGHTING CORRECTION STAGE — DO NOT CHANGE IDENTITY OR OUTFIT
+
+Adjust lighting, shadows, and color grading of the subject to match the background.
+Do NOT alter the face or outfit.
+
+IDENTITY RULES (NEVER BREAK):
+- Do NOT change face shape, skin texture, expression, or identity.
+- Preserve the exact face from Stage 2.
+
+OUTFIT RULES:
+- Do NOT alter outfit design, texture, color, length, material, or silhouette.
+
+LIGHTING MATCHING REQUIREMENTS:
+- Match global illumination to background.
+- Adjust brightness, shadow falloff, and rimlight direction.
+- Match color temperature (warm/cool) to environment."""
+    except Exception as e:
+        print(f"[V3] ERROR: Stage 3 프롬프트 로드 실패: {e}")
+        return "Adjust lighting to match background. Keep face and outfit unchanged."
+
+
+# ============================================================
+# V3 파이프라인 메인 함수
+# ============================================================
+
+def generate_unified_tryon_v3(
+    person_img: Image.Image,
+    garment_img: Image.Image,
+    background_img: Image.Image,
+    model_id: str = "xai-gemini-unified-v3"
+) -> Dict:
+    """
+    통합 트라이온 파이프라인 V3: 2단계 Gemini 플로우
+    - Stage 1: X.AI 프롬프트 생성 (V2와 동일)
+    - Stage 2: Gemini로 의상 교체만 수행 (person + garment_only)
+    - Stage 3: Gemini로 배경 합성 + 조명 보정 (dressed_person + background)
+    
+    Args:
+        person_img: 사람 이미지 (PIL Image)
+        garment_img: 의상 이미지 (PIL Image) - SegFormer B2 Parsing 대상
+        background_img: 배경 이미지 (PIL Image)
+        model_id: 모델 ID (기본값: "xai-gemini-unified-v3")
+    
+    Returns:
+        dict: {
+            "success": bool,
+            "prompt": str,
+            "result_image": str (base64),
+            "message": str,
+            "llm": str,
+            "error": Optional[str]
+        }
+    """
+    start_time = time.time()
+    person_s3_url = ""
+    garment_s3_url = ""
+    garment_only_s3_url = ""
+    background_s3_url = ""
+    stage2_result_s3_url = ""
+    result_s3_url = ""
+    used_prompt = ""
+    
+    try:
+        # ============================================================
+        # Stage 1: 의상 이미지 전처리 및 SegFormer B2 Garment Parsing
+        # ============================================================
+        print("\n" + "="*80)
+        print("V3 파이프라인 시작")
+        print("="*80)
+        
+        print("\n[Stage 1] 의상 이미지 전처리 시작...")
+        garment_img_processed = preprocess_dress_image(garment_img, target_size=1024)
+        print("[Stage 1] 의상 이미지 전처리 완료")
+        
+        print("\n[Stage 1] SegFormer B2 Garment Parsing 시작...")
+        parsing_result = parse_garment_image(garment_img_processed)
+        
+        if not parsing_result.get("success"):
+            error_msg = parsing_result.get("message", "SegFormer B2 Garment Parsing에 실패했습니다.")
+            run_time = time.time() - start_time
+            
+            person_buffered = io.BytesIO()
+            person_img.save(person_buffered, format="PNG")
+            person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+            
+            garment_buffered = io.BytesIO()
+            garment_img_processed.save(garment_buffered, format="PNG")
+            garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt="",
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": "",
+                "result_image": "",
+                "message": error_msg,
+                "llm": "segformer-b2-parsing",
+                "error": parsing_result.get("error", "segformer_parsing_failed")
+            }
+        
+        garment_only_img = parsing_result.get("garment_only")
+        if not garment_only_img:
+            error_msg = "garment_only 이미지를 추출할 수 없습니다."
+            run_time = time.time() - start_time
+            
+            person_buffered = io.BytesIO()
+            person_img.save(person_buffered, format="PNG")
+            person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+            
+            garment_buffered = io.BytesIO()
+            garment_img_processed.save(garment_buffered, format="PNG")
+            garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt="",
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": "",
+                "result_image": "",
+                "message": error_msg,
+                "llm": "segformer-b2-parsing",
+                "error": "garment_only_extraction_failed"
+            }
+        
+        print("[Stage 1] SegFormer B2 Garment Parsing 완료 - garment_only 이미지 추출 성공")
+        
+        # 원본 인물 이미지 크기 저장
+        person_size = person_img.size
+        print(f"[Stage 1] 인물 이미지 크기: {person_size[0]}x{person_size[1]}")
+        
+        # garment_only 이미지를 인물 이미지 크기로 조정
+        print(f"[Stage 1] garment_only 이미지를 인물 크기({person_size[0]}x{person_size[1]})로 조정...")
+        garment_only_img = garment_only_img.resize(person_size, Image.Resampling.LANCZOS)
+        print(f"[Stage 1] garment_only 이미지 크기 조정 완료: {garment_only_img.size[0]}x{garment_only_img.size[1]}")
+        
+        # 배경 이미지를 인물 이미지 높이에 맞게 리사이즈하여
+        # 스케일과 렌즈 느낌을 맞춰준다.
+        # (배경: 인물 높이의 약 1.8배로 설정, 필요시 1.5~2.0 사이로 조정 가능)
+        person_w, person_h = person_img.size
+        target_bg_h = int(person_h * 1.8)
+        scale = target_bg_h / background_img.height
+        target_bg_w = int(background_img.width * scale)
+
+        background_img_processed = background_img.resize(
+            (target_bg_w, target_bg_h),
+            Image.Resampling.LANCZOS
+        )
+
+        print(f"[Stage 1] 배경 이미지 리사이즈: {target_bg_w}x{target_bg_h} (인물 비율에 맞춤)")
+        
+        # S3에 입력 이미지 업로드
+        person_buffered = io.BytesIO()
+        person_img.save(person_buffered, format="PNG")
+        person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+        
+        garment_buffered = io.BytesIO()
+        garment_img_processed.save(garment_buffered, format="PNG")
+        garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
+        
+        garment_only_buffered = io.BytesIO()
+        garment_only_img.save(garment_only_buffered, format="PNG")
+        garment_only_s3_url = upload_log_to_s3(garment_only_buffered.getvalue(), model_id, "garment_only") or ""
+        
+        background_buffered = io.BytesIO()
+        background_img_processed.save(background_buffered, format="PNG")
+        background_s3_url = upload_log_to_s3(background_buffered.getvalue(), model_id, "background") or ""
+        
+        # ============================================================
+        # Stage 1: X.AI 프롬프트 생성
+        # ============================================================
+        print("\n" + "="*80)
+        print("[Stage 1] X.AI 프롬프트 생성 시작 (V3: garment_only 이미지 사용)")
+        print("="*80)
+        
+        xai_result = generate_prompt_from_images(person_img, garment_only_img)
+        
+        if not xai_result.get("success"):
+            error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt="",
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": "",
+                "result_image": "",
+                "message": error_msg,
+                "llm": XAI_PROMPT_MODEL,
+                "error": xai_result.get("error", "xai_prompt_generation_failed")
+            }
+        
+        used_prompt = xai_result.get("prompt", "")
+        print("\n[Stage 1] 생성된 프롬프트:")
+        print("-"*80)
+        print(used_prompt)
+        print("="*80 + "\n")
+        
+        # ============================================================
+        # Stage 2: Gemini로 의상 교체만 수행
+        # ============================================================
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            error_msg = ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "gemini_api_key_not_found"
+            }
+        
+        client = genai.Client(api_key=api_key)
+        
+        print("\n" + "="*80)
+        print("[Stage 2] Gemini 2.5 Flash - 의상 교체만 수행")
+        print("="*80)
+        
+        # Stage 2 프롬프트 로드
+        stage2_prompt = load_v3_stage2_prompt(used_prompt)
+        
+        print("[Stage 2] 프롬프트:")
+        print("-"*80)
+        print(stage2_prompt)
+        print("="*80 + "\n")
+        
+        print("[Stage 2] Gemini API 호출 시작...")
+        print(f"[Stage 2] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_only_img ({garment_only_img.size[0]}x{garment_only_img.size[1]})")
+        stage2_start_time = time.time()
+        
+        try:
+            stage2_response = client.models.generate_content(
+                model=GEMINI_FLASH_MODEL,
+                contents=[person_img, garment_only_img, stage2_prompt]
+            )
+        except Exception as exc:
+            run_time = time.time() - start_time
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            print(f"[Stage 2] Gemini API 호출 실패: {exc}")
+            traceback.print_exc()
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": f"Stage 2 Gemini 호출에 실패했습니다: {str(exc)}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage2_gemini_call_failed"
+            }
+        
+        stage2_latency = time.time() - stage2_start_time
+        print(f"[Stage 2] Gemini API 응답 수신 완료 (지연 시간: {stage2_latency:.2f}초)")
+        
+        # Stage 2 응답 확인 및 이미지 추출
+        if not stage2_response.candidates or len(stage2_response.candidates) == 0:
+            error_msg = "Stage 2: Gemini API가 응답을 생성하지 못했습니다."
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage2_no_response"
+            }
+        
+        stage2_candidate = stage2_response.candidates[0]
+        if not hasattr(stage2_candidate, 'content') or stage2_candidate.content is None:
+            error_msg = "Stage 2: Gemini API 응답에 content가 없습니다."
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage2_no_content"
+            }
+        
+        if not hasattr(stage2_candidate.content, 'parts') or stage2_candidate.content.parts is None:
+            error_msg = "Stage 2: Gemini API 응답에 parts가 없습니다."
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage2_no_parts"
+            }
+        
+        # Stage 2 이미지 추출
+        stage2_image_parts = [
+            part.inline_data.data
+            for part in stage2_candidate.content.parts
+            if hasattr(part, 'inline_data') and part.inline_data
+        ]
+        
+        if not stage2_image_parts:
+            error_msg = "Stage 2: Gemini API가 이미지를 생성하지 못했습니다."
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage2_no_image_generated"
+            }
+        
+        # Stage 2 결과 이미지 변환
+        dressed_person_img = decode_base64_to_image(stage2_image_parts[0])
+        print(f"[Stage 2] 의상 교체 완료 - 이미지 크기: {dressed_person_img.size[0]}x{dressed_person_img.size[1]}")
+        
+        # Stage 2 결과 S3 업로드
+        stage2_buffered = io.BytesIO()
+        dressed_person_img.save(stage2_buffered, format="PNG")
+        stage2_result_s3_url = upload_log_to_s3(stage2_buffered.getvalue(), model_id, "stage2_result") or ""
+        
+        # ============================================================
+        # Stage 3: Gemini로 배경 합성 + 조명 보정
+        # ============================================================
+        print("\n" + "="*80)
+        print("[Stage 3] Gemini 2.5 Flash - 배경 합성 + 조명 보정")
+        print("="*80)
+        
+        # Stage 3 프롬프트 로드
+        stage3_prompt = load_v3_stage3_prompt()
+        
+        print("[Stage 3] 프롬프트:")
+        print("-"*80)
+        print(stage3_prompt)
+        print("="*80 + "\n")
+        
+        print("[Stage 3] Gemini API 호출 시작...")
+        print(f"[Stage 3] 입력 이미지: dressed_person_img ({dressed_person_img.size[0]}x{dressed_person_img.size[1]}), background_img ({background_img_processed.size[0]}x{background_img_processed.size[1]})")
+        stage3_start_time = time.time()
+        
+        try:
+            stage3_response = client.models.generate_content(
+                model=GEMINI_FLASH_MODEL,
+                contents=[dressed_person_img, background_img_processed, stage3_prompt]
+            )
+        except Exception as exc:
+            run_time = time.time() - start_time
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            print(f"[Stage 3] Gemini API 호출 실패: {exc}")
+            traceback.print_exc()
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": f"Stage 3 Gemini 호출에 실패했습니다: {str(exc)}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage3_gemini_call_failed"
+            }
+        
+        stage3_latency = time.time() - stage3_start_time
+        print(f"[Stage 3] Gemini API 응답 수신 완료 (지연 시간: {stage3_latency:.2f}초)")
+        
+        # Stage 3 응답 확인 및 이미지 추출
+        if not stage3_response.candidates or len(stage3_response.candidates) == 0:
+            error_msg = "Stage 3: Gemini API가 응답을 생성하지 못했습니다."
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage3_no_response"
+            }
+        
+        stage3_candidate = stage3_response.candidates[0]
+        if not hasattr(stage3_candidate, 'content') or stage3_candidate.content is None:
+            error_msg = "Stage 3: Gemini API 응답에 content가 없습니다."
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage3_no_content"
+            }
+        
+        if not hasattr(stage3_candidate.content, 'parts') or stage3_candidate.content.parts is None:
+            error_msg = "Stage 3: Gemini API 응답에 parts가 없습니다."
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage3_no_parts"
+            }
+        
+        # Stage 3 이미지 추출
+        stage3_image_parts = [
+            part.inline_data.data
+            for part in stage3_candidate.content.parts
+            if hasattr(part, 'inline_data') and part.inline_data
+        ]
+        
+        if not stage3_image_parts:
+            error_msg = "Stage 3: Gemini API가 이미지를 생성하지 못했습니다."
+            run_time = time.time() - start_time
+            
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url="",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "error": "stage3_no_image_generated"
+            }
+        
+        # Stage 3 결과 이미지 변환
+        final_img = decode_base64_to_image(stage3_image_parts[0])
+        print(f"[Stage 3] 배경 합성 + 조명 보정 완료 - 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
+        
+        # ============================================================
+        # 최종 결과 처리 및 S3 업로드
+        # ============================================================
+        result_image_base64 = base64.b64encode(stage3_image_parts[0]).decode()
+        
+        result_buffered = io.BytesIO()
+        final_img.save(result_buffered, format="PNG")
+        result_s3_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
+        
+        run_time = time.time() - start_time
+        
+        print("\n" + "="*80)
+        print("[V3] 파이프라인 완료")
+        print("="*80)
+        print(f"전체 실행 시간: {run_time:.2f}초")
+        print(f"Stage 2 지연 시간: {stage2_latency:.2f}초")
+        print(f"Stage 3 지연 시간: {stage3_latency:.2f}초")
+        print(f"최종 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
+        print("="*80 + "\n")
+        
+        # 성공 로그 저장
+        save_test_log(
+            person_url=person_s3_url or "",
+            dress_url=garment_s3_url or None,
+            result_url=result_s3_url or "",
+            model=model_id,
+            prompt=used_prompt,
+            success=True,
+            run_time=run_time
+        )
+        
+        return {
+            "success": True,
+            "prompt": used_prompt,
+            "result_image": f"data:image/png;base64,{result_image_base64}",
+            "message": "통합 트라이온 파이프라인 V3가 성공적으로 완료되었습니다.",
+            "llm": f"segformer-b2-parsing+{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}+{GEMINI_FLASH_MODEL}"
+        }
+        
+    except Exception as e:
+        error_detail = traceback.format_exc()
+        run_time = time.time() - start_time
+        
+        # 오류 로그 저장
+        try:
+            save_test_log(
+                person_url=person_s3_url or "",
+                dress_url=garment_s3_url or None,
+                result_url=result_s3_url or "",
+                model=model_id,
+                prompt=used_prompt,
+                success=False,
+                run_time=run_time
+            )
+        except:
+            pass  # 로그 저장 실패해도 계속 진행
+        
+        print(f"통합 트라이온 파이프라인 V3 오류: {e}")
+        traceback.print_exc()
+        
+        return {
+            "success": False,
+            "prompt": used_prompt,
+            "result_image": "",
+            "message": f"통합 트라이온 파이프라인 V3 중 오류 발생: {str(e)}",
+            "llm": f"segformer-b2-parsing+{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}+{GEMINI_FLASH_MODEL}",
+            "error": str(e)
+        }
