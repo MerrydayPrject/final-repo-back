@@ -1,13 +1,19 @@
-"""FastAPI 메인 애플리케이션"""
+# main.py
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pathlib import Path
 import importlib
+import logging
+from pathlib import Path
 
 from config.cors import CORS_ORIGINS, CORS_CREDENTIALS, CORS_METHODS, CORS_HEADERS
-from core.model_loader import load_models  # startup용 비동기 모델 로드
+from core.model_loader import load_all_models  # 모델 로딩 함수 import
+
+# 로깅 설정
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # 디렉토리 생성
 Path("static").mkdir(exist_ok=True)
@@ -63,8 +69,11 @@ app.include_router(generation.router)
 
 # Startup 이벤트
 @app.on_event("startup")
-async def startup_event():
-    """애플리케이션 시작 시 모델 로드"""
-    print("애플리케이션 시작 - 모델 로딩 중...")
-    await load_models()  # 비동기 모델 로드 호출
-    print("모든 모델 로딩 완료!")
+def startup_event():  # async와 await 제거
+    """서버 시작 시 모든 모델을 동기적으로 로드합니다."""
+    logger.info("서버 시작, 모든 모델 로딩 시작...")
+    try:
+        load_all_models()  # await를 제거하여 일반 함수로 호출
+        logger.info("모든 모델 로딩 완료.")
+    except Exception as e:
+        logger.error(f"모델 로딩 중 치명적인 오류 발생: {e}", exc_info=True)

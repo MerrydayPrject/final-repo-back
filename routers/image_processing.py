@@ -11,9 +11,9 @@ from PIL import Image
 import torch
 import torch.nn as nn
 
+# 사용되지 않는 get_segformer_b2_processor와 get_segformer_b2_model 임포트 제거
 from core.model_loader import (
-    get_realesrgan_model, get_sdxl_pipeline, get_rtmpose_model,
-    get_segformer_b2_processor, get_segformer_b2_model
+    load_realesrgan_model, get_sdxl_pipeline, get_rtmpose_model
 )
 from core.xai_client import generate_image_from_text
 from config.settings import GEMINI_FLASH_MODEL
@@ -38,7 +38,7 @@ async def upscale_image(
         import cv2
         
         # Real-ESRGAN 모델 lazy loading
-        realesrgan_model = get_realesrgan_model()
+        realesrgan_model = load_realesrgan_model()
         
         if realesrgan_model is None:
             try:
@@ -633,4 +633,3 @@ async def pose_estimation(file: UploadFile = File(..., description="포즈 인�
             "error": str(e),
             "message": f"처리 중 오류 발생: {str(e)}"
         }, status_code=500)
-

@@ -2,6 +2,7 @@
 import cv2
 import numpy as np
 from PIL import Image
+import mediapipe as mp
 from core.model_loader import get_mediapipe_pose
 
 async def extract_pose_from_image(image_file):
@@ -31,7 +32,7 @@ async def extract_pose_from_image(image_file):
         drawing_utils.draw_landmarks(
             annotated_image,
             results.pose_landmarks,
-            drawing_utils.solutions.pose.POSE_CONNECTIONS,
+            mp.solutions.pose.POSE_CONNECTIONS,
             landmark_drawing_spec=drawing_utils.DrawingSpec(color=(255,255,0), thickness=2, circle_radius=2),
             connection_drawing_spec=drawing_utils.DrawingSpec(color=(0,255,0), thickness=2, circle_radius=2)
         )

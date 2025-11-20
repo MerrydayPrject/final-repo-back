@@ -12,11 +12,20 @@ from urllib.parse import urlparse
 import requests
 import boto3
 from botocore.exceptions import ClientError
-from google import genai
+from google.genai  import Client
 
 from core.llm_clients import generate_custom_prompt_from_images
 from core.s3_client import upload_log_to_s3
-from core.model_loader import _load_segformer_b2_models, _load_rtmpose_model, _load_realesrgan_model
+# routers/composition.py
+
+from core.model_loader import (
+    load_segformer_b2_models,
+    load_rtmpose_model,
+    load_realesrgan_model
+)
+
+# 그 외 코드...
+
 from services.image_service import preprocess_dress_image
 from services.log_service import save_test_log
 from config.settings import GEMINI_FLASH_MODEL

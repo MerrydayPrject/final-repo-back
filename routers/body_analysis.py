@@ -6,7 +6,7 @@ from fastapi import APIRouter, File, UploadFile, Form, Query
 from fastapi.responses import JSONResponse
 from PIL import Image
 
-from core.model_loader import get_body_analysis_service
+from core.model_loader import load_body_analysis_service
 from services.body_service import determine_body_features, analyze_body_with_gemini
 from services.database import get_db_connection
 from body_analysis_test.database import save_body_analysis_result, get_body_logs, get_body_logs_count
@@ -30,7 +30,7 @@ async def analyze_body(
     
     try:
         # 체형 분석 서비스 확인
-        body_analysis_service = get_body_analysis_service()
+        body_analysis_service = load_body_analysis_service()
         if not body_analysis_service or not body_analysis_service.is_initialized:
             return JSONResponse({
                 "success": False,

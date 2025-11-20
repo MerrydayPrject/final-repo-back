@@ -1,4 +1,3 @@
-"""웹 인터페이스 라우터"""
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
@@ -27,7 +26,6 @@ async def vton_test_page(request: Request):
     """
     return templates.TemplateResponse("vton_test.html", {"request": request})
 # <<< 추가된 부분 끝 >>>
-
 
 @router.get("/nukki", response_class=HTMLResponse, tags=["Web Interface"])
 async def nukki_service(request: Request):

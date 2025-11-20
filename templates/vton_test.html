@@ -1,39 +1,49 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VTON 테스트 페이지</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        .container { max-width: 1200px; }
+        .container {
+            max-width: 1200px;
+        }
+
         .grid-container {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 2rem;
             align-items: start;
         }
-        .input-section, .result-section {
+
+        .input-section,
+        .result-section {
             background-color: #f9f9f9;
             padding: 1.5rem;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
+
         .input-group {
             margin-bottom: 1.5rem;
         }
+
         .input-group label {
             display: block;
             margin-bottom: 0.5rem;
             font-weight: bold;
             color: #333;
         }
+
         .input-group input[type="file"] {
             width: 100%;
             padding: 0.5rem;
             border: 1px solid #ccc;
             border-radius: 4px;
         }
+
         .input-group textarea {
             width: 100%;
             min-height: 100px;
@@ -42,6 +52,7 @@
             border-radius: 4px;
             resize: vertical;
         }
+
         button {
             width: 100%;
             padding: 0.75rem;
@@ -53,8 +64,15 @@
             cursor: pointer;
             transition: background-color 0.3s;
         }
-        button:hover { background-color: #0056b3; }
-        .result-image-container { text-align: center; }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .result-image-container {
+            text-align: center;
+        }
+
         .result-image-container img {
             max-width: 100%;
             height: auto;
@@ -62,8 +80,10 @@
             border-radius: 4px;
             margin-top: 1rem;
         }
+
         .loader {
-            display: none; /* 평소에는 숨김 */
+            display: none;
+            /* 평소에는 숨김 */
             margin: 20px auto;
             border: 8px solid #f3f3f3;
             border-radius: 50%;
@@ -72,17 +92,25 @@
             height: 60px;
             animation: spin 2s linear infinite;
         }
+
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>👕 가상 피팅 (VTON) 테스트</h1>
-            <p>인물 이미지와 텍스트 프롬프트를 이용해 새로운 의상을 생성합니다.</p>
+            <h1>🎨 포즈 기반 이미지 생성</h1>
+            <p><strong>원본 인물의 포즈(자세)를 유지</strong>하면서 새로운 스타일의 이미지를 생성합니다.</p>
+            <p style="color: #d63384; margin-top: 0.5rem;">⚠️ 주의: 얼굴, 배경, 피부톤 등이 변경됩니다. 완전히 새로운 이미지가 생성됩니다.</p>
             <a href="/" style="display: inline-block; margin-top: 1rem;">← 테스트 페이지 목록으로 돌아가기</a>
         </header>
 
@@ -94,11 +122,14 @@
                     <div class="input-group">
                         <label for="person-image">인물 이미지 업로드</label>
                         <input type="file" id="person-image" accept="image/*">
-                        <img id="image-preview" src="#" alt="이미지 미리보기" style="max-width: 100%; margin-top: 10px; display: none;">
+                        <img id="image-preview" src="#" alt="이미지 미리보기"
+                            style="max-width: 100%; margin-top: 10px; display: none;">
                     </div>
                     <div class="input-group">
-                        <label for="prompt">의상 프롬프트</label>
-                        <textarea id="prompt" placeholder="예시: a man wearing a blue denim jacket, high quality photo"></textarea>
+                        <label for="prompt">이미지 생성 프롬프트 (체형, 의상, 품질 키워드 포함)</label>
+                        <textarea id="prompt" placeholder="예시: a slim woman wearing elegant white wedding dress, professional photo, high quality
+
+팁: 체형(slim, fit), 의상, 품질(professional, high quality) 키워드를 함께 작성하세요"></textarea>
                     </div>
                     <button id="generate-btn">이미지 생성</button>
                 </section>
@@ -182,4 +213,5 @@
         });
     </script>
 </body>
+
 </html>
