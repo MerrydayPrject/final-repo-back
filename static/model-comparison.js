@@ -61,7 +61,7 @@ function renderModelButtons() {
             <div class="model-button-icon">🎯</div>
             <div class="model-button-content">
                 <h3>XAI + Gemini 2.5 Flash (버전 선택)</h3>
-                <p>V1/V2/V2.5 중 선택하여 실행할 수 있습니다</p>
+                <p>V1/V2/V2.5/V3 중 선택하여 실행할 수 있습니다</p>
                 <span class="model-category">합성</span>
             </div>
             <div style="width: 100%; padding: 0 10px;">
@@ -69,6 +69,7 @@ function renderModelButtons() {
                     <option value="v1">V1 (배경 포함)</option>
                     <option value="v2">V2 (SegFormer B2 Parsing)</option>
                     <option value="v2.5">V2.5 (인물 전처리 + SegFormer B2 Parsing)</option>
+                    <option value="v3">V3 (2단계 Gemini 플로우)</option>
                 </select>
             </div>
             <button class="model-run-btn" onclick="runVersionSelectedFlash()" style="width: calc(100% - 20px); padding: 12px; font-size: 1em; margin: 0 10px;">
@@ -1632,6 +1633,9 @@ function runVersionSelectedFlash() {
     } else if (selectedVersion === 'v2.5') {
         // V2.5 선택: V2.5 전용 모달 호출
         openV25Modal();
+    } else if (selectedVersion === 'v3') {
+        // V3 선택: V3 전용 모달 호출
+        openV3Modal();
     }
 }
 
@@ -2131,5 +2135,246 @@ async function runV25Compose() {
         loadingDiv.style.display = 'none';
         runBtn.disabled = false;
         alert(`V2.5 합성 실행 중 오류 발생: ${error.message}`);
+    }
+}
+
+// V3 모달 열기
+function openV3Modal() {
+    let modal = document.getElementById('modal-v3');
+    
+    if (!modal) {
+        createV3Modal();
+        modal = document.getElementById('modal-v3');
+    }
+    
+    if (modal) {
+        modal.classList.add('show');
+        if (!modelModals['v3']) {
+            modelModals['v3'] = {};
+        }
+    }
+}
+
+// V3 모달 생성
+function createV3Modal() {
+    const container = document.getElementById('model-modals-container');
+    
+    const modalHtml = `
+        <div class="model-modal" id="modal-v3">
+            <div class="model-modal-content">
+                <div class="model-modal-header">
+                    <div class="model-modal-title">
+                        <div class="model-modal-icon">🎯</div>
+                        <div>
+                            <h2>XAI + Gemini 2.5 Flash V3</h2>
+                            <p>2단계 Gemini 플로우: 의상 교체 + 배경 합성 + 조명 보정</p>
+                        </div>
+                    </div>
+                    <button class="model-modal-close" onclick="closeV3Modal()">&times;</button>
+                </div>
+                <div class="model-modal-body">
+                    <div class="model-upload-section">
+                        <div class="model-upload-row">
+                            <div class="model-upload-item">
+                                <label class="model-upload-label">
+                                    <span class="upload-icon">👤</span>
+                                    사람 이미지
+                                </label>
+                                <div class="model-upload-area" id="upload-v3-person">
+                                    <input type="file" id="input-v3-person" accept="image/*" style="display: none;" onchange="handleModelImageUpload(event, 'v3', 'person')">
+                                    <div class="model-upload-content">
+                                        <div class="model-upload-icon">📁</div>
+                                        <p>이미지를 드래그하거나 클릭</p>
+                                        <button class="model-upload-btn" onclick="document.getElementById('input-v3-person').click()">파일 선택</button>
+                                    </div>
+                                    <div class="model-preview-container" id="preview-v3-person" style="display: none;">
+                                        <img id="img-v3-person" alt="Person Preview">
+                                        <button class="model-remove-btn" onclick="removeModelImage('v3', 'person')">&times;</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="model-upload-item">
+                                <label class="model-upload-label">
+                                    <span class="upload-icon">👗</span>
+                                    의상 이미지
+                                </label>
+                                <div class="model-upload-area" id="upload-v3-dress">
+                                    <input type="file" id="input-v3-dress" accept="image/*" style="display: none;" onchange="handleModelImageUpload(event, 'v3', 'dress')">
+                                    <div class="model-upload-content">
+                                        <div class="model-upload-icon">📁</div>
+                                        <p>이미지를 드래그하거나 클릭</p>
+                                        <button class="model-upload-btn" onclick="document.getElementById('input-v3-dress').click()">파일 선택</button>
+                                    </div>
+                                    <div class="model-preview-container" id="preview-v3-dress" style="display: none;">
+                                        <img id="img-v3-dress" alt="Dress Preview">
+                                        <button class="model-remove-btn" onclick="removeModelImage('v3', 'dress')">&times;</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="model-upload-item">
+                                <label class="model-upload-label">
+                                    <span class="upload-icon">🖼️</span>
+                                    배경 이미지
+                                </label>
+                                <div class="model-upload-area" id="upload-v3-background">
+                                    <input type="file" id="input-v3-background" accept="image/*" style="display: none;" onchange="handleModelImageUpload(event, 'v3', 'background')">
+                                    <div class="model-upload-content">
+                                        <div class="model-upload-icon">📁</div>
+                                        <p>이미지를 드래그하거나 클릭</p>
+                                        <button class="model-upload-btn" onclick="document.getElementById('input-v3-background').click()">파일 선택</button>
+                                    </div>
+                                    <div class="model-preview-container" id="preview-v3-background" style="display: none;">
+                                        <img id="img-v3-background" alt="Background Preview">
+                                        <button class="model-remove-btn" onclick="removeModelImage('v3', 'background')">&times;</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="model-action-section">
+                        <button class="model-run-btn" id="run-btn-v3" onclick="runV3Compose()">
+                            <span class="btn-icon">🚀</span>
+                            V3 합성 실행
+                        </button>
+                    </div>
+                    <div class="model-loading" id="loading-v3" style="display: none;">
+                        <div class="loading-spinner"></div>
+                        <p>V3 파이프라인 실행 중...</p>
+                    </div>
+                    <div class="model-result" id="result-v3" style="display: none;">
+                        <div class="model-result-header">
+                            <h3>결과</h3>
+                            <div class="model-result-meta">
+                                <div class="model-result-time">
+                                    <span>처리 시간: </span>
+                                    <span id="time-v3">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="model-result-images" id="result-images-v3">
+                            <!-- 결과 이미지가 여기에 표시됨 -->
+                        </div>
+                        <div class="model-result-actions">
+                            <button class="model-download-btn" id="download-btn-v3" onclick="downloadModelResult('v3')" style="display: none;">
+                                <span class="btn-icon">💾</span>
+                                결과 다운로드
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // 드래그 앤 드롭 설정
+    setupV3ModalDragAndDrop();
+}
+
+// V3 모달 닫기
+function closeV3Modal() {
+    const modal = document.getElementById('modal-v3');
+    if (modal) {
+        modal.classList.remove('show');
+        const resultDiv = document.getElementById('result-v3');
+        if (resultDiv) {
+            resultDiv.style.display = 'none';
+        }
+        delete modelModals['v3'];
+    }
+}
+
+// V3 모달 드래그 앤 드롭 설정
+function setupV3ModalDragAndDrop() {
+    const types = ['person', 'dress', 'background'];
+    
+    types.forEach(type => {
+        const area = document.getElementById(`upload-v3-${type}`);
+        if (!area) return;
+        
+        area.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            area.classList.add('drag-over');
+        });
+        
+        area.addEventListener('dragleave', () => {
+            area.classList.remove('drag-over');
+        });
+        
+        area.addEventListener('drop', (e) => {
+            e.preventDefault();
+            area.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const input = document.getElementById(`input-v3-${type}`);
+                if (input) {
+                    input.files = files;
+                    input.dispatchEvent(new Event('change'));
+                }
+            }
+        });
+    });
+}
+
+// V3 합성 실행
+async function runV3Compose() {
+    const modelId = 'v3';
+    const personFile = modelModals[modelId]?.person;
+    const dressFile = modelModals[modelId]?.dress;
+    const backgroundFile = modelModals[modelId]?.background;
+    
+    if (!personFile || !dressFile || !backgroundFile) {
+        alert('인물 이미지, 의상 이미지, 배경 이미지를 모두 업로드해주세요.');
+        return;
+    }
+    
+    if (!(personFile instanceof File) || !(dressFile instanceof File) || !(backgroundFile instanceof File)) {
+        alert('이미지 파일이 올바르지 않습니다. 다시 업로드해주세요.');
+        return;
+    }
+    
+    const loadingDiv = document.getElementById(`loading-${modelId}`);
+    const resultDiv = document.getElementById(`result-${modelId}`);
+    const runBtn = document.getElementById(`run-btn-${modelId}`);
+    
+    loadingDiv.style.display = 'flex';
+    resultDiv.style.display = 'none';
+    runBtn.disabled = true;
+    
+    const startTime = performance.now();
+    
+    try {
+        const formData = new FormData();
+        formData.append('person_image', personFile);
+        formData.append('garment_image', dressFile);
+        formData.append('background_image', backgroundFile);
+        
+        const response = await fetch('/fit/v3/compose', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        const endTime = performance.now();
+        const processingTime = ((endTime - startTime) / 1000).toFixed(2);
+        
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+        
+        if (data.success) {
+            const tempModel = {
+                id: modelId,
+                name: 'XAI + Gemini 2.5 V3',
+                input_type: 'dual_image'
+            };
+            displayModelResult(modelId, tempModel, data, processingTime);
+        } else {
+            alert(`오류 발생: ${data.message || data.error}`);
+        }
+    } catch (error) {
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+        alert(`V3 합성 실행 중 오류 발생: ${error.message}`);
     }
 }

@@ -1,0 +1,58 @@
+STAGE 2 — STRICT OUTFIT REPLACEMENT
+THIS STAGE MUST REMOVE THE ORIGINAL OUTFIT COMPLETELY.
+THIS STAGE MUST APPLY THE OUTFIT FROM IMAGE 2 EXACTLY.
+
+CONTEXT:
+- Image 1: the person wearing their original clothing.
+- Image 2: the target outfit that must fully replace the original clothing.
+
+DO NOT MODIFY:
+- face
+- head shape
+- expression
+- hairstyle
+- body shape
+- pose
+- background
+- lighting
+
+TASK (MUST FOLLOW):
+Replace ALL of the person's original clothing with the outfit from Image 2.
+The original clothing MUST NOT appear in the final image.
+
+OUTFIT REPLACEMENT RULES:
+- Remove the original top entirely.
+- Remove the original bottom entirely.
+- Remove any jackets, hoodies, sleeves, or folds from the original outfit.
+- Apply the outfit from Image 2 EXACTLY as shown:
+  • same length
+  • same silhouette
+  • same neckline
+  • same sleeve or sleeveless style
+  • same material and texture
+  • same color
+  • same overall design
+
+FIT RULES:
+- Fit the new outfit naturally to the existing body proportions.
+- Maintain the same pose.
+- Ensure clean boundaries with NO overlapping original clothing.
+
+SHOES RULES:
+- Replace the original footwear with shoes that match and complement the outfit.
+- Generate elegant dress shoes or high heels that fit the style of the gown.
+- Keep the feet position and perspective natural on the ground.
+- The new shoes should match the outfit color palette
+  (for example, black or neutral tones suitable for the dress).
+
+WHAT NOT TO DO:
+- Do NOT leave any part of the original outfit visible.
+- Do NOT leave the original sneakers or casual shoes visible.
+- Do NOT mix clothing elements.
+- Do NOT generate oversized or distorted feet.
+- Do NOT change the face or skin.
+- Do NOT change lighting or background.
+
+OUTPUT:
+Return a clean full-body image of the person wearing ONLY the outfit from Image 2,
+with matching formal shoes and ZERO visible traces of the original clothing or footwear.
