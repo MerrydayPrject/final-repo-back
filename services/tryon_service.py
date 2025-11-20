@@ -11,7 +11,7 @@ from google import genai
 from core.xai_client import generate_prompt_from_images
 from core.s3_client import upload_log_to_s3
 # SegFormer B2 Garment Parsing (HuggingFace Inference API)
-from core.segformer_garment_parser import parse_garment_image
+from core.segformer_garment_parser import parse_garment_image, parse_garment_image_v3
 from services.image_service import preprocess_dress_image
 from services.log_service import save_test_log
 from config.settings import GEMINI_FLASH_MODEL, XAI_PROMPT_MODEL
@@ -1322,13 +1322,13 @@ def generate_unified_tryon_v3(
 ) -> Dict:
     """
     통합 트라이온 파이프라인 V3: 2단계 Gemini 플로우
-    - Stage 1: X.AI 프롬프트 생성 (V2와 동일)
+    - Stage 1: SegFormer B2 Clothes Parsing + X.AI 프롬프트 생성
     - Stage 2: Gemini로 의상 교체만 수행 (person + garment_only)
     - Stage 3: Gemini로 배경 합성 + 조명 보정 (dressed_person + background)
     
     Args:
         person_img: 사람 이미지 (PIL Image)
-        garment_img: 의상 이미지 (PIL Image) - SegFormer B2 Parsing 대상
+        garment_img: 의상 이미지 (PIL Image) - SegFormer B2 Clothes Parsing 대상
         background_img: 배경 이미지 (PIL Image)
         model_id: 모델 ID (기본값: "xai-gemini-unified-v3")
     
@@ -1363,11 +1363,11 @@ def generate_unified_tryon_v3(
         garment_img_processed = preprocess_dress_image(garment_img, target_size=1024)
         print("[Stage 1] 의상 이미지 전처리 완료")
         
-        print("\n[Stage 1] SegFormer B2 Garment Parsing 시작...")
-        parsing_result = parse_garment_image(garment_img_processed)
+        print("\n[Stage 1] SegFormer B2 Clothes Parsing 시작...")
+        parsing_result = parse_garment_image_v3(garment_img_processed)
         
         if not parsing_result.get("success"):
-            error_msg = parsing_result.get("message", "SegFormer B2 Garment Parsing에 실패했습니다.")
+            error_msg = parsing_result.get("message", "SegFormer B2 Clothes Parsing에 실패했습니다.")
             run_time = time.time() - start_time
             
             person_buffered = io.BytesIO()
@@ -1393,7 +1393,7 @@ def generate_unified_tryon_v3(
                 "prompt": "",
                 "result_image": "",
                 "message": error_msg,
-                "llm": "segformer-b2-parsing",
+                "llm": "segformer-b2-clothes-parsing",
                 "error": parsing_result.get("error", "segformer_parsing_failed")
             }
         
@@ -1425,11 +1425,11 @@ def generate_unified_tryon_v3(
                 "prompt": "",
                 "result_image": "",
                 "message": error_msg,
-                "llm": "segformer-b2-parsing",
+                "llm": "segformer-b2-clothes-parsing",
                 "error": "garment_only_extraction_failed"
             }
         
-        print("[Stage 1] SegFormer B2 Garment Parsing 완료 - garment_only 이미지 추출 성공")
+        print("[Stage 1] SegFormer B2 Clothes Parsing 완료 - garment_only 이미지 추출 성공")
         
         # 원본 인물 이미지 크기 저장
         person_size = person_img.size
