@@ -4,6 +4,7 @@ import torch
 from typing import Optional
 from transformers import SegformerImageProcessor, AutoModelForSemanticSegmentation
 from body_analysis_test.body_analysis import BodyAnalysisService
+from services.image_classifier_service import ImageClassifierService
 
 # 전역 변수로 모델 저장
 processor = None
@@ -18,6 +19,9 @@ sdxl_pipeline = None
 
 # 체형 분석 서비스 전역 변수
 body_analysis_service: Optional[BodyAnalysisService] = None
+
+# 이미지 분류 서비스 전역 변수
+image_classifier_service: Optional[ImageClassifierService] = None
 
 
 def _load_segformer_b2_models():
@@ -168,6 +172,23 @@ def get_sdxl_pipeline():
 def get_body_analysis_service():
     """전역 body_analysis_service 반환"""
     return body_analysis_service
+
+
+def get_image_classifier_service():
+    """전역 image_classifier_service 반환 (lazy loading)"""
+    global image_classifier_service
+    if image_classifier_service is None:
+        try:
+            print("이미지 분류 서비스 초기화 중...")
+            image_classifier_service = ImageClassifierService()
+            if image_classifier_service and image_classifier_service.is_initialized:
+                print("✅ 이미지 분류 서비스 초기화 완료")
+            else:
+                print("⚠️  이미지 분류 서비스 초기화 실패")
+        except Exception as e:
+            print(f"❌ 이미지 분류 서비스 로딩 오류: {e}")
+            image_classifier_service = None
+    return image_classifier_service
 
 
 def get_segformer_model():
