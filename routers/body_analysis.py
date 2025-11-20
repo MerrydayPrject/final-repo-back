@@ -6,12 +6,166 @@ from fastapi import APIRouter, File, UploadFile, Form, Query
 from fastapi.responses import JSONResponse
 from PIL import Image
 
-from core.model_loader import get_body_analysis_service
+from core.model_loader import get_body_analysis_service, get_image_classifier_service
 from services.body_service import determine_body_features, analyze_body_with_gemini
 from services.database import get_db_connection
 from body_analysis_test.database import save_body_analysis_result, get_body_logs, get_body_logs_count
+from services.face_swap_service import FaceSwapService
+import numpy as np
+from typing import Optional
 
 router = APIRouter()
+
+
+@router.post("/api/validate-person", tags=["사람 감지"])
+async def validate_person(
+    file: UploadFile = File(..., description="이미지 파일")
+):
+    """
+    이미지에서 사람이 감지되는지 확인
+    
+    MediaPipe Image Classifier를 사용하여 이미지에 사람이 있는지 검증합니다.
+    ImageNet의 1000개 클래스를 분류하여 사람 관련 클래스를 감지합니다.
+    """
+    try:
+        # 이미지 읽기
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        is_person = False
+        detection_type = None
+        classification_result = None
+        is_animal_detected = False  # 동물 감지 플래그
+        
+        # 1. 이미지 분류 서비스로 사람 감지 (우선 검증)
+        image_classifier_result = None
+        try:
+            image_classifier_service = get_image_classifier_service()
+            if image_classifier_service and image_classifier_service.is_initialized:
+                classification_result = image_classifier_service.classify_image(image)
+                image_classifier_result = classification_result
+                
+                if classification_result:
+                    # 동물 키워드 먼저 확인 (즉시 차단)
+                    animal_keywords = [
+                        "animal", "dog", "cat", "bear", "monkey", "ape", "gorilla",
+                        "orangutan", "chimpanzee", "elephant", "lion", "tiger",
+                        "bird", "fish", "horse", "cow", "pig", "sheep", "goat",
+                        "rabbit", "mouse", "rat", "hamster", "squirrel", "deer",
+                        "wolf", "fox", "panda", "koala", "kangaroo", "zebra",
+                        "giraffe", "camel", "donkey", "mule", "llama", "alpaca"
+                    ]
+                    
+                    for category in classification_result:
+                        category_name_lower = category["category_name"].lower()
+                        if any(keyword in category_name_lower for keyword in animal_keywords):
+                            is_animal_detected = True
+                            print(f"❌ 동물 감지: {category['category_name']} (신뢰도: {category['score']:.2f}) - 즉시 차단")
+                            break
+                    
+                    # 동물이 감지되면 즉시 차단 (여기서 바로 return)
+                    if is_animal_detected:
+                        print(f"❌ 동물 감지로 인해 즉시 차단 (이미지 분류 단계)")
+                        return JSONResponse({
+                            "success": True,
+                            "is_person": False,
+                            "face_detected": False,
+                            "landmarks_count": 0,
+                            "detection_type": None,
+                            "classification_result": classification_result[:3],
+                            "message": "동물이 감지되었습니다. 사람이 포함된 이미지를 업로드해주세요."
+                        })
+                    else:
+                        # 이미지 분류 결과 확인
+                        is_person_from_classifier = image_classifier_service.is_person(image, threshold=0.3)
+                        if is_person_from_classifier:
+                            # 이미지 분류로 사람 감지 성공
+                            # 하지만 전신 랜드마크가 있으면 추가 검증 필요
+                            print(f"✅ 이미지 분류로 사람 감지 성공 - 전신 랜드마크 추가 검증")
+                            is_person = True  # 일단 True로 설정, 전신 랜드마크 검증 후 결정
+                            detection_type = "image_classifier"
+                        else:
+                            print(f"❌ 이미지 분류로 사람 감지 실패")
+                            is_person = False
+                else:
+                    print(f"❌ 이미지 분류 결과 없음")
+                    is_person = False
+        except Exception as e:
+            print(f"이미지 분류 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            is_person = False
+        
+        # 2. 동물이 감지되면 즉시 차단 (얼굴 감지 단계로 넘어가지 않음)
+        if is_animal_detected:
+            print(f"❌ 동물 감지로 인해 즉시 차단")
+            return JSONResponse({
+                "success": True,
+                "is_person": False,
+                "face_detected": False,
+                "landmarks_count": 0,
+                "detection_type": None,
+                "classification_result": classification_result[:3] if classification_result else None,
+                "message": "동물이 감지되었습니다. 사람이 포함된 이미지를 업로드해주세요."
+            })
+        
+        # 3. 이미지 분류가 실패하면 얼굴 감지 시도 (얼굴만 있는 사진 허용)
+        if not is_person:
+            try:
+                # 이미지를 numpy array로 변환 (BGR 형식)
+                image_array = np.array(image)
+                if len(image_array.shape) == 3:
+                    # RGB -> BGR (OpenCV/InsightFace 형식)
+                    image_bgr = image_array[:, :, ::-1]
+                else:
+                    image_bgr = image_array
+                
+                face_swap_service = FaceSwapService()
+                if face_swap_service.is_available():
+                    face = face_swap_service.detect_face(image_bgr)
+                    if face is not None:
+                        # 얼굴만 감지된 경우 - 얼굴만 있는 사진으로 판단
+                        is_person = True
+                        detection_type = "face_only"
+                        print(f"✅ 얼굴만으로 사람 감지 성공")
+            except Exception as e:
+                print(f"얼굴 감지 오류 (무시): {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # 3. 둘 다 실패하면 사람이 아님
+        if not is_person:
+            print(f"❌ 사람 감지 실패")
+            return JSONResponse({
+                "success": True,
+                "is_person": False,
+                "face_detected": False,
+                "landmarks_count": 0,
+                "detection_type": None,
+                "classification_result": classification_result[:3] if classification_result else None,  # 상위 3개만
+                "message": "이미지에서 사람을 감지할 수 없습니다. 사람이 포함된 이미지를 업로드해주세요."
+            })
+        
+        # 4. 사람이 감지됨
+        return JSONResponse({
+            "success": True,
+            "is_person": True,
+            "face_detected": detection_type == "face",
+            "landmarks_count": 0,
+            "detection_type": detection_type,
+            "classification_result": classification_result[:3] if classification_result else None,  # 상위 3개만
+            "message": "사람이 감지되었습니다."
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"사람 감지 오류: {e}")
+        print(traceback.format_exc())
+        return JSONResponse({
+            "success": False,
+            "is_person": False,
+            "message": f"사람 감지 중 오류가 발생했습니다: {str(e)}"
+        }, status_code=500)
 
 
 @router.post("/api/analyze-body", tags=["체형 분석"])
@@ -112,8 +266,6 @@ async def analyze_body(
             "success": True,
             "body_analysis": {
                 "body_type": body_type.get('type', 'unknown'),
-                "bmi": bmi,
-                "height": height,
                 "body_features": body_features,
                 "measurements": measurements
             },

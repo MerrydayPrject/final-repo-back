@@ -196,26 +196,20 @@ function displayResults(data) {
         return filtered.slice(0, 6); // 최대 6개 (모든 카테고리)
     }
     
-    // 체형 타입 및 기본 정보
+    // 1. 체형 타입 (맨 위)
     html += `
         <div class="result-card">
             <div class="result-item">
                 <div class="result-label">체형 타입</div>
                 <div class="body-type-text">${body_analysis.body_type}의 체형에 가깝습니다</div>
             </div>
-            ${body_analysis.height ? `
-                <div class="result-item">
-                    <div class="result-label">키</div>
-                    <div class="result-value">${body_analysis.height} cm</div>
-                </div>
-            ` : ''}
-            ${body_analysis.bmi ? `
-                <div class="result-item">
-                    <div class="result-label">BMI</div>
-                    <div class="result-value">${body_analysis.bmi.toFixed(1)}</div>
-                </div>
-            ` : ''}
-            ${body_analysis.body_features && body_analysis.body_features.length > 0 ? `
+        </div>
+    `;
+    
+    // 2. 체형 특징
+    if (body_analysis.body_features && body_analysis.body_features.length > 0) {
+        html += `
+            <div class="result-card">
                 <div class="result-item">
                     <div class="result-label">체형 특징</div>
                     <div class="style-badges">
@@ -248,19 +242,12 @@ function displayResults(data) {
                         }).filter(f => f !== '').join('')}
                     </div>
                 </div>
-            ` : ''}
-            ${measurements ? `
-                <div class="result-item">
-                    <div class="result-label">어깨/엉덩이 비율</div>
-                    <div class="result-value">${measurements.shoulder_hip_ratio.toFixed(2)}</div>
-                </div>
-            ` : ''}
-        </div>
-    `;
+            </div>
+        `;
+    }
     
-    // Gemini 분석 결과 (상세 분석 텍스트만 표시, 별도 리스트는 제외)
+    // 3. 추천 드레스 카테고리 2개 (분석글 위)
     if (gemini_analysis && gemini_analysis.detailed_analysis) {
-        // 마크다운 형식 처리
         let analysisText = gemini_analysis.detailed_analysis;
         
         // 추천 드레스 스타일 추출 (추천 섹션만 추출)
@@ -284,32 +271,139 @@ function displayResults(data) {
             .filter(style => !avoidStyles.includes(style))
             .slice(0, 2);
         
-        // 마크다운 볼드를 HTML strong 태그로 변환
-        analysisText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        // 리스트 항목 정리
-        analysisText = analysisText.replace(/\*\s+/g, '• ');
-        
-        // 빈 줄 정리
-        const lines = analysisText.split('\n').filter(line => line.trim());
-        
-        html += `
-            <div class="result-card">
-                ${filteredRecommendedStyles.length > 0 ? `
+        if (filteredRecommendedStyles.length > 0) {
+            html += `
+                <div class="result-card">
                     <div class="result-item">
                         <div class="result-label">추천 드레스 스타일</div>
                         <div class="style-badges">
                             ${filteredRecommendedStyles.map(style => `<span class="dress-style-badge recommended">${style}</span>`).join('')}
                         </div>
                     </div>
-                ` : ''}
-                ${avoidStyles.length > 0 ? `
-                    <div class="result-item">
-                        <div class="result-label">피해야 할 드레스 스타일</div>
-                        <div class="style-badges">
-                            ${avoidStyles.map(style => `<span class="dress-style-badge avoid">${style}</span>`).join('')}
-                        </div>
-                    </div>
-                ` : ''}
+                </div>
+            `;
+        }
+    }
+    
+    // 키워드 하이라이트 함수
+    function highlightKeywords(text) {
+        let result = text;
+        
+        // HTML 태그 제거한 순수 텍스트
+        const plainText = text.replace(/<[^>]*>/g, '');
+        
+        // 1. 체형 장점 설명 부분 찾기 (첫 문장에서)
+        // 첫 번째 문장 가져오기
+        const firstSentence = plainText.split(/[\.。]/)[0].trim();
+        
+        // 체형 장점을 설명하는 패턴들 (더 구체적으로)
+        let advantageText = null;
+        
+        // 패턴 1: "~체형을 가지고 있습니다" 또는 "~체형입니다"
+        const pattern1 = /([^\.]*(?:슬림|늘씬|균형|우아|세련|좋은|탄탄)[^\.]*체형[을를]?\s*(?:가지고\s*있습니다|입니다))/;
+        const match1 = firstSentence.match(pattern1);
+        if (match1 && match1[1]) {
+            advantageText = match1[1].trim();
+        }
+        
+        // 패턴 2: "~돋보이며" 또는 "~돋보입니다"
+        if (!advantageText) {
+            const pattern2 = /([^\.]*(?:돋보이|좋|균형|우아|세련)[^\.]*(?:며|고|습니다|입니다))/;
+            const match2 = firstSentence.match(pattern2);
+            if (match2 && match2[1]) {
+                advantageText = match2[1].trim();
+            }
+        }
+        
+        // 패턴 3: "비율이 좋은", "라인이 ~" 등
+        if (!advantageText) {
+            const pattern3 = /([^\.]*(?:비율|라인|실루엣|다리|팔|어깨)[이가]\s*(?:좋|돋보이|균형|우아|세련|길|가늘)[^\.]*)/;
+            const match3 = firstSentence.match(pattern3);
+            if (match3 && match3[1]) {
+                advantageText = match3[1].trim();
+            }
+        }
+        
+        // 패턴 4: 긍정적 형용사 + 체형 관련 단어
+        if (!advantageText) {
+            const pattern4 = /([^\.]*(?:슬림|늘씬|균형잡힌|우아한|세련된|좋은|탄탄한)[^\.]*(?:체형|비율|라인|실루엣|인상|느낌))/;
+            const match4 = firstSentence.match(pattern4);
+            if (match4 && match4[1]) {
+                advantageText = match4[1].trim();
+            }
+        }
+        
+        // 체형 장점 설명 하이라이트
+        if (advantageText && advantageText.length > 8) {
+            // 문장 끝에 마침표가 없으면 추가
+            if (!advantageText.endsWith('.') && !advantageText.endsWith('다') && !advantageText.endsWith('며')) {
+                advantageText += '.';
+            }
+            
+            const escapedText = advantageText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${escapedText})`, 'g');
+            
+            result = result.replace(regex, (match) => {
+                if (!match.includes('<span class="highlight')) {
+                    return `<span class="highlight">${match}</span>`;
+                }
+                return match;
+            });
+        }
+        
+        // 2. 드레스 키워드 2개만 하이라이트
+        const styleKeywords = [
+            '슬림', '프린세스', 'A라인', '벨라인', '머메이드', '트럼펫', '미니드레스',
+            '스트레이트', 'H라인', '에이라인', '플레어', '하이웨이스트', '벨트라인'
+        ];
+        
+        let highlightCount = 0;
+        const maxHighlights = 2;
+        
+        // 키워드 길이순으로 정렬 (긴 키워드부터 매칭)
+        const sortedKeywords = [...styleKeywords].sort((a, b) => b.length - a.length);
+        
+        sortedKeywords.forEach(keyword => {
+            if (highlightCount >= maxHighlights) return;
+            
+            const regex = new RegExp(`(${keyword})`, 'gi');
+            result = result.replace(regex, (match, p1, offset, string) => {
+                if (highlightCount >= maxHighlights) return match;
+                
+                // 이미 하이라이트된 부분이 아니고, HTML 태그 내부가 아니면 하이라이트
+                const before = string.substring(Math.max(0, offset - 20), offset);
+                const after = string.substring(offset + match.length, offset + match.length + 20);
+                
+                if (!before.includes('<span') && !after.includes('</span>') && 
+                    !before.includes('>') && !after.includes('<')) {
+                    highlightCount++;
+                    return `<span class="highlight">${p1}</span>`;
+                }
+                return match;
+            });
+        });
+        
+        return result;
+    }
+    
+    // 4. AI 상세 분석 (분석 결과)
+    if (gemini_analysis && gemini_analysis.detailed_analysis) {
+        // 마크다운 형식 처리
+        let analysisText = gemini_analysis.detailed_analysis;
+        
+        // 마크다운 볼드를 HTML strong 태그로 변환
+        analysisText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        // 리스트 항목 정리
+        analysisText = analysisText.replace(/\*\s+/g, '• ');
+        
+        // 키워드 하이라이트 적용
+        analysisText = highlightKeywords(analysisText);
+        
+        // 빈 줄 정리
+        const lines = analysisText.split('\n').filter(line => line.trim());
+        
+        html += `
+            <div class="result-card">
                 <div class="result-title">AI 상세 분석</div>
                 <div class="analysis-text">
                     ${lines.map(line => line.trim() ? `<p>${line.trim()}</p>` : '').join('')}
