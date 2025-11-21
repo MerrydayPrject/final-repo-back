@@ -35,44 +35,19 @@ BACKGROUND COMPOSITION:
 - Ensure the feet are correctly placed on the ground or floor.
 
 LIGHTING AND COLOR MATCHING RULES:
-- Use the background image as the primary reference for overall lighting and mood.
-- Match the global light direction, intensity, and softness to the background scene.
-- Adjust the brightness and exposure of all composited foreground areas so they
-  do not look pasted on top of the background.
-- Match the color temperature (warm or cool) of the foreground to the background,
-  so tones reflect the ambient light of the environment.
-- Ensure cast shadows and shading are consistent with the background light
-  direction and approximate time of day.
-- Add realistic contact shadows where the foreground meets the ground or any
-  surfaces, so the composition feels grounded and physically coherent.
-- Blend the overall color grading (contrast, saturation, and tint) of foreground
-  and background so they share the same photographic style.
-- Avoid harsh cutout edges or halos; transitions between foreground and
-  background should be smooth and natural.
-- If the background has depth-of-field blur (bokeh), adjust the apparent
-  sharpness of the foreground slightly so that focus levels feel coherent
-  and believable.
-- It is acceptable if skin tone appears warmer, cooler, slightly brighter
-  or darker than the original, as long as it remains physically plausible
-  under the given background lighting.
-- Strongly adapt the skin tone and local color of the subject so that it
-  clearly reflects the ambient light and color of the background scene.
-  The subject should no longer look like it was lit in a different place.
-- Do not significantly change the colors, contrast, or exposure of Background Image 3.
-  Global color grading is allowed, but the main adaptation must be applied to the
-  subject (skin, dress, and local shadows), not to the background.
-
-LIGHTING, COLOR, AND FOCUS MATCH:
-- Match the global light direction and strength to the background.
-- Darken or brighten the subject if needed so exposure matches the scene.
-- Match color temperature (warm/cool) to Background Image 3.
-- Add soft ambient light from the surroundings onto the skin and dress.
-- Blend skin tones using ambient colors from the environment.
-- Add or refine realistic contact shadows under and around the feet.
-- Apply the same level of sharpness or blur (depth of field) to the subject
-  as in the background so they share a single focus plane.
-- Apply subtle global color grading so the subject and background feel
-  like one unified photograph.
+- Use the background image as the primary reference for overall lighting, mood, and color palette.
+- Match the **global light direction, intensity, and softness** to the background scene.
+- Adjust the brightness and exposure of all composited foreground areas so they do not look pasted on top of the background.
+- Match the **color temperature (warm or cool)** of the foreground (subject and dress) to the background, so tones reflect the ambient light of the environment.
+- **Strongly adapt the skin tone and local color of the subject and DRESS so that it clearly reflects the ambient light and colors of the background scene.** The subject should no longer look like it was lit in a different place.
+- **DRAPE AND TEXTURE LIGHTING:** Ensure the **highlights, shadows, and subtle ambient reflections** on the dress's fabric, especially the ruffles and texture, are consistent with the background's light source. The folds and texture of the dress must clearly define the light direction.
+- Ensure **cast shadows and shading** (on the subject and the ground) are consistent with the background light direction and approximate time of day.
+- Add **realistic contact shadows** where the foreground (feet, hem of the dress) meets the ground or any surfaces, so the composition feels grounded and physically coherent.
+- **Apply the same level of sharpness or blur (depth of field)** to the subject as in the background so they share a single focus plane.
+- Blend the **overall color grading (contrast, saturation, and tint)** of foreground and background so they share the same photographic style.
+- Apply a **subtle global color grading** so the subject and background feel like one unified photograph.
+- Avoid harsh cutout edges or halos; transitions between foreground and background should be smooth and natural.
+- Do not significantly change the colors, contrast, or exposure of Background Image 3. Global color grading is allowed, but the main adaptation must be applied to the subject (skin, dress, and local shadows), not to the background.
 
 NATURAL BLENDING:
 - Ensure there are no visible cutout edges or halos around the subject.
