@@ -11,7 +11,7 @@ from google import genai
 from core.xai_client import generate_prompt_from_images
 from core.s3_client import upload_log_to_s3
 # SegFormer B2 Garment Parsing (HuggingFace Inference API)
-from core.segformer_garment_parser import parse_garment_image, parse_garment_image_v3
+from core.segformer_garment_parser import parse_garment_image
 from services.image_service import preprocess_dress_image
 from services.log_service import save_test_log
 from config.settings import GEMINI_FLASH_MODEL, XAI_PROMPT_MODEL
@@ -1322,13 +1322,13 @@ def generate_unified_tryon_v3(
 ) -> Dict:
     """
     통합 트라이온 파이프라인 V3: 2단계 Gemini 플로우
-    - Stage 1: SegFormer B2 Clothes Parsing + X.AI 프롬프트 생성
-    - Stage 2: Gemini로 의상 교체만 수행 (person + garment_only)
+    - Stage 1: 의상 이미지 전처리 + X.AI 프롬프트 생성
+    - Stage 2: Gemini로 의상 교체만 수행 (person + garment)
     - Stage 3: Gemini로 배경 합성 + 조명 보정 (dressed_person + background)
     
     Args:
         person_img: 사람 이미지 (PIL Image)
-        garment_img: 의상 이미지 (PIL Image) - SegFormer B2 Clothes Parsing 대상
+        garment_img: 의상 이미지 (PIL Image)
         background_img: 배경 이미지 (PIL Image)
         model_id: 모델 ID (기본값: "xai-gemini-unified-v3")
     
@@ -1345,7 +1345,6 @@ def generate_unified_tryon_v3(
     start_time = time.time()
     person_s3_url = ""
     garment_s3_url = ""
-    garment_only_s3_url = ""
     background_s3_url = ""
     stage2_result_s3_url = ""
     result_s3_url = ""
@@ -1353,7 +1352,7 @@ def generate_unified_tryon_v3(
     
     try:
         # ============================================================
-        # Stage 1: 의상 이미지 전처리 및 SegFormer B2 Garment Parsing
+        # Stage 1: 의상 이미지 전처리 및 크기 조정
         # ============================================================
         print("\n" + "="*80)
         print("V3 파이프라인 시작")
@@ -1363,97 +1362,19 @@ def generate_unified_tryon_v3(
         garment_img_processed = preprocess_dress_image(garment_img, target_size=1024)
         print("[Stage 1] 의상 이미지 전처리 완료")
         
-        print("\n[Stage 1] SegFormer B2 Clothes Parsing 시작...")
-        parsing_result = parse_garment_image_v3(garment_img_processed)
-        
-        if not parsing_result.get("success"):
-            error_msg = parsing_result.get("message", "SegFormer B2 Clothes Parsing에 실패했습니다.")
-            run_time = time.time() - start_time
-            
-            person_buffered = io.BytesIO()
-            person_img.save(person_buffered, format="PNG")
-            person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
-            
-            garment_buffered = io.BytesIO()
-            garment_img_processed.save(garment_buffered, format="PNG")
-            garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
-            
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt="",
-                success=False,
-                run_time=run_time
-            )
-            
-            return {
-                "success": False,
-                "prompt": "",
-                "result_image": "",
-                "message": error_msg,
-                "llm": "segformer-b2-clothes-parsing",
-                "error": parsing_result.get("error", "segformer_parsing_failed")
-            }
-        
-        garment_only_img = parsing_result.get("garment_only")
-        if not garment_only_img:
-            error_msg = "garment_only 이미지를 추출할 수 없습니다."
-            run_time = time.time() - start_time
-            
-            person_buffered = io.BytesIO()
-            person_img.save(person_buffered, format="PNG")
-            person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
-            
-            garment_buffered = io.BytesIO()
-            garment_img_processed.save(garment_buffered, format="PNG")
-            garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
-            
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt="",
-                success=False,
-                run_time=run_time
-            )
-            
-            return {
-                "success": False,
-                "prompt": "",
-                "result_image": "",
-                "message": error_msg,
-                "llm": "segformer-b2-clothes-parsing",
-                "error": "garment_only_extraction_failed"
-            }
-        
-        print("[Stage 1] SegFormer B2 Clothes Parsing 완료 - garment_only 이미지 추출 성공")
-        
         # 원본 인물 이미지 크기 저장
         person_size = person_img.size
         print(f"[Stage 1] 인물 이미지 크기: {person_size[0]}x{person_size[1]}")
         
-        # garment_only 이미지를 인물 이미지 크기로 조정
-        print(f"[Stage 1] garment_only 이미지를 인물 크기({person_size[0]}x{person_size[1]})로 조정...")
-        garment_only_img = garment_only_img.resize(person_size, Image.Resampling.LANCZOS)
-        print(f"[Stage 1] garment_only 이미지 크기 조정 완료: {garment_only_img.size[0]}x{garment_only_img.size[1]}")
+        # 의상 이미지를 인물 이미지 크기로 조정
+        print(f"[Stage 1] 의상 이미지를 인물 크기({person_size[0]}x{person_size[1]})로 조정...")
+        garment_img_processed = garment_img_processed.resize(person_size, Image.Resampling.LANCZOS)
+        print(f"[Stage 1] 의상 이미지 크기 조정 완료: {garment_img_processed.size[0]}x{garment_img_processed.size[1]}")
         
-        # 배경 이미지를 인물 이미지 높이에 맞게 리사이즈하여
-        # 스케일과 렌즈 느낌을 맞춰준다.
-        # (배경: 인물 높이의 약 1.8배로 설정, 필요시 1.5~2.0 사이로 조정 가능)
-        person_w, person_h = person_img.size
-        target_bg_h = int(person_h * 1.8)
-        scale = target_bg_h / background_img.height
-        target_bg_w = int(background_img.width * scale)
-
-        background_img_processed = background_img.resize(
-            (target_bg_w, target_bg_h),
-            Image.Resampling.LANCZOS
-        )
-
-        print(f"[Stage 1] 배경 이미지 리사이즈: {target_bg_w}x{target_bg_h} (인물 비율에 맞춤)")
+        # 배경 이미지는 원본 그대로 유지 (변형 방지)
+        background_img_processed = background_img
+        background_size = background_img.size
+        print(f"[Stage 1] 배경 이미지 원본 유지: {background_size[0]}x{background_size[1]} (변형 없음)")
         
         # S3에 입력 이미지 업로드
         person_buffered = io.BytesIO()
@@ -1464,10 +1385,6 @@ def generate_unified_tryon_v3(
         garment_img_processed.save(garment_buffered, format="PNG")
         garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
         
-        garment_only_buffered = io.BytesIO()
-        garment_only_img.save(garment_only_buffered, format="PNG")
-        garment_only_s3_url = upload_log_to_s3(garment_only_buffered.getvalue(), model_id, "garment_only") or ""
-        
         background_buffered = io.BytesIO()
         background_img_processed.save(background_buffered, format="PNG")
         background_s3_url = upload_log_to_s3(background_buffered.getvalue(), model_id, "background") or ""
@@ -1476,10 +1393,10 @@ def generate_unified_tryon_v3(
         # Stage 1: X.AI 프롬프트 생성
         # ============================================================
         print("\n" + "="*80)
-        print("[Stage 1] X.AI 프롬프트 생성 시작 (V3: garment_only 이미지 사용)")
+        print("[Stage 1] X.AI 프롬프트 생성 시작 (V3: 원본 의상 이미지 사용)")
         print("="*80)
         
-        xai_result = generate_prompt_from_images(person_img, garment_only_img)
+        xai_result = generate_prompt_from_images(person_img, garment_img_processed)
         
         if not xai_result.get("success"):
             error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")
@@ -1552,13 +1469,13 @@ def generate_unified_tryon_v3(
         print("="*80 + "\n")
         
         print("[Stage 2] Gemini API 호출 시작...")
-        print(f"[Stage 2] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_only_img ({garment_only_img.size[0]}x{garment_only_img.size[1]})")
+        print(f"[Stage 2] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_img ({garment_img_processed.size[0]}x{garment_img_processed.size[1]})")
         stage2_start_time = time.time()
         
         try:
             stage2_response = client.models.generate_content(
                 model=GEMINI_FLASH_MODEL,
-                contents=[person_img, garment_only_img, stage2_prompt]
+                contents=[person_img, garment_img_processed, stage2_prompt]
             )
         except Exception as exc:
             run_time = time.time() - start_time
@@ -1887,7 +1804,7 @@ def generate_unified_tryon_v3(
             "prompt": used_prompt,
             "result_image": f"data:image/png;base64,{result_image_base64}",
             "message": "통합 트라이온 파이프라인 V3가 성공적으로 완료되었습니다.",
-            "llm": f"segformer-b2-parsing+{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}+{GEMINI_FLASH_MODEL}"
+            "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}+{GEMINI_FLASH_MODEL}"
         }
         
     except Exception as e:
@@ -1916,6 +1833,6 @@ def generate_unified_tryon_v3(
             "prompt": used_prompt,
             "result_image": "",
             "message": f"통합 트라이온 파이프라인 V3 중 오류 발생: {str(e)}",
-            "llm": f"segformer-b2-parsing+{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}+{GEMINI_FLASH_MODEL}",
+            "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}+{GEMINI_FLASH_MODEL}",
             "error": str(e)
         }
