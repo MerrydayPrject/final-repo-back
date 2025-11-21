@@ -24,3 +24,4 @@ WHAT TO AVOID (STRICT):
 
 OUTPUT:
 A photorealistic image where the person is wearing ONLY the new outfit.
+
