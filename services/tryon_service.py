@@ -1408,6 +1408,34 @@ LIGHTING MATCHING REQUIREMENTS:
         return "Adjust lighting to match background. Keep face and outfit unchanged."
 
 
+def load_v4_unified_prompt(xai_prompt: str) -> str:
+    """
+    V4 통합 프롬프트: Stage 2와 Stage 3 프롬프트를 순서대로 결합
+    
+    Args:
+        xai_prompt: X.AI에서 생성된 프롬프트
+    
+    Returns:
+        str: Stage 2 프롬프트 + Stage 3 프롬프트를 순서대로 결합한 통합 프롬프트
+    """
+    # Stage 2 프롬프트 로드 (X.AI 프롬프트 포함)
+    stage2_prompt = load_v4_stage2_prompt(xai_prompt)
+    
+    # Stage 3 프롬프트 로드
+    stage3_prompt = load_v4_stage3_prompt()
+    
+    # 순서대로 결합: Stage 2 먼저, 그 다음 Stage 3
+    unified_prompt = (
+        stage2_prompt
+        + "\n\n"
+        + "="*80
+        + "\n"
+        + stage3_prompt
+    )
+    
+    return unified_prompt
+
+
 # ============================================================
 # V3 파이프라인 메인 함수
 # ============================================================
@@ -1932,10 +1960,9 @@ def generate_unified_tryon_v4(
     model_id: str = "xai-gemini-unified-v4"
 ) -> Dict:
     """
-    통합 트라이온 파이프라인 V4: 2단계 Gemini 3 Flash 플로우
-    - Stage 1: 의상 이미지 전처리 + X.AI 프롬프트 생성
-    - Stage 2: Gemini 3 Flash로 의상 교체만 수행 (person + garment)
-    - Stage 3: Gemini 3 Flash로 배경 합성 + 조명 보정 (dressed_person + background)
+    통합 트라이온 파이프라인 V4: 통합 Gemini 3 Flash 플로우
+    - Stage 1: X.AI 프롬프트 생성
+    - Stage 2: Gemini 3 Flash로 의상 교체 + 배경 합성 통합 처리 (person + garment + background)
     
     Args:
         person_img: 사람 이미지 (PIL Image)
@@ -1957,7 +1984,6 @@ def generate_unified_tryon_v4(
     person_s3_url = ""
     garment_s3_url = ""
     background_s3_url = ""
-    stage2_result_s3_url = ""
     result_s3_url = ""
     used_prompt = ""
     
@@ -2024,7 +2050,7 @@ def generate_unified_tryon_v4(
         print("="*80 + "\n")
         
         # ============================================================
-        # Stage 2: Gemini 3 Flash로 의상 교체만 수행
+        # Stage 2: Gemini 3 Flash로 의상 교체 + 배경 합성 통합 처리
         # ============================================================
         api_key = os.getenv("GEMINI_3_API_KEY")
         if not api_key:
@@ -2053,25 +2079,25 @@ def generate_unified_tryon_v4(
         client = genai.Client(api_key=api_key)
         
         print("\n" + "="*80)
-        print("[Stage 2] Gemini 3 Flash - 의상 교체만 수행")
+        print("[Stage 2] Gemini 3 Flash - 의상 교체 + 배경 합성 통합 처리")
         print("="*80)
         
-        # Stage 2 프롬프트 로드
-        stage2_prompt = load_v4_stage2_prompt(used_prompt)
+        # 통합 프롬프트 로드 (Stage 2 + Stage 3 순서대로 결합)
+        unified_prompt = load_v4_unified_prompt(used_prompt)
         
-        print("[Stage 2] 프롬프트:")
+        print("[Stage 2] 통합 프롬프트:")
         print("-"*80)
-        print(stage2_prompt)
+        print(unified_prompt)
         print("="*80 + "\n")
         
         print("[Stage 2] Gemini API 호출 시작...")
-        print(f"[Stage 2] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_img ({garment_img.size[0]}x{garment_img.size[1]})")
+        print(f"[Stage 2] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_img ({garment_img.size[0]}x{garment_img.size[1]}), background_img ({background_img_processed.size[0]}x{background_img_processed.size[1]})")
         stage2_start_time = time.time()
         
         try:
             stage2_response = client.models.generate_content(
                 model=GEMINI_3_FLASH_MODEL,
-                contents=[person_img, garment_img, stage2_prompt]
+                contents=[person_img, garment_img, background_img_processed, unified_prompt]
             )
         except Exception as exc:
             run_time = time.time() - start_time
@@ -2200,174 +2226,14 @@ def generate_unified_tryon_v4(
                 "error": "stage2_no_image_generated"
             }
         
-        # Stage 2 결과 이미지 변환
-        dressed_person_img = decode_base64_to_image(stage2_image_parts[0])
-        print(f"[Stage 2] 의상 교체 완료 - 이미지 크기: {dressed_person_img.size[0]}x{dressed_person_img.size[1]}")
-        
-        # Stage 2 결과 S3 업로드
-        stage2_buffered = io.BytesIO()
-        dressed_person_img.save(stage2_buffered, format="PNG")
-        stage2_result_s3_url = upload_log_to_s3(stage2_buffered.getvalue(), model_id, "stage2_result") or ""
-        
-        # ============================================================
-        # Stage 3: Gemini 3 Flash로 배경 합성 + 조명 보정
-        # ============================================================
-        print("\n" + "="*80)
-        print("[Stage 3] Gemini 3 Flash - 배경 합성 + 조명 보정")
-        print("="*80)
-        
-        # Stage 3 프롬프트 로드
-        stage3_prompt = load_v4_stage3_prompt()
-        
-        print("[Stage 3] 프롬프트:")
-        print("-"*80)
-        print(stage3_prompt)
-        print("="*80 + "\n")
-        
-        print("[Stage 3] Gemini API 호출 시작...")
-        print(f"[Stage 3] 입력 이미지: dressed_person_img ({dressed_person_img.size[0]}x{dressed_person_img.size[1]}), background_img ({background_img_processed.size[0]}x{background_img_processed.size[1]})")
-        stage3_start_time = time.time()
-        
-        try:
-            stage3_response = client.models.generate_content(
-                model=GEMINI_3_FLASH_MODEL,
-                contents=[dressed_person_img, background_img_processed, stage3_prompt]
-            )
-        except Exception as exc:
-            run_time = time.time() - start_time
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-            
-            print(f"[Stage 3] Gemini API 호출 실패: {exc}")
-            traceback.print_exc()
-            return {
-                "success": False,
-                "prompt": used_prompt,
-                "result_image": "",
-                "message": f"Stage 3 Gemini 호출에 실패했습니다: {str(exc)}",
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
-                "error": "stage3_gemini_call_failed"
-            }
-        
-        stage3_latency = time.time() - stage3_start_time
-        print(f"[Stage 3] Gemini API 응답 수신 완료 (지연 시간: {stage3_latency:.2f}초)")
-        
-        # Stage 3 응답 확인 및 이미지 추출
-        if not stage3_response.candidates or len(stage3_response.candidates) == 0:
-            error_msg = "Stage 3: Gemini API가 응답을 생성하지 못했습니다."
-            run_time = time.time() - start_time
-            
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-            
-            return {
-                "success": False,
-                "prompt": used_prompt,
-                "result_image": "",
-                "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
-                "error": "stage3_no_response"
-            }
-        
-        stage3_candidate = stage3_response.candidates[0]
-        if not hasattr(stage3_candidate, 'content') or stage3_candidate.content is None:
-            error_msg = "Stage 3: Gemini API 응답에 content가 없습니다."
-            run_time = time.time() - start_time
-            
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-            
-            return {
-                "success": False,
-                "prompt": used_prompt,
-                "result_image": "",
-                "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
-                "error": "stage3_no_content"
-            }
-        
-        if not hasattr(stage3_candidate.content, 'parts') or stage3_candidate.content.parts is None:
-            error_msg = "Stage 3: Gemini API 응답에 parts가 없습니다."
-            run_time = time.time() - start_time
-            
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-            
-            return {
-                "success": False,
-                "prompt": used_prompt,
-                "result_image": "",
-                "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
-                "error": "stage3_no_parts"
-            }
-        
-        # Stage 3 이미지 추출
-        stage3_image_parts = [
-            part.inline_data.data
-            for part in stage3_candidate.content.parts
-            if hasattr(part, 'inline_data') and part.inline_data
-        ]
-        
-        if not stage3_image_parts:
-            error_msg = "Stage 3: Gemini API가 이미지를 생성하지 못했습니다."
-            run_time = time.time() - start_time
-            
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-            
-            return {
-                "success": False,
-                "prompt": used_prompt,
-                "result_image": "",
-                "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
-                "error": "stage3_no_image_generated"
-            }
-        
-        # Stage 3 결과 이미지 변환
-        final_img = decode_base64_to_image(stage3_image_parts[0])
-        print(f"[Stage 3] 배경 합성 + 조명 보정 완료 - 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
+        # 최종 결과 이미지 변환
+        final_img = decode_base64_to_image(stage2_image_parts[0])
+        print(f"[Stage 2] 의상 교체 + 배경 합성 완료 - 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
         
         # ============================================================
         # 최종 결과 처리 및 S3 업로드
         # ============================================================
-        result_image_base64 = base64.b64encode(stage3_image_parts[0]).decode()
+        result_image_base64 = base64.b64encode(stage2_image_parts[0]).decode()
         
         result_buffered = io.BytesIO()
         final_img.save(result_buffered, format="PNG")
@@ -2380,7 +2246,6 @@ def generate_unified_tryon_v4(
         print("="*80)
         print(f"전체 실행 시간: {run_time:.2f}초")
         print(f"Stage 2 지연 시간: {stage2_latency:.2f}초")
-        print(f"Stage 3 지연 시간: {stage3_latency:.2f}초")
         print(f"최종 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
         print("="*80 + "\n")
         
