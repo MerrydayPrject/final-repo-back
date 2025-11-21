@@ -1,4 +1,4 @@
-"""CustomV3 통합 트라이온 서비스"""
+"""CustomV4 통합 트라이온 서비스"""
 import os
 import io
 import base64
@@ -14,35 +14,35 @@ from services.image_service import preprocess_dress_image
 from services.log_service import save_test_log
 from services.garment_nukki_service import remove_garment_background
 from services.tryon_service import (
-    load_v3_stage2_prompt,
-    load_v3_stage3_prompt,
+    load_v4_stage2_prompt,
+    load_v4_stage3_prompt,
     decode_base64_to_image
 )
-from config.settings import GEMINI_FLASH_MODEL, XAI_PROMPT_MODEL
+from config.settings import GEMINI_3_FLASH_MODEL, XAI_PROMPT_MODEL
 
 
-def generate_unified_tryon_custom_v3(
+def generate_unified_tryon_custom_v4(
     person_img: Image.Image,
     garment_img: Image.Image,
     background_img: Image.Image,
-    model_id: str = "xai-gemini-unified-custom-v3"
+    model_id: str = "xai-gemini-unified-custom-v4"
 ) -> Dict:
     """
-    CustomV3 통합 트라이온 파이프라인: 의상 누끼 + X.AI 프롬프트 생성 + 2단계 Gemini 플로우
+    CustomV4 통합 트라이온 파이프라인: 의상 누끼 + X.AI 프롬프트 생성 + 2단계 Gemini 3 플로우
     
-    CustomV3는 기존 V3와 동일한 구조를 가지지만, 의상 이미지에 자동으로 누끼(배경 제거) 처리를 적용합니다.
+    CustomV4는 기존 V3 커스텀과 동일한 구조를 가지지만, Gemini 3 Flash 모델을 사용합니다.
     
     파이프라인 단계:
     - Stage 0: 의상 이미지 누끼 처리 (배경 제거)
     - Stage 1: 누끼 처리된 의상 이미지로 X.AI 프롬프트 생성
-    - Stage 2: Gemini로 의상 교체만 수행 (person + garment_nukki)
-    - Stage 3: Gemini로 배경 합성 + 조명 보정 (dressed_person + background)
+    - Stage 2: Gemini 3로 의상 교체만 수행 (person + garment_nukki)
+    - Stage 3: Gemini 3로 배경 합성 + 조명 보정 (dressed_person + background)
     
     Args:
         person_img: 사람 이미지 (PIL Image)
         garment_img: 의상 이미지 (PIL Image)
         background_img: 배경 이미지 (PIL Image)
-        model_id: 모델 ID (기본값: "xai-gemini-unified-custom-v3")
+        model_id: 모델 ID (기본값: "xai-gemini-unified-custom-v4")
     
     Returns:
         dict: {
@@ -68,7 +68,7 @@ def generate_unified_tryon_custom_v3(
         # Stage 0: 의상 이미지 누끼 처리 (배경 제거)
         # ============================================================
         print("\n" + "="*80)
-        print("CustomV3 파이프라인 시작")
+        print("CustomV4 파이프라인 시작")
         print("="*80)
         
         print("\n[Stage 0] 의상 이미지 누끼 처리 시작...")
@@ -118,7 +118,7 @@ def generate_unified_tryon_custom_v3(
         # Stage 1: X.AI 프롬프트 생성 (누끼 처리된 의상 이미지 사용)
         # ============================================================
         print("\n" + "="*80)
-        print("[Stage 1] X.AI 프롬프트 생성 시작 (CustomV3: 누끼 처리된 의상 이미지 사용)")
+        print("[Stage 1] X.AI 프롬프트 생성 시작 (CustomV4: 누끼 처리된 의상 이미지 사용)")
         print("="*80)
         
         xai_result = generate_prompt_from_images(person_img, garment_nukki_rgb)
@@ -153,11 +153,11 @@ def generate_unified_tryon_custom_v3(
         print("="*80 + "\n")
         
         # ============================================================
-        # Stage 2: Gemini로 의상 교체만 수행
+        # Stage 2: Gemini 3로 의상 교체만 수행
         # ============================================================
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("GEMINI_3_API_KEY") or os.getenv("GEMINI_API_KEY")
         if not api_key:
-            error_msg = ".env 파일에 GEMINI_API_KEY가 설정되지 않았습니다."
+            error_msg = ".env 파일에 GEMINI_3_API_KEY 또는 GEMINI_API_KEY가 설정되지 않았습니다."
             run_time = time.time() - start_time
             
             save_test_log(
@@ -175,18 +175,18 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "gemini_api_key_not_found"
             }
         
         client = genai.Client(api_key=api_key)
         
         print("\n" + "="*80)
-        print("[Stage 2] Gemini 2.5 Flash - 의상 교체만 수행")
+        print("[Stage 2] Gemini 3 Flash - 의상 교체만 수행")
         print("="*80)
         
         # Stage 2 프롬프트 로드
-        stage2_prompt = load_v3_stage2_prompt(used_prompt)
+        stage2_prompt = load_v4_stage2_prompt(used_prompt)
         
         print("[Stage 2] 프롬프트:")
         print("-"*80)
@@ -199,7 +199,7 @@ def generate_unified_tryon_custom_v3(
         
         try:
             stage2_response = client.models.generate_content(
-                model=GEMINI_FLASH_MODEL,
+                model=GEMINI_3_FLASH_MODEL,
                 contents=[person_img, garment_nukki_rgb, stage2_prompt]
             )
         except Exception as exc:
@@ -221,7 +221,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": f"Stage 2 Gemini 호출에 실패했습니다: {str(exc)}",
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage2_gemini_call_failed"
             }
         
@@ -248,7 +248,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage2_no_response"
             }
         
@@ -272,7 +272,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage2_no_content"
             }
         
@@ -295,7 +295,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage2_no_parts"
             }
         
@@ -325,7 +325,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage2_no_image_generated"
             }
         
@@ -339,14 +339,14 @@ def generate_unified_tryon_custom_v3(
         stage2_result_s3_url = upload_log_to_s3(stage2_buffered.getvalue(), model_id, "stage2_result") or ""
         
         # ============================================================
-        # Stage 3: Gemini로 배경 합성 + 조명 보정
+        # Stage 3: Gemini 3로 배경 합성 + 조명 보정
         # ============================================================
         print("\n" + "="*80)
-        print("[Stage 3] Gemini 2.5 Flash - 배경 합성 + 조명 보정")
+        print("[Stage 3] Gemini 3 Flash - 배경 합성 + 조명 보정")
         print("="*80)
         
         # Stage 3 프롬프트 로드
-        stage3_prompt = load_v3_stage3_prompt()
+        stage3_prompt = load_v4_stage3_prompt()
         
         print("[Stage 3] 프롬프트:")
         print("-"*80)
@@ -359,7 +359,7 @@ def generate_unified_tryon_custom_v3(
         
         try:
             stage3_response = client.models.generate_content(
-                model=GEMINI_FLASH_MODEL,
+                model=GEMINI_3_FLASH_MODEL,
                 contents=[dressed_person_img, background_img_processed, stage3_prompt]
             )
         except Exception as exc:
@@ -381,7 +381,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": f"Stage 3 Gemini 호출에 실패했습니다: {str(exc)}",
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage3_gemini_call_failed"
             }
         
@@ -408,7 +408,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage3_no_response"
             }
         
@@ -432,7 +432,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage3_no_content"
             }
         
@@ -455,7 +455,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage3_no_parts"
             }
         
@@ -485,7 +485,7 @@ def generate_unified_tryon_custom_v3(
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": error_msg,
-                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+                "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
                 "error": "stage3_no_image_generated"
             }
         
@@ -505,7 +505,7 @@ def generate_unified_tryon_custom_v3(
         run_time = time.time() - start_time
         
         print("\n" + "="*80)
-        print("[CustomV3] 파이프라인 완료")
+        print("[CustomV4] 파이프라인 완료")
         print("="*80)
         print(f"전체 실행 시간: {run_time:.2f}초")
         print(f"Stage 2 지연 시간: {stage2_latency:.2f}초")
@@ -528,15 +528,15 @@ def generate_unified_tryon_custom_v3(
             "success": True,
             "prompt": used_prompt,
             "result_image": f"data:image/png;base64,{result_image_base64}",
-            "message": "CustomV3 파이프라인이 성공적으로 완료되었습니다.",
-            "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
+            "message": "CustomV4 파이프라인이 성공적으로 완료되었습니다.",
+            "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
             "error": None
         }
         
     except Exception as e:
         run_time = time.time() - start_time
         error_detail = traceback.format_exc()
-        print(f"[CustomV3] 파이프라인 오류: {e}")
+        print(f"[CustomV4] 파이프라인 오류: {e}")
         print(error_detail)
         
         save_test_log(
@@ -553,8 +553,8 @@ def generate_unified_tryon_custom_v3(
             "success": False,
             "prompt": used_prompt,
             "result_image": "",
-            "message": f"CustomV3 파이프라인 처리 중 오류가 발생했습니다: {str(e)}",
-            "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_FLASH_MODEL}",
-            "error": "custom_v3_pipeline_error"
+            "message": f"CustomV4 파이프라인 처리 중 오류가 발생했습니다: {str(e)}",
+            "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}",
+            "error": "custom_v4_pipeline_error"
         }
 

@@ -9,7 +9,12 @@ load_dotenv()
 GPT4O_MODEL_NAME = os.getenv("GPT4O_MODEL_NAME", "gpt-4o")
 GPT4O_V2_MODEL_NAME = os.getenv("GPT4O_V2_MODEL_NAME", "gpt-4o-2024-08-06")
 GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.5-flash-image")
+GEMINI_3_FLASH_MODEL = os.getenv("GEMINI_3_FLASH_MODEL", "gemini-3-pro-image-preview")
 GEMINI_PROMPT_MODEL = os.getenv("GEMINI_PROMPT_MODEL", "gemini-2.0-flash-exp")
+
+# Gemini API 키 설정
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_3_API_KEY = os.getenv("GEMINI_3_API_KEY", "")
 
 # Meshy API 설정
 MESHY_API_KEY = os.getenv("MESHY_API_KEY", "")
