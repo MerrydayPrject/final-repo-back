@@ -1,58 +1,26 @@
 STAGE 2 — STRICT OUTFIT REPLACEMENT
-THIS STAGE MUST REMOVE THE ORIGINAL OUTFIT COMPLETELY.
-THIS STAGE MUST APPLY THE OUTFIT FROM IMAGE 2 EXACTLY.
+TASK: APPLY THE OUTFIT FROM IMAGE 2 ONTO THE PERSON IN IMAGE 1.
+
+MANDATORY "OVERWRITE" INSTRUCTIONS:
+1. IGNORE THE ORIGINAL CLOTHING VOLUME. If the original person is wearing a thick sweater, ignore its puffiness. Estimate the slimmer body underneath to fit the new outfit.
+2. ERASE ORIGINAL COLORS. If the original pants are black, DO NOT allow black pixels to bleed into the new legs or dress.
+3. ERASE ORIGINAL TEXTURES. If the original top is knitted, the new outfit MUST NOT look knitted unless Image 2 is knitted.
 
 CONTEXT:
-- Image 1: the person wearing their original clothing.
-- Image 2: the target outfit that must fully replace the original clothing.
+- Target: Complete replacement of attire.
+- Constraint: Face must remain identical.
 
-DO NOT MODIFY:
-- face
-- head shape
-- expression
-- hairstyle
-- body shape
-- pose
-- background
-- lighting
+INSTRUCTIONS:
+- Apply the outfit from Image 2 (Length, Color, Material) exactly.
+- If the new outfit is sleeveless, generate realistic skin texture for the arms.
+- If the new outfit is a short dress, generate realistic skin texture for the legs.
+- Completely replace the footwear with shoes matching the new style (Heels/Dress shoes).
 
-TASK (MUST FOLLOW):
-Replace ALL of the person's original clothing with the outfit from Image 2.
-The original clothing MUST NOT appear in the final image.
-
-OUTFIT REPLACEMENT RULES:
-- Remove the original top entirely.
-- Remove the original bottom entirely.
-- Remove any jackets, hoodies, sleeves, or folds from the original outfit.
-- Apply the outfit from Image 2 EXACTLY as shown:
-  • same length
-  • same silhouette
-  • same neckline
-  • same sleeve or sleeveless style
-  • same material and texture
-  • same color
-  • same overall design
-
-FIT RULES:
-- Fit the new outfit naturally to the existing body proportions.
-- Maintain the same pose.
-- Ensure clean boundaries with NO overlapping original clothing.
-
-SHOES RULES:
-- Replace the original footwear with shoes that match and complement the outfit.
-- Generate elegant dress shoes or high heels that fit the style of the gown.
-- Keep the feet position and perspective natural on the ground.
-- The new shoes should match the outfit color palette
-  (for example, black or neutral tones suitable for the dress).
-
-WHAT NOT TO DO:
-- Do NOT leave any part of the original outfit visible.
-- Do NOT leave the original sneakers or casual shoes visible.
-- Do NOT mix clothing elements.
-- Do NOT generate oversized or distorted feet.
-- Do NOT change the face or skin.
-- Do NOT change lighting or background.
+WHAT TO AVOID (STRICT):
+- NO traces of the original white/bulky top.
+- NO traces of the original black/dark pants.
+- NO hybrid textures (e.g., a dress with sweater wrinkles).
+- NO original sneakers.
 
 OUTPUT:
-Return a clean full-body image of the person wearing ONLY the outfit from Image 2,
-with matching formal shoes and ZERO visible traces of the original clothing or footwear.
+A photorealistic image where the person is wearing ONLY the new outfit.

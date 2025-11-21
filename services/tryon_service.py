@@ -1214,17 +1214,7 @@ def decode_base64_to_image(image_data: bytes) -> Image.Image:
 
 def load_v3_stage2_prompt(xai_prompt: str) -> str:
     """
-    V3 Stage 2 프롬프트 템플릿을 로드하고,
-    상단에는 강한 규칙(template),
-    하단에는 X.AI가 생성한 분석 프롬프트(used_prompt)를
-    '추가 컨텍스트'로 붙여준다.
-    템플릿의 RULES가 항상 우선이며, X.AI 문장은 규칙을 보완하는 설명 역할만 한다.
-    
-    Args:
-        xai_prompt: X.AI가 생성한 프롬프트
-    
-    Returns:
-        str: Stage 2 프롬프트 (템플릿 + X.AI 분석)
+    V3 Stage 2 프롬프트 템플릿 로드 + X.AI 프롬프트 결합 + 강력한 최종 제약사항 추가
     """
     prompt_path = os.path.join(
         os.path.dirname(__file__), "..", "prompts", "v3", "prompt_stage2_outfit.txt"
@@ -1234,14 +1224,20 @@ def load_v3_stage2_prompt(xai_prompt: str) -> str:
         with open(prompt_path, "r", encoding="utf-8") as f:
             template = f.read().strip()
 
+        # 템플릿 + X.AI 분석 + [강력한 최종 제약사항 (샌드위치 기법)]
         combined = (
             template
-            + "\n\nCONTEXT FROM X.AI ANALYSIS (DO NOT OVERRIDE RULES ABOVE):\n"
+            + "\n\n--- DETAILED INSTRUCTIONS FROM ANALYSIS ---\n"
             + xai_prompt
+            + "\n\n--- FINAL CONSTRAINTS (EXECUTE LAST) ---\n"
+            + "1. FACE PRIORITY: The face must match Image 1 EXACTLY. Do not re-render, beautify, or alter facial features.\n"
+            + "2. TEXTURE RESET: The texture of the original top (knitted/thick) must be completely removed. Use ONLY the texture from Image 2.\n"
+            + "3. NO GHOSTING: The original black pants must NOT be visible under the dress or on the legs. \n"
+            + "4. SKIN TEXTURE: If legs or arms are exposed, use high-quality natural skin texture, not clothing texture.\n"
+            + "5. SHOE FIX: Original sneakers are BANNED. Render appropriate formal footwear."
         )
 
         return combined
-
     except FileNotFoundError:
         print(f"[V3] WARNING: Stage 2 프롬프트 템플릿을 찾을 수 없습니다: {prompt_path}")
         # Fallback: 기본 프롬프트 반환
@@ -1263,15 +1259,17 @@ TASK (MUST FOLLOW):
 Replace ALL of the person's original clothing with the outfit from Image 2.
 The original clothing MUST NOT appear in the final image.
 
-CONTEXT FROM X.AI ANALYSIS (DO NOT OVERRIDE RULES ABOVE):
-{xai_prompt}"""
-    except Exception as e:
-        print(f"[V3] ERROR: Stage 2 프롬프트 로드 실패: {e}")
-        return f"""STAGE 2 — STRICT OUTFIT REPLACEMENT
-Replace the person's outfit from Image 2. Keep face unchanged.
+--- DETAILED INSTRUCTIONS FROM IMAGE ANALYSIS ---
+{xai_prompt}
 
-CONTEXT FROM X.AI ANALYSIS (DO NOT OVERRIDE RULES ABOVE):
-{xai_prompt}"""
+--- FINAL CONSTRAINTS (EXECUTE LAST) ---
+1. FACE PRIORITY: The face must match Image 1 EXACTLY. Do not re-render, beautify, or alter facial features.
+2. OUTFIT FIT: Ensure the new outfit fits perfectly. NO traces of the original clothing (pants/top).
+3. NO GHOSTING: No mixed outfits or double clothing artifacts.
+4. LENGTH LOGIC: If the dress is short, legs/shoes must be realistic. If long, cover everything underneath."""
+    except Exception as e:
+        print(f"[V3] ERROR loading prompt file: {e}")
+        return xai_prompt
 
 
 def load_v3_stage3_prompt() -> str:
