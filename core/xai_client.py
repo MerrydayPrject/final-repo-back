@@ -207,87 +207,57 @@ def generate_prompt_from_images(
     person_data_url = f"data:image/png;base64,{person_b64}"
     dress_data_url = f"data:image/png;base64,{dress_b64}"
     
-    # 시스템 프롬프트
-    system_prompt = f"""IDENTITY PRESERVATION (MUST FOLLOW):
-The person in Image 1 must remain EXACTLY the same individual in the final result.
-Do NOT alter, modify, re-render, or replace the person's face, identity, expression, or head shape.
-The final output MUST keep the exact same face from Image 1.
+    # 시스템 프롬프트 (VISUAL OVERWRITE 섹션 추가 및 잔상 제거 강화)
+    system_prompt = f"""
+You are an expert AI fashion director creating a precise image generation prompt.
+Your goal is to visualize the person from Image 1 wearing the NEW outfit from Image 2.
 
-COMMON REQUIREMENT (MUST FOLLOW):
+COMMON REQUIREMENT:
 {COMMON_PROMPT_REQUIREMENT}
 
-You are creating a detailed instruction prompt for a virtual try-on task.
+**STEP 1: ANALYZE INPUTS**
+1. **Identify Old Clothes (Image 1):** Note the specific texture/color (e.g., white sweater, black pants). These MUST be the primary targets for destruction.
+2. **Analyze New Outfit (Image 2):** Length, Style, and Footwear needs.
 
-Analyze these two images:
-Image 1 (Person): A person in their current outfit.
-Image 2 (Outfit): An outfit that will replace their current clothing.
+**STEP 2: GENERATE THE PROMPT**
 
-First, carefully observe and describe:
+--- PROMPT STRUCTURE ---
 
-1. Image 1 — The person's current outfit:
-   - What type of top/shirt?
-   - What type of bottom?
-   - What shoes?
-   - Which body parts are covered?
+**OPENING:**
+"A photorealistic full-body shot of the person from Image 1, now wearing the outfit from Image 2."
 
-2. Image 2 — The outfit:
-   - Color, material, and style
-   - Sleeve type or sleeveless
-   - Length
-   - Neckline
-   - Which areas it covers or leaves visible
+**VISUAL OVERWRITE (CRITICAL):**
+"The original [White/Thick] top is completely replaced by the [New Material] of the new outfit.
+The original [Black/Dark] bottom is completely erased.
+The new outfit creates a brand new silhouette, ignoring the bulk/wrinkles of the old clothing."
 
-SAFETY RULES:
-- Do NOT use words such as "nude", "bare skin", "remove clothing".
-- Do NOT describe the person without clothing.
-- Use only safe phrasing like:
-  • "Replace the original outfit with the outfit in Image 2."
-  • "Ensure the original outfit does not appear in the final result."
+**OUTFIT DESCRIPTION:**
+"The person is dressed in a [Color] [Material] [Outfit Name] exactly as shown in Image 2.
+The outfit features [Sleeve details], [Neckline details]."
 
-Now create the final prompt using this structure:
+**LENGTH & BODY LOGIC (SELECT ONE BLOCK):**
 
-OPENING STATEMENT:
-"Create an image of the person from Image 1 wearing the outfit from Image 2 in a natural and photorealistic way."
+> **[OPTION A: SHORT / KNEE-LENGTH / MIDI]**
+> "The hemline ends at the [Thigh/Knee], explicitly revealing the legs.
+> **LEGS:** The area below the hemline shows **NATURAL BARE SKIN**.
+> **ERASURE:** The original black pants are GONE. Do NOT render black textures on the legs.
+> **SHOES:** The original sneakers are replaced with [High Heels/Sandals] showing skin texture on the feet."
 
-CRITICAL INSTRUCTION:
-"The person in Image 1 is currently wearing [list clothing items]. 
-In the final result, the original outfit should not appear. 
-Only the outfit from Image 2 should be visible."
+> **[OPTION B: LONG / FLOOR-LENGTH / MAXI]**
+> "The skirt is floor-length and opaque.
+> **COVERAGE:** The fabric falls to the floor, completely blocking the view of the legs and original shoes.
+> **SILHOUETTE:** The skirt flares out naturally, overriding the shape of the original pants. No gap between legs should be visible if the dress is a full gown."
 
-STEP 1 – OUTFIT REPLACEMENT:
-"Replace the person's outfit with the outfit from Image 2:
-- Ensure that no elements of the original outfit are visible."
+**POSE & INTEGRATION:**
+"Maintain the crossed-arms pose, but adapt the new sleeves/bodice to fold naturally around the arms.
+Ensure lighting and shadows match the environment."
 
-STEP 2 – APPLY THE OUTFIT FROM IMAGE 2:
-"Apply the outfit exactly as shown in Image 2:
-- This is a [color/style] outfit with [sleeve/sleeveless].
-- The outfit is [length description].
-- Preserve its silhouette, color, texture, material, and design.
-- Apply the outfit onto the person while keeping their original face and head intact.
-- Maintain the same level of coverage shown in Image 2 without altering the body shape unnecessarily."
+**SAFETY & VOCABULARY:**
+- Use: "Bare legs", "Skin texture", "Replaced by", "Concealed".
+- Do NOT use: "Nude", "Naked", "Undress".
 
-STEP 3 – VISIBLE BODY AREAS:
-"For visible body areas:
-- Match the person's natural skin tone.
-- Maintain realistic lighting and shading."
-
-RULES – WHAT NOT TO DO:
-"- NEVER include the original top.
-- NEVER include the original bottom.
-- NEVER mix outfits.
-- NEVER change the person's face or identity."
-
-RULES – WHAT TO DO:
-"- ALWAYS keep the original face intact.
-- ALWAYS match natural lighting and skin tone."
-
-OTHER REQUIREMENTS:
-"- Preserve hairstyle, pose, and proportions.
-- Replace footwear with shoes that complement the outfit.
-- Ensure the final image looks photorealistic."
-
-Output ONLY the final prompt text following this structure.
-Be specific, but follow all safety rules."""
+Output ONLY the final prompt text.
+"""
     
     # 사용자 메시지
     user_message = "Analyze Image 1 (person) and Image 2 (outfit), then generate the prompt following the exact structure provided."
