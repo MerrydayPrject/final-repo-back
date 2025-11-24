@@ -19,6 +19,9 @@
                         <button id="tabBodyAnalysis" class="tab-button" style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
                             📊 분석 결과 로그 목록
                         </button>
+                        <button id="tabReviews" class="tab-button" style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                            ⭐ 리뷰 로그 목록
+                        </button>
                     </div>
                     <h2 id="section-title">📋 합성 로그 목록</h2>
                     <div class="logs-header-right">
@@ -100,6 +103,33 @@
 
                 <!-- 페이지네이션 -->
                 <div class="pagination" id="body-pagination">
+                    <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+
+            <!-- 리뷰 로그 목록 -->
+            <div id="reviews-logs-section" style="display: none;">
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>카테고리</th>
+                                <th>별점</th>
+                                <th>내용</th>
+                                <th>작성일시</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reviews-logs-tbody">
+                            <tr>
+                                <td colspan="5" class="loading">데이터를 불러오는 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 페이지네이션 -->
+                <div class="pagination" id="reviews-pagination">
                     <!-- 동적으로 생성됨 -->
                 </div>
             </div>

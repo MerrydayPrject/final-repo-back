@@ -2,8 +2,9 @@
 let currentPage = 1;
 const itemsPerPage = 20;
 let currentSearchModel = null;
-let currentTab = 'synthesis'; // 'synthesis' or 'body'
+let currentTab = 'synthesis'; // 'synthesis', 'body', or 'reviews'
 let currentBodyPage = 1;
+let currentReviewsPage = 1;
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', () => {
@@ -12,12 +13,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // 탭 버튼 이벤트 리스너
     const tabSynthesis = document.getElementById('tabSynthesis');
     const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
+    const tabReviews = document.getElementById('tabReviews');
     
     if (tabSynthesis) {
         tabSynthesis.addEventListener('click', () => switchTab('synthesis'));
     }
     if (tabBodyAnalysis) {
         tabBodyAnalysis.addEventListener('click', () => switchTab('body'));
+    }
+    if (tabReviews) {
+        tabReviews.addEventListener('click', () => switchTab('reviews'));
     }
     
     // 검색 입력 필드에 Enter 키 이벤트 추가
@@ -37,37 +42,49 @@ function switchTab(tab) {
     
     const synthesisSection = document.getElementById('synthesis-logs-section');
     const bodySection = document.getElementById('body-logs-section');
+    const reviewsSection = document.getElementById('reviews-logs-section');
     const tabSynthesis = document.getElementById('tabSynthesis');
     const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
+    const tabReviews = document.getElementById('tabReviews');
     const sectionTitle = document.getElementById('section-title');
     const logsCountLabel = document.getElementById('logs-count-label');
     const searchContainer = document.querySelector('.search-container');
     
+    // 모든 섹션 숨기기
+    if (synthesisSection) synthesisSection.style.display = 'none';
+    if (bodySection) bodySection.style.display = 'none';
+    if (reviewsSection) reviewsSection.style.display = 'none';
+    
+    // 모든 탭 버튼 초기화
+    if (tabSynthesis) {
+        tabSynthesis.classList.remove('active');
+        tabSynthesis.style.background = '#fff';
+        tabSynthesis.style.color = '#333';
+    }
+    if (tabBodyAnalysis) {
+        tabBodyAnalysis.classList.remove('active');
+        tabBodyAnalysis.style.background = '#fff';
+        tabBodyAnalysis.style.color = '#333';
+    }
+    if (tabReviews) {
+        tabReviews.classList.remove('active');
+        tabReviews.style.background = '#fff';
+        tabReviews.style.color = '#333';
+    }
+    
     if (tab === 'synthesis') {
         if (synthesisSection) synthesisSection.style.display = 'block';
-        if (bodySection) bodySection.style.display = 'none';
         if (tabSynthesis) {
             tabSynthesis.classList.add('active');
             tabSynthesis.style.background = '#007bff';
             tabSynthesis.style.color = '#fff';
         }
-        if (tabBodyAnalysis) {
-            tabBodyAnalysis.classList.remove('active');
-            tabBodyAnalysis.style.background = '#fff';
-            tabBodyAnalysis.style.color = '#333';
-        }
         if (sectionTitle) sectionTitle.textContent = '📋 합성 로그 목록';
         if (logsCountLabel) logsCountLabel.textContent = '전체 합성:';
         if (searchContainer) searchContainer.style.display = 'block';
         loadLogs(currentPage, currentSearchModel);
-    } else {
-        if (synthesisSection) synthesisSection.style.display = 'none';
+    } else if (tab === 'body') {
         if (bodySection) bodySection.style.display = 'block';
-        if (tabSynthesis) {
-            tabSynthesis.classList.remove('active');
-            tabSynthesis.style.background = '#fff';
-            tabSynthesis.style.color = '#333';
-        }
         if (tabBodyAnalysis) {
             tabBodyAnalysis.classList.add('active');
             tabBodyAnalysis.style.background = '#007bff';
@@ -77,6 +94,17 @@ function switchTab(tab) {
         if (logsCountLabel) logsCountLabel.textContent = '전체 분석:';
         if (searchContainer) searchContainer.style.display = 'none';
         loadBodyLogs(currentBodyPage);
+    } else if (tab === 'reviews') {
+        if (reviewsSection) reviewsSection.style.display = 'block';
+        if (tabReviews) {
+            tabReviews.classList.add('active');
+            tabReviews.style.background = '#007bff';
+            tabReviews.style.color = '#fff';
+        }
+        if (sectionTitle) sectionTitle.textContent = '⭐ 리뷰 로그 목록';
+        if (logsCountLabel) logsCountLabel.textContent = '전체 리뷰:';
+        if (searchContainer) searchContainer.style.display = 'none';
+        loadReviews(currentReviewsPage);
     }
 }
 
@@ -738,6 +766,129 @@ function renderBodyDetailModal(log) {
             }
         }, 100);
     }
+}
+
+// 리뷰 로그 목록 로드
+async function loadReviews(page) {
+    try {
+        const url = `/api/reviews?limit=${itemsPerPage}&offset=${(page - 1) * itemsPerPage}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+            renderReviews(data.reviews);
+            renderReviewsPagination(data.total, page);
+            updateReviewsCount(data.total);
+            currentReviewsPage = page;
+        } else {
+            showError('리뷰 로그를 불러오는 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('리뷰 로그 로드 오류:', error);
+        const tbody = document.getElementById('reviews-logs-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="5" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        }
+    }
+}
+
+// 리뷰 로그 갯수 업데이트
+function updateReviewsCount(count) {
+    const logsCountElement = document.getElementById('logs-count');
+    if (logsCountElement) {
+        logsCountElement.textContent = count;
+    }
+}
+
+// 리뷰 로그 테이블 렌더링
+function renderReviews(reviews) {
+    const tbody = document.getElementById('reviews-logs-tbody');
+    
+    if (!tbody) return;
+    
+    if (reviews.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="loading">리뷰가 없습니다.</td></tr>';
+        return;
+    }
+    
+    // 카테고리 한글 변환
+    const categoryMap = {
+        'general': '일반피팅',
+        'custom': '커스텀피팅',
+        'analysis': '체형분석'
+    };
+    
+    tbody.innerHTML = reviews.map(review => {
+        const id = review.idx !== undefined ? review.idx : '-';
+        const category = categoryMap[review.category] || review.category || '-';
+        const rating = review.rating !== undefined ? '⭐'.repeat(review.rating) + ` (${review.rating})` : '-';
+        const content = review.content ? (review.content.length > 50 ? review.content.substring(0, 50) + '...' : review.content) : '-';
+        const createdAt = review.created_at ? formatDateTime(review.created_at) : '-';
+        
+        return `
+        <tr>
+            <td>${id}</td>
+            <td>${category}</td>
+            <td>${rating}</td>
+            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(review.content || '')}">${escapeHtml(content)}</td>
+            <td>${createdAt}</td>
+        </tr>
+    `;
+    }).join('');
+}
+
+// 리뷰 로그 페이지네이션 렌더링
+function renderReviewsPagination(total, currentPage) {
+    const paginationDiv = document.getElementById('reviews-pagination');
+    
+    if (!paginationDiv) return;
+    
+    const totalPages = Math.ceil(total / itemsPerPage);
+    
+    if (totalPages === 0) {
+        paginationDiv.innerHTML = '';
+        return;
+    }
+    
+    const createPageButton = (pageNum, text, disabled = false, active = false) => {
+        if (disabled) {
+            return `<button disabled>${text}</button>`;
+        }
+        const activeClass = active ? ' class="active"' : '';
+        return `<button onclick="loadReviews(${pageNum})"${activeClass}>${text}</button>`;
+    };
+    
+    let html = createPageButton(1, '처음', currentPage === 1);
+    
+    if (currentPage > 1) {
+        html += createPageButton(currentPage - 1, '이전');
+    }
+    
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        html += '<button disabled>...</button>';
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += createPageButton(i, i.toString(), false, i === currentPage);
+    }
+    
+    if (endPage < totalPages) {
+        html += '<button disabled>...</button>';
+    }
+    
+    if (currentPage < totalPages) {
+        html += createPageButton(currentPage + 1, '다음');
+    }
+    
+    html += createPageButton(totalPages, '마지막', currentPage === totalPages);
+    
+    html += `<span class="pagination-info">총 ${total}개 항목 (${currentPage}/${totalPages} 페이지)</span>`;
+    
+    paginationDiv.innerHTML = html;
 }
 
 
