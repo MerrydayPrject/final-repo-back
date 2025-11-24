@@ -16,10 +16,6 @@ GEMINI_PROMPT_MODEL = os.getenv("GEMINI_PROMPT_MODEL", "gemini-2.0-flash-exp")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_3_API_KEY = os.getenv("GEMINI_3_API_KEY", "")
 
-# Meshy API 설정
-MESHY_API_KEY = os.getenv("MESHY_API_KEY", "")
-MESHY_API_URL = "https://api.meshy.ai"
-
 # x.ai API 설정
 XAI_API_KEY = os.getenv("XAI_API_KEY", "")
 XAI_API_BASE_URL = os.getenv("XAI_API_BASE_URL", "https://api.x.ai/v1")

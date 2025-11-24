@@ -65,8 +65,10 @@ class BodyAnalysisService:
     
     def _get_default_model_path(self) -> Path:
         """기본 모델 경로 반환"""
-        models_dir = Path(__file__).parent / "models"
-        models_dir.mkdir(exist_ok=True)
+        # 프로젝트 루트 기준으로 models/body_analysis/ 경로 사용
+        project_root = Path(__file__).parent.parent
+        models_dir = project_root / "models" / "body_analysis"
+        models_dir.mkdir(parents=True, exist_ok=True)
         return models_dir / "pose_landmarker_lite.task"
     
     def _download_model(self, model_path: Path):

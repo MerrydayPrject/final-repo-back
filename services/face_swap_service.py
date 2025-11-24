@@ -307,7 +307,7 @@ class FaceSwapService:
                 from mediapipe.tasks.python import vision
                 
                 # MediaPipe Pose Landmarker로 포즈 감지
-                model_path = Path(__file__).parent.parent / 'body_analysis_test' / 'models' / 'pose_landmarker_lite.task'
+                model_path = Path(__file__).parent.parent / 'models' / 'body_analysis' / 'pose_landmarker_lite.task'
                 if model_path.exists():
                     base_options = python.BaseOptions(model_asset_path=str(model_path))
                     options = vision.PoseLandmarkerOptions(

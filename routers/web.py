@@ -55,12 +55,6 @@ async def gemini_test_page(request: Request):
     return templates.TemplateResponse("gemini_test.html", {"request": request})
 
 
-@router.get("/3d-conversion", response_class=HTMLResponse, tags=["Web Interface"])
-async def conversion_3d_page(request: Request):
-    """3D 이미지 변환 페이지"""
-    return templates.TemplateResponse("3d_conversion.html", {"request": request})
-
-
 @router.get("/model-comparison", response_class=HTMLResponse, tags=["Web Interface"])
 async def model_comparison_page(request: Request):
     """

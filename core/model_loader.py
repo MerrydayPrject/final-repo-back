@@ -3,7 +3,7 @@ import asyncio
 import torch
 from typing import Optional
 from transformers import SegformerImageProcessor, AutoModelForSemanticSegmentation
-from body_analysis_test.body_analysis import BodyAnalysisService
+from services.body_analysis_service import BodyAnalysisService
 from services.image_classifier_service import ImageClassifierService
 
 # 전역 변수로 모델 저장

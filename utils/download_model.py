@@ -9,9 +9,10 @@ def download_model():
     """MediaPipe Pose Landmarker 모델 다운로드"""
     model_url = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
     
-    # 모델 저장 경로
-    models_dir = Path(__file__).parent / "models"
-    models_dir.mkdir(exist_ok=True)
+    # 모델 저장 경로 (models/body_analysis/)
+    project_root = Path(__file__).parent.parent
+    models_dir = project_root / "models" / "body_analysis"
+    models_dir.mkdir(parents=True, exist_ok=True)
     model_path = models_dir / "pose_landmarker_lite.task"
     
     if model_path.exists():
