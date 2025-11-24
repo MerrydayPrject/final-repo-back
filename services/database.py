@@ -160,6 +160,22 @@ def init_database():
             cursor.execute(create_body_logs_table)
             connection.commit()
             print("DB 테이블 생성 완료: body_logs")
+            
+            # reviews 테이블 생성
+            create_reviews_table = """
+            CREATE TABLE IF NOT EXISTS reviews (
+                idx INT AUTO_INCREMENT PRIMARY KEY,
+                rating TINYINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+                content TEXT,
+                category ENUM('general', 'custom', 'analysis') NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_category (category),
+                INDEX idx_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """
+            cursor.execute(create_reviews_table)
+            connection.commit()
+            print("DB 테이블 생성 완료: reviews")
     except Exception as e:
         print(f"테이블 생성 오류: {e}")
     finally:
