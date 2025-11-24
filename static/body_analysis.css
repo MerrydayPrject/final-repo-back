@@ -22,8 +22,15 @@
 
 body {
     font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #ffffff;
-    color: var(--text-dark);
+    width: 100%;
+    height: 100%;
+    background-color: #111111;
+    background-image: linear-gradient(32deg,
+            rgba(8, 8, 8, 0.74) 30px,
+            transparent);
+    background-size: 60px 60px;
+    background-position: -5px -5px;
+    color: #e0e0e0;
     line-height: 1.6;
     min-height: 100vh;
 }
@@ -36,11 +43,18 @@ body {
 
 /* 헤더 */
 .test-header {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-    padding: 20px 40px;
-    box-shadow: var(--shadow-md);
-    position: sticky;
-    top: 0;
+    background: white;
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    color: black;
+    padding: 35px 100px;
+    width: 98%;
+    max-width: 1800px;
+    margin: 30px auto;
+    border-radius: 200px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    position: relative;
     z-index: 100;
 }
 
@@ -50,23 +64,79 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    position: relative;
 }
 
 .logo-text {
-    font-size: 28px;
+    font-size: 2.2em;
     font-weight: 700;
-    color: white;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    color: black;
+    flex: 1;
+    text-align: center;
+    margin: 0;
 }
 
 .header-badge {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
+    position: absolute;
+    right: 200px;
+    background: rgba(46, 213, 115, 0.2);
+    color: rgb(46, 213, 115);
     padding: 6px 16px;
     border-radius: 20px;
     font-size: 14px;
     font-weight: 500;
     backdrop-filter: blur(10px);
+}
+
+/* Home Button */
+.btn-home {
+    /* From Uiverse.io by Smit-Prajapati */
+    --main-color: rgb(46, 213, 115);
+    --main-bg-color: rgba(46, 213, 116, 0.36);
+    --pattern-color: rgba(46, 213, 116, 0.073);
+
+    filter: hue-rotate(0deg);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5rem;
+    background: radial-gradient(circle,
+            var(--main-bg-color) 0%,
+            rgba(0, 0, 0, 0) 95%),
+        linear-gradient(var(--pattern-color) 1px, transparent 1px),
+        linear-gradient(to right, var(--pattern-color) 1px, transparent 1px);
+    background-size:
+        cover,
+        15px 15px,
+        15px 15px;
+    background-position:
+        center center,
+        center center,
+        center center;
+    border-image: radial-gradient(circle,
+            var(--main-color) 0%,
+            rgba(0, 0, 0, 0) 100%) 1;
+    border-width: 1px 0 1px 0;
+    color: var(--main-color);
+    padding: 1rem 3rem;
+    font-weight: 700;
+    font-size: 1.5rem;
+    transition: background-size 0.2s ease-in-out;
+    text-decoration: none;
+    display: inline-block;
+    position: absolute;
+    right: 0;
+}
+
+.btn-home:hover {
+    background-size:
+        cover,
+        10px 10px,
+        10px 10px;
+    text-decoration: none;
+}
+
+.btn-home:active {
+    filter: hue-rotate(250deg);
 }
 
 /* 메인 컨텐츠 */
@@ -173,8 +243,8 @@ body {
     margin-bottom: 16px;
     flex: 1;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1),
-                inset 0 2px 4px rgba(0, 0, 0, 0.05),
-                0 4px 8px rgba(0, 0, 0, 0.1);
+        inset 0 2px 4px rgba(0, 0, 0, 0.05),
+        0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .upload-area:hover {
@@ -564,8 +634,13 @@ body {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 /* 반응형 */
@@ -573,7 +648,7 @@ body {
     .content-wrapper {
         flex-direction: column;
     }
-    
+
     .left-section,
     .right-section {
         width: 100%;
@@ -584,14 +659,13 @@ body {
     .main-content {
         padding: 20px;
     }
-    
+
     .upload-container,
     .result-container {
         padding: 20px;
     }
-    
+
     .page-title {
         font-size: 28px;
     }
 }
-

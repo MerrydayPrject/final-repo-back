@@ -6,42 +6,136 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    width: 100%;
+    height: 100%;
+    background-color: #111111;
+    background-image: linear-gradient(32deg,
+            rgba(8, 8, 8, 0.74) 30px,
+            transparent);
+    background-size: 60px 60px;
+    background-position: -5px -5px;
     min-height: 100vh;
-    padding: 20px;
+    padding: 0;
     color: #333;
-}
-
-.container {
-    max-width: 1400px;
-    margin: 0 auto;
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 40px 30px;
+    background: white;
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    color: black;
+    padding: 35px 100px;
+    width: 98%;
+    max-width: 1800px;
+    margin: 30px auto;
+    border-radius: 200px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    position: relative;
+    z-index: 10;
+}
+
+header>div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+header>div>div:first-child {
+    flex: 1;
     text-align: center;
 }
 
 header h1 {
-    font-size: 2.5em;
-    margin-bottom: 10px;
+    font-size: 2.2em;
+    margin: 0;
     font-weight: 700;
 }
 
 header p {
     font-size: 1.1em;
     opacity: 0.9;
+    margin: 10px 0 0 0;
 }
 
-main {
+/* Admin Header */
+header.admin-header,
+.admin-header {
+    background: white !important;
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
+    color: black !important;
+    padding: 35px 100px !important;
+    width: 98% !important;
+    max-width: 1800px !important;
+    margin: 30px auto !important;
+    border-radius: 200px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    position: relative !important;
+    z-index: 10 !important;
+    text-align: left !important;
+}
+
+.admin-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.admin-header h1 {
+    font-size: 2.2em;
+    font-weight: 700;
+    margin: 0;
+    color: black;
+}
+
+.admin-subtitle {
+    font-size: 1.1em;
+    opacity: 0.95;
+    font-weight: 500;
+}
+
+/* Admin Main */
+.admin-main {
+    flex: 1;
     padding: 40px 30px;
     min-height: 400px;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Admin Footer */
+.admin-footer {
+    background: rgba(173, 159, 65, 0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 20px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.9);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: 100;
+}
+
+.admin-footer a {
+    color: rgba(255, 255, 255, 0.95);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.admin-footer a:hover {
+    text-decoration: underline;
+    color: white;
 }
 
 /* Upload Section */
@@ -51,7 +145,7 @@ main {
 }
 
 .upload-area {
-    border: 3px dashed #667eea;
+    border: 3px dashed #ad9f41;
     border-radius: 15px;
     padding: 60px 30px;
     text-align: center;
@@ -61,7 +155,7 @@ main {
 }
 
 .upload-area:hover {
-    border-color: #764ba2;
+    border-color: #8b7d3a;
     background: #f0f2ff;
     transform: translateY(-2px);
 }
@@ -84,7 +178,7 @@ main {
 }
 
 .upload-button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #ad9f41 0%, #8b7d3a 100%);
     color: white;
     border: none;
     padding: 15px 40px;
@@ -97,7 +191,7 @@ main {
 
 .upload-button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 5px 20px rgba(173, 159, 65, 0.4);
 }
 
 /* Loading Section */
@@ -108,7 +202,7 @@ main {
 
 .spinner {
     border: 5px solid #f3f3f3;
-    border-top: 5px solid #667eea;
+    border-top: 5px solid #ad9f41;
     border-radius: 50%;
     width: 60px;
     height: 60px;
@@ -117,13 +211,18 @@ main {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .loading-section p {
     font-size: 1.3em;
-    color: #667eea;
+    color: #ad9f41;
     font-weight: 600;
 }
 
@@ -137,6 +236,7 @@ main {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -192,7 +292,7 @@ main {
 }
 
 .result-image-wrapper {
-    background: 
+    background:
         linear-gradient(45deg, #ccc 25%, transparent 25%),
         linear-gradient(-45deg, #ccc 25%, transparent 25%),
         linear-gradient(45deg, transparent 75%, #ccc 75%),
@@ -281,7 +381,7 @@ footer {
 }
 
 footer a {
-    color: #667eea;
+    color: #ad9f41;
     text-decoration: none;
     font-weight: 600;
 }
@@ -300,7 +400,7 @@ footer a:hover {
 }
 
 .admin-navigation h3 {
-    color: #667eea;
+    color: #ad9f41;
     margin-bottom: 15px;
     font-size: 1.2em;
 }
@@ -315,53 +415,144 @@ footer a:hover {
 .admin-btn {
     display: inline-block;
     padding: 12px 24px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #ad9f41 0%, #8b7d3a 100%);
     color: white;
     text-decoration: none;
     border-radius: 8px;
     font-weight: 600;
     transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 2px 4px rgba(173, 159, 65, 0.3);
 }
 
 .admin-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 8px rgba(173, 159, 65, 0.4);
     text-decoration: none;
 }
 
-/* Test Pages Section */
-.test-pages-section {
-    padding: 40px 30px;
-}
-
+/* Test Pages Grid */
 .test-pages-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 30px;
-    max-width: 1200px;
-    margin: 0 auto;
+    width: 100%;
+    margin: 0;
 }
 
 .test-page-card {
+    position: relative;
     display: block;
-    background: white;
-    border-radius: 16px;
-    padding: 40px 30px;
-    text-align: center;
     text-decoration: none;
-    color: #333;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    border: 2px solid transparent;
+    cursor: pointer;
+    font-weight: bold;
+    padding: 0;
+    -webkit-box-reflect: bottom 1px linear-gradient(transparent, #0004);
+    overflow: hidden;
+}
+
+.test-page-card::before {
+    content: "";
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background-size: 400%;
+    opacity: 0;
+    transition: 0.5s;
+    background: linear-gradient(45deg,
+            #91155d,
+            #525296,
+            #0f0,
+            #ff0,
+            #fb0094,
+            #00f,
+            #0f0,
+            #ff0);
+    animation: animate123 20s linear infinite;
+    z-index: 0;
+}
+
+.test-page-card::after {
+    content: "";
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background-size: 400%;
+    filter: blur(20px);
+    transition: 0.5s;
+    background: linear-gradient(45deg,
+            #91155d,
+            #525296,
+            #0f0,
+            #ff0,
+            #fb0094,
+            #00f,
+            #0f0,
+            #ff0);
+    animation: animate123 20s linear infinite;
+    z-index: 0;
+}
+
+.test-page-card:hover::before,
+.test-page-card:hover::after {
+    opacity: 1;
 }
 
 .test-page-card:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
-    border-color: #667eea;
-    text-decoration: none;
-    color: #333;
+    box-shadow: 0 0 30px rgba(255, 255, 255, 0.6),
+        0 0 60px rgba(255, 255, 255, 0.4),
+        0 0 90px rgba(255, 255, 255, 0.2);
+}
+
+.test-page-card span {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    top: 4px;
+    right: 4px;
+    bottom: 4px;
+    left: 4px;
+    text-align: center;
+    background: black;
+    color: rgba(255, 255, 255, 0.781);
+    transition: 0.5s;
+    z-index: 1;
+    padding: 40px 30px;
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+.test-page-card:hover span {
+    color: rgba(255, 255, 255, 1);
+}
+
+.test-page-card span::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 50%;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+@keyframes animate123 {
+    0% {
+        background-position: 0 0;
+    }
+
+    50% {
+        background-position: 300% 0;
+    }
+
+    100% {
+        background-position: 0 0;
+    }
 }
 
 .test-page-icon {
@@ -369,38 +560,91 @@ footer a:hover {
     margin-bottom: 20px;
 }
 
-.test-page-card h2 {
-    color: #667eea;
+.test-page-card span h2 {
+    color: rgba(255, 255, 255, 0.781);
+    background: transparent;
     font-size: 1.5em;
     margin-bottom: 15px;
     font-weight: 700;
+    padding: 0;
+    border-radius: 0;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    transition: 0.5s;
 }
 
-.test-page-card p {
-    color: #666;
+.test-page-card:hover span h2 {
+    color: rgba(255, 255, 255, 1);
+}
+
+.test-page-card span p {
+    color: rgba(255, 255, 255, 0.781);
     font-size: 1em;
     line-height: 1.6;
+    transition: 0.5s;
+}
+
+.test-page-card:hover span p {
+    color: rgba(255, 255, 255, 1);
+}
+
+.test-page-card span .test-page-icon {
+    color: rgba(255, 255, 255, 0.781);
+    transition: 0.5s;
+}
+
+.test-page-card:hover span .test-page-icon {
+    color: rgba(255, 255, 255, 1);
 }
 
 /* Home Button */
 .btn-home {
-    display: inline-block;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    /* From Uiverse.io by Smit-Prajapati */
+    --main-color: rgb(46, 213, 115);
+    --main-bg-color: rgba(46, 213, 116, 0.36);
+    --pattern-color: rgba(46, 213, 116, 0.073);
+
+    filter: hue-rotate(0deg);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5rem;
+    background: radial-gradient(circle,
+            var(--main-bg-color) 0%,
+            rgba(0, 0, 0, 0) 95%),
+        linear-gradient(var(--pattern-color) 1px, transparent 1px),
+        linear-gradient(to right, var(--pattern-color) 1px, transparent 1px);
+    background-size:
+        cover,
+        15px 15px,
+        15px 15px;
+    background-position:
+        center center,
+        center center,
+        center center;
+    border-image: radial-gradient(circle,
+            var(--main-color) 0%,
+            rgba(0, 0, 0, 0) 100%) 1;
+    border-width: 1px 0 1px 0;
+    color: var(--main-color);
+    padding: 1rem 3rem;
+    font-weight: 700;
+    font-size: 1.5rem;
+    transition: background-size 0.2s ease-in-out;
     text-decoration: none;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 0.95em;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+    display: inline-block;
 }
 
 .btn-home:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+    background-size:
+        cover,
+        10px 10px,
+        10px 10px;
     text-decoration: none;
-    color: white;
+}
+
+.btn-home:active {
+    filter: hue-rotate(250deg);
 }
 
 /* Responsive Design */
@@ -411,6 +655,35 @@ footer a:hover {
 
     header p {
         font-size: 1em;
+    }
+
+    .admin-header {
+        padding: 25px 40px;
+        width: 98%;
+        border-radius: 150px;
+    }
+
+    .admin-header-content {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+
+    .admin-header h1 {
+        font-size: 1.8em;
+    }
+
+    .admin-subtitle {
+        font-size: 0.95em;
+    }
+
+    .admin-main {
+        padding: 30px 20px;
+    }
+
+    .test-pages-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
     }
 
     main {
@@ -446,6 +719,7 @@ footer a:hover {
 
     .test-page-card h2 {
         font-size: 1.3em;
+        padding: 10px 15px;
     }
 }
 
@@ -457,5 +731,3 @@ footer a:hover {
 .test-page-card:hover .test-page-icon {
     transform: scale(1.1);
 }
-
-

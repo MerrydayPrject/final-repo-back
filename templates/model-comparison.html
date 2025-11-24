@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,11 +9,17 @@
     <link rel="stylesheet" href="/static/model-comparison.css">
     <style>
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -21,63 +28,81 @@
                     <h1>⚖️ 모델 비교 테스트</h1>
                     <p>여러 모델의 합성 기능을 동시에 비교합니다</p>
                 </div>
-                <a href="/" class="btn-home">🏠 홈으로</a>
+                <a href="/" class="btn-home">홈으로</a>
             </div>
         </header>
 
         <main>
             <!-- 프롬프트 비교 섹션 -->
-            <section class="prompt-comparison-section" style="margin-bottom: 40px; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <section class="prompt-comparison-section"
+                style="margin-bottom: 40px; padding: 20px; background: #f5f5f5; border-radius: 8px;">
                 <h2>📝 프롬프트 생성 모델 비교</h2>
                 <p style="color: #666; margin-bottom: 20px;">Gemini, GPT-4o, x.ai 세 모델의 프롬프트 생성 결과를 동시에 비교합니다</p>
-                
-                <div class="prompt-upload-section" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+
+                <div class="prompt-upload-section"
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
                     <div>
                         <label style="display: block; margin-bottom: 10px; font-weight: bold;">👤 사람 이미지</label>
-                        <div class="prompt-upload-area" id="prompt-upload-person" style="border: 2px dashed #ddd; padding: 20px; text-align: center; cursor: pointer; background: white; border-radius: 4px;">
-                            <input type="file" id="prompt-input-person" accept="image/*" style="display: none;" onchange="handlePromptImageUpload(event, 'person')">
+                        <div class="prompt-upload-area" id="prompt-upload-person"
+                            style="border: 2px dashed #ddd; padding: 20px; text-align: center; cursor: pointer; background: white; border-radius: 4px;">
+                            <input type="file" id="prompt-input-person" accept="image/*" style="display: none;"
+                                onchange="handlePromptImageUpload(event, 'person')">
                             <div class="prompt-upload-content" id="prompt-content-person">
                                 <div style="font-size: 24px; margin-bottom: 10px;">📁</div>
                                 <p>이미지를 드래그하거나 클릭</p>
-                                <button onclick="document.getElementById('prompt-input-person').click()" style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">파일 선택</button>
+                                <button onclick="document.getElementById('prompt-input-person').click()"
+                                    style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">파일
+                                    선택</button>
                             </div>
                             <div class="prompt-preview-container" id="prompt-preview-person" style="display: none;">
-                                <img id="prompt-img-person" alt="Person Preview" style="max-width: 100%; max-height: 200px; border-radius: 4px;">
-                                <button onclick="removePromptImage('person')" style="margin-top: 10px; padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">제거</button>
+                                <img id="prompt-img-person" alt="Person Preview"
+                                    style="max-width: 100%; max-height: 200px; border-radius: 4px;">
+                                <button onclick="removePromptImage('person')"
+                                    style="margin-top: 10px; padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">제거</button>
                             </div>
                         </div>
                     </div>
                     <div>
                         <label style="display: block; margin-bottom: 10px; font-weight: bold;">👗 드레스 이미지</label>
-                        <div class="prompt-upload-area" id="prompt-upload-dress" style="border: 2px dashed #ddd; padding: 20px; text-align: center; cursor: pointer; background: white; border-radius: 4px;">
-                            <input type="file" id="prompt-input-dress" accept="image/*" style="display: none;" onchange="handlePromptImageUpload(event, 'dress')">
+                        <div class="prompt-upload-area" id="prompt-upload-dress"
+                            style="border: 2px dashed #ddd; padding: 20px; text-align: center; cursor: pointer; background: white; border-radius: 4px;">
+                            <input type="file" id="prompt-input-dress" accept="image/*" style="display: none;"
+                                onchange="handlePromptImageUpload(event, 'dress')">
                             <div class="prompt-upload-content" id="prompt-content-dress">
                                 <div style="font-size: 24px; margin-bottom: 10px;">📁</div>
                                 <p>이미지를 드래그하거나 클릭</p>
-                                <button onclick="document.getElementById('prompt-input-dress').click()" style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">파일 선택</button>
+                                <button onclick="document.getElementById('prompt-input-dress').click()"
+                                    style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">파일
+                                    선택</button>
                             </div>
                             <div class="prompt-preview-container" id="prompt-preview-dress" style="display: none;">
-                                <img id="prompt-img-dress" alt="Dress Preview" style="max-width: 100%; max-height: 200px; border-radius: 4px;">
-                                <button onclick="removePromptImage('dress')" style="margin-top: 10px; padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">제거</button>
+                                <img id="prompt-img-dress" alt="Dress Preview"
+                                    style="max-width: 100%; max-height: 200px; border-radius: 4px;">
+                                <button onclick="removePromptImage('dress')"
+                                    style="margin-top: 10px; padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">제거</button>
                             </div>
                         </div>
                     </div>
                 </div>
-                
+
                 <div style="text-align: center;">
-                    <button id="prompt-compare-btn" onclick="runPromptComparison()" style="padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold;">
+                    <button id="prompt-compare-btn" onclick="runPromptComparison()"
+                        style="padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold;">
                         🚀 프롬프트 비교 실행
                     </button>
                 </div>
-                
+
                 <div id="prompt-loading" style="display: none; text-align: center; padding: 20px;">
-                    <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <div
+                        style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite;">
+                    </div>
                     <p style="margin-top: 10px;">프롬프트 생성 중...</p>
                 </div>
-                
+
                 <div id="prompt-results" style="display: none; margin-top: 30px;">
                     <h3 style="margin-bottom: 20px;">비교 결과</h3>
-                    <div id="prompt-results-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+                    <div id="prompt-results-grid"
+                        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
                         <!-- 결과가 여기에 표시됨 -->
                     </div>
                 </div>
@@ -123,7 +148,8 @@
                         </div>
                         <div class="form-group">
                             <label>설명 *</label>
-                            <textarea id="add-model-description" placeholder="모델에 대한 설명을 입력하세요" rows="3" required></textarea>
+                            <textarea id="add-model-description" placeholder="모델에 대한 설명을 입력하세요" rows="3"
+                                required></textarea>
                         </div>
                         <div class="form-group">
                             <label>API 엔드포인트 *</label>
@@ -162,5 +188,5 @@
 
     <script src="/static/model-comparison.js"></script>
 </body>
-</html>
 
+</html>

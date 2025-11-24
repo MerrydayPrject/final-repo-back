@@ -1,5 +1,18 @@
 /* 이미지 필터 & 프레임 페이지 스타일 */
 
+body {
+    width: 100%;
+    height: 100%;
+    background-color: #111111;
+    background-image: linear-gradient(32deg,
+            rgba(8, 8, 8, 0.74) 30px,
+            transparent);
+    background-size: 60px 60px;
+    background-position: -5px -5px;
+    min-height: 100vh;
+    color: #e0e0e0;
+}
+
 .upload-section {
     margin-bottom: 20px;
 }
@@ -130,7 +143,9 @@
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .action-buttons {
@@ -235,22 +250,21 @@
     .controls-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .filter-buttons {
         flex-direction: column;
     }
-    
+
     .filter-btn {
         width: 100%;
     }
-    
+
     .action-buttons {
         flex-direction: column;
     }
-    
+
     .btn-primary,
     .btn-secondary {
         width: 100%;
     }
 }
-
