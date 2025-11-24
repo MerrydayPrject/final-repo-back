@@ -50,7 +50,7 @@ from routers import (
     info, web, segmentation, composition, prompt, 
     body_analysis, admin, dress_management, image_processing,
     proxy, models, tryon_router, body_generation, fitting_router,
-    custom_v3_router, custom_v4_router
+    custom_v3_router, custom_v4_router, review
 )
 
 app.include_router(info.router)
@@ -69,6 +69,7 @@ app.include_router(body_generation.router)
 app.include_router(fitting_router.router)
 app.include_router(custom_v3_router.router)
 app.include_router(custom_v4_router.router)
+app.include_router(review.router)
 
 # Startup 이벤트
 @app.on_event("startup")
