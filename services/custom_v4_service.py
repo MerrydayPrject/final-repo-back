@@ -12,7 +12,7 @@ from core.xai_client import generate_prompt_from_images
 from core.s3_client import upload_log_to_s3
 from services.image_service import preprocess_dress_image
 from services.log_service import save_test_log
-from services.garment_nukki_service import remove_garment_background
+from core.segformer_garment_parser import parse_garment_image_v4
 from services.tryon_service import (
     load_v4_unified_prompt,
     decode_base64_to_image
@@ -68,28 +68,28 @@ def generate_unified_tryon_custom_v4(
         print("CustomV4 파이프라인 시작")
         print("="*80)
         
-        print("\n[Stage 0] 의상 이미지 누끼 처리 시작...")
-        try:
-            garment_nukki = remove_garment_background(garment_img)
-            print("[Stage 0] 의상 이미지 누끼 처리 완료")
-            print(f"[Stage 0] 누끼 처리된 이미지 크기: {garment_nukki.size[0]}x{garment_nukki.size[1]}, 모드: {garment_nukki.mode}")
-        except Exception as e:
-            print(f"[Stage 0] 누끼 처리 실패: {e}")
+        print("\n[Stage 0] 의상 이미지 누끼 처리 시작 (HuggingFace API)...")
+        parsing_result = parse_garment_image_v4(garment_img)
+        
+        if not parsing_result.get("success"):
+            error_msg = parsing_result.get("message", "의상 이미지 누끼 처리에 실패했습니다.")
+            print(f"[Stage 0] 누끼 처리 실패: {error_msg}")
             print("[Stage 0] 원본 의상 이미지를 그대로 사용합니다.")
             # 누끼 처리 실패 시 원본 이미지를 RGB로 변환하여 사용
-            garment_nukki = garment_img.convert('RGB')
+            garment_nukki_rgb = garment_img.convert('RGB')
+        else:
+            garment_nukki_rgb = parsing_result.get("garment_only")
+            if garment_nukki_rgb is None:
+                print("[Stage 0] 누끼 처리 결과에서 garment_only 이미지를 찾을 수 없습니다.")
+                garment_nukki_rgb = garment_img.convert('RGB')
+            else:
+                print("[Stage 0] 의상 이미지 누끼 처리 완료")
+                print(f"[Stage 0] 누끼 처리된 이미지 크기: {garment_nukki_rgb.size[0]}x{garment_nukki_rgb.size[1]}, 모드: {garment_nukki_rgb.mode}")
         
         # ============================================================
         # Stage 1: X.AI 프롬프트 생성 준비
         # ============================================================
-        # 누끼 처리된 이미지를 RGB로 변환
-        if garment_nukki.mode == 'RGBA':
-            # RGBA를 RGB로 변환 (흰색 배경에 합성)
-            white_bg = Image.new('RGB', garment_nukki.size, (255, 255, 255))
-            white_bg.paste(garment_nukki, mask=garment_nukki.split()[3] if garment_nukki.mode == 'RGBA' else None)
-            garment_nukki_rgb = white_bg
-        else:
-            garment_nukki_rgb = garment_nukki.convert('RGB')
+        # garment_nukki_rgb는 이미 RGB 모드로 반환됨
         
         # 배경 이미지는 원본 그대로 유지
         background_img_processed = background_img
@@ -104,7 +104,7 @@ def generate_unified_tryon_custom_v4(
         garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
         
         garment_nukki_buffered = io.BytesIO()
-        garment_nukki.save(garment_nukki_buffered, format="PNG")
+        garment_nukki_rgb.save(garment_nukki_buffered, format="PNG")
         garment_nukki_s3_url = upload_log_to_s3(garment_nukki_buffered.getvalue(), model_id, "garment_nukki") or ""
         
         background_buffered = io.BytesIO()
