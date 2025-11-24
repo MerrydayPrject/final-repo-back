@@ -1,31 +1,77 @@
+# ============================================
+# 필수 웹 프레임워크
+# ============================================
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-transformers==4.35.2
-torch>=2.2.0
-torchvision>=0.17.0
-pillow>=10.0.0
 python-multipart==0.0.6
-openai>=1.3.0
 jinja2==3.1.2
+
+# ============================================
+# 프론트엔드에서 실제 사용하는 모델 의존성
+# ============================================
+# MediaPipe (사람 감지 및 포즈 인식)
+mediapipe>=0.10.0  # 얼굴 감지 및 포즈 인식 (체형 분석 기능)
+
+# InsightFace (얼굴 감지)
+insightface>=0.7.3  # 페이스스왑 (InsightFace + INSwapper)
+onnxruntime>=1.16.0  # InsightFace 의존성
+
+# ============================================
+# 이미지 처리
+# ============================================
+pillow>=10.0.0
 numpy>=1.24.0
-requests>=2.31.0
-python-dotenv>=1.0.0
+opencv-python>=4.8.0  # 이미지 필터, Color Harmonization
+
+# ============================================
+# API 클라이언트
+# ============================================
+openai>=1.3.0  # X.AI API 클라이언트 (프롬프트 생성)
+google-genai>=0.2.0  # Gemini API (이미지 합성 및 체형 분석)
+requests>=2.31.0  # HuggingFace Inference API 호출
+
+# ============================================
+# 데이터베이스
+# ============================================
 pymysql>=1.1.0
 sqlalchemy>=2.0.23
 cryptography>=41.0.0
-boto3>=1.34.0
-google-genai>=0.2.0  # Gemini API 사용 시 필요 (선택 사항)
-# 새로 추가된 모델 의존성
-mmpose>=0.31.0  # RTMPose-s 포즈 인식
-mmengine>=0.10.0  # mmpose 의존성
-diffusers>=0.21.0  # SDXL-LoRA 구두 생성
-basicsr>=1.4.0  # Real-ESRGAN 의존성
-realesrgan>=0.3.0  # Real-ESRGAN 해상도 향상
-opencv-python>=4.8.0  # TPS Warp, Color Harmonization
-scipy>=1.11.0  # TPS Warp
-mediapipe>=0.10.0  # 얼굴 감지 (체형 생성 기능)
-insightface>=0.7.3  # 페이스스왑 (InsightFace + INSwapper)
-onnxruntime>=1.16.0  # InsightFace 의존성
-# SegFormer B2 Garment Parsing (HuggingFace Inference API 사용)
-# requests 라이브러리만으로 HuggingFace Inference API 호출 가능 (이미 설치됨)
+
+# ============================================
+# AWS
+# ============================================
+boto3>=1.34.0  # S3 업로드
+
+# ============================================
+# 기타
+# ============================================
+python-dotenv>=1.0.0  # 환경 변수 관리
+
+# ============================================
+# 프론트엔드에서 사용하지 않는 모델 (주석 처리)
+# ============================================
+# SegFormer B2 로컬 모델 (프론트엔드는 HuggingFace Inference API 사용)
+# transformers==4.35.2  # SegFormer B2 로컬 모델 로딩 (프론트엔드 미사용)
+# torch>=2.2.0  # transformers 의존성 (프론트엔드 미사용)
+# torchvision>=0.17.0  # transformers 의존성 (프론트엔드 미사용)
+
+# RTMPose (프론트엔드 미사용)
+# mmpose>=0.31.0  # RTMPose-s 포즈 인식 (프론트엔드 미사용)
+# mmengine>=0.10.0  # mmpose 의존성 (프론트엔드 미사용)
+
+# SDXL (프론트엔드 미사용)
+# diffusers>=0.21.0  # SDXL-LoRA 구두 생성 (프론트엔드 미사용)
+
+# Real-ESRGAN (프론트엔드 미사용)
+# basicsr>=1.4.0  # Real-ESRGAN 의존성 (프론트엔드 미사용)
+# realesrgan>=0.3.0  # Real-ESRGAN 해상도 향상 (프론트엔드 미사용)
+
+# TPS Warp (프론트엔드 미사용)
+# scipy>=1.11.0  # TPS Warp (프론트엔드 미사용)
+
+# ============================================
+# 참고
+# ============================================
+# SegFormer B2 Garment Parsing은 HuggingFace Inference API를 사용하므로
+# 로컬 모델 로딩이 필요하지 않습니다 (requests만으로 충분)
 # huggingface_hub는 선택 사항 (로컬 SegFormer 모델 로딩 시 필요)
