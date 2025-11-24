@@ -9,7 +9,7 @@ from PIL import Image
 from core.model_loader import get_body_analysis_service, get_image_classifier_service
 from services.body_service import determine_body_features, analyze_body_with_gemini
 from services.database import get_db_connection
-from body_analysis_test.database import save_body_analysis_result, get_body_logs, get_body_logs_count
+from services.body_analysis_database import save_body_analysis_result, get_body_logs, get_body_logs_count
 from services.face_swap_service import FaceSwapService
 import numpy as np
 from typing import Optional

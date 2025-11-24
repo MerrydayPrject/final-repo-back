@@ -40,7 +40,7 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount(
     "/body-analysis-static",
-    StaticFiles(directory="body_analysis_test/static"),
+    StaticFiles(directory="static"),
     name="body_analysis_static"
 )
 templates = Jinja2Templates(directory="templates")
@@ -52,9 +52,6 @@ from routers import (
     proxy, models, tryon_router, body_generation, fitting_router,
     custom_v3_router, custom_v4_router
 )
-# conversion_3d는 숫자로 시작하므로 importlib 사용
-import importlib
-conversion_3d_router = importlib.import_module('routers.conversion_3d')
 
 app.include_router(info.router)
 app.include_router(web.router)
@@ -65,7 +62,6 @@ app.include_router(body_analysis.router)
 app.include_router(admin.router)
 app.include_router(dress_management.router)
 app.include_router(image_processing.router)
-app.include_router(conversion_3d_router.router)
 app.include_router(proxy.router)
 app.include_router(models.router)
 app.include_router(tryon_router.router)

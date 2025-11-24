@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from PIL import Image
 from google import genai
 
-from body_analysis_test.database import (
+from services.body_analysis_database import (
     get_multiple_body_definitions,
     format_body_type_info_for_prompt
 )
