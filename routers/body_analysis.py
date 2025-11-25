@@ -68,7 +68,7 @@ async def validate_person(
                             "landmarks_count": 0,
                             "detection_type": None,
                             "classification_result": classification_result[:3],
-                            "message": "동물이 감지되었습니다. 사람이 포함된 이미지를 업로드해주세요."
+                            "message": "인물사진을 업로드해주세요."
                         })
         except Exception as e:
             print(f"동물 감지 검증 오류 (무시): {e}")
@@ -253,7 +253,7 @@ async def analyze_body(
                             "success": False,
                             "error": "Animal detected",
                             "is_animal": True,
-                            "message": "동물이 감지되었습니다. 사람이 포함된 이미지를 업로드해주세요."
+                            "message": "인물사진을 업로드해주세요."
                         }, status_code=400)
             except Exception as e:
                 print(f"동물 감지 검증 오류 (무시): {e}")
