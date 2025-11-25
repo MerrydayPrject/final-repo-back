@@ -1,106 +1,50 @@
 """
 페이스스왑 서비스 모듈
-InsightFace + INSwapper를 사용하여 템플릿 이미지에 사용자 얼굴을 교체
+HuggingFace Inference Endpoint를 사용한 얼굴 분석 및 페이스스왑
 
 기능:
-1. 사용자 얼굴 이미지에서 얼굴 인식 및 정렬
-2. 템플릿 이미지의 얼굴을 사용자 얼굴로 교체
+1. 사용자 얼굴 이미지에서 얼굴 인식 및 정렬 (API 기반)
+2. 템플릿 이미지의 얼굴을 사용자 얼굴로 교체 (로컬 INSwapper 필요)
 3. 자연스러운 페이스스왑 결과 생성
 """
 import os
 import cv2
 import numpy as np
 from PIL import Image
-from typing import Optional, List, TYPE_CHECKING, Dict
+from typing import Optional, List, Dict
 from pathlib import Path
-
-if TYPE_CHECKING:
-    import insightface
-
-try:
-    import insightface
-    INSIGHTFACE_AVAILABLE = True
-except ImportError:
-    INSIGHTFACE_AVAILABLE = False
-    insightface = None  # 타입 힌트를 위한 더미 값
-    print("⚠️  InsightFace가 설치되지 않았습니다. pip install insightface를 실행하세요.")
+from services.face_analysis_service import FaceAnalysisService
+from services.pose_landmark_service import PoseLandmarkService
 
 
 class FaceSwapService:
     """페이스스왑 서비스"""
     
-    def __init__(self):
-        """서비스 초기화"""
-        self.face_analyzer = None
+    def __init__(self, endpoint_url: Optional[str] = None, api_key: Optional[str] = None):
+        """
+        서비스 초기화
+        
+        Args:
+            endpoint_url: HuggingFace Inference Endpoint URL
+            api_key: HuggingFace API 키
+        """
+        self.face_analysis_service = FaceAnalysisService(endpoint_url=endpoint_url, api_key=api_key)
+        self.pose_landmark_service = PoseLandmarkService()
         self.swapper = None
-        self.is_initialized = False
+        self.is_initialized = self.face_analysis_service.is_initialized
         
-        if INSIGHTFACE_AVAILABLE:
-            try:
-                self._init_insightface()
-            except Exception as e:
-                print(f"⚠️  InsightFace 초기화 실패: {e}")
-                self.is_initialized = False
+        # INSwapper는 로컬 모델이 필요하므로 경고 메시지 출력
+        if not self.is_initialized:
+            print("⚠️  얼굴 분석 서비스를 사용할 수 없습니다.")
         else:
-            print("⚠️  InsightFace를 사용할 수 없습니다.")
-    
-    def _init_insightface(self):
-        """InsightFace 모델 초기화"""
-        if not INSIGHTFACE_AVAILABLE:
-            return
-        
-        try:
-            # InsightFace FaceAnalysis 초기화
-            # 모델은 자동으로 다운로드됨 (~/.insightface/models/ 경로)
-            self.face_analyzer = insightface.app.FaceAnalysis(
-                name='buffalo_l',  # 기본 모델 (buffalo_l은 가장 정확함)
-                providers=['CUDAExecutionProvider', 'CPUExecutionProvider']  # CUDA 우선, 없으면 CPU
-            )
-            self.face_analyzer.prepare(ctx_id=0, det_size=(640, 640))
-            
-            # INSwapper 모델 로드
-            # InsightFace의 model_zoo를 사용하여 모델 로드
-            model_root = Path.home() / '.insightface' / 'models'
-            inswapper_path = model_root / 'inswapper_128.onnx'
-            
-            try:
-                from insightface.model_zoo import get_model
-                
-                # 먼저 로컬에 있는지 확인
-                if inswapper_path.exists():
-                    print(f"📦 로컬 INSwapper 모델 발견: {inswapper_path}")
-                    self.swapper = get_model(str(inswapper_path))
-                else:
-                    # 자동 다운로드 시도
-                    print("⚠️  INSwapper 모델을 찾을 수 없습니다. 자동 다운로드를 시도합니다...")
-                    try:
-                        self.swapper = get_model('inswapper_128.onnx', download=True, download_zip=False)
-                    except Exception as download_error:
-                        print(f"⚠️  자동 다운로드 실패: {download_error}")
-                        print("   수동 다운로드가 필요합니다.")
-                        print("   다운로드 링크:")
-                        print("   - https://github.com/haofanwang/inswapper (checkpoints 폴더)")
-                        print("   - 또는 다른 소스에서 inswapper_128.onnx 파일 다운로드")
-                        print(f"   저장 위치: {inswapper_path}")
-                        return
-            except Exception as e:
-                print(f"⚠️  INSwapper 모델 로드 실패: {e}")
-                print("   수동으로 모델을 다운로드하거나 경로를 설정해주세요.")
-                print(f"   저장 위치: {inswapper_path}")
-                return
-            
-            self.is_initialized = True
-            print("✅ InsightFace + INSwapper 초기화 완료")
-            
-        except Exception as e:
-            print(f"❌ InsightFace 초기화 오류: {e}")
-            self.is_initialized = False
+            print("✅ 얼굴 분석 서비스 초기화 완료 (페이스스왑 기능은 INSwapper 모델이 필요합니다)")
     
     def is_available(self) -> bool:
         """서비스 사용 가능 여부 확인"""
-        return self.is_initialized and self.face_analyzer is not None and self.swapper is not None
+        # 얼굴 감지는 API로 가능하지만, 페이스스왑은 INSwapper 모델이 필요
+        return self.face_analysis_service.is_initialized
     
-    def detect_face(self, image: np.ndarray) -> Optional["insightface.types.Face"]:
+    def detect_face(self, image: np.ndarray) -> Optional[Dict]:
         """
         이미지에서 얼굴 감지 및 분석
         
@@ -108,17 +52,15 @@ class FaceSwapService:
             image: BGR 형식의 numpy 배열 이미지
             
         Returns:
-            감지된 얼굴 객체 (없으면 None)
+            감지된 얼굴 정보 딕셔너리 (없으면 None)
         """
         if not self.is_available():
             return None
         
         try:
-            faces = self.face_analyzer.get(image)
-            if len(faces) > 0:
-                # 가장 큰 얼굴 반환 (여러 얼굴이 있을 경우)
-                return max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
-            return None
+            # FaceAnalysisService를 통해 얼굴 감지
+            face_data = self.face_analysis_service.detect_face(image)
+            return face_data
         except Exception as e:
             print(f"얼굴 감지 오류: {e}")
             return None
@@ -133,6 +75,9 @@ class FaceSwapService:
         """
         템플릿 이미지에 사용자 얼굴을 교체
         
+        주의: 페이스스왑 기능은 INSwapper 모델이 필요합니다.
+        현재는 얼굴 감지만 API로 수행되며, 실제 페이스스왑은 로컬 모델이 필요합니다.
+        
         Args:
             source_image: 사용자 얼굴 이미지 (PIL Image)
             target_image: 템플릿 이미지 (PIL Image)
@@ -146,13 +91,19 @@ class FaceSwapService:
             print("⚠️  페이스스왑 서비스를 사용할 수 없습니다.")
             return None
         
+        # INSwapper 모델이 없으면 페이스스왑 불가
+        if self.swapper is None:
+            print("⚠️  페이스스왑 기능은 INSwapper 모델이 필요합니다.")
+            print("   현재는 얼굴 감지만 API로 수행됩니다.")
+            return None
+        
         try:
             # PIL Image를 BGR numpy 배열로 변환
             source_np = np.array(source_image.convert('RGB'))[:, :, ::-1]  # RGB -> BGR
             target_np = np.array(target_image.convert('RGB'))[:, :, ::-1]  # RGB -> BGR
             
-            # 소스 이미지에서 얼굴 감지
-            source_faces = self.face_analyzer.get(source_np)
+            # 소스 이미지에서 얼굴 감지 (API 사용)
+            source_faces = self.face_analysis_service.detect_faces(source_np)
             if len(source_faces) == 0:
                 print("⚠️  소스 이미지에서 얼굴을 찾을 수 없습니다.")
                 return None
@@ -160,10 +111,10 @@ class FaceSwapService:
             if source_face_index >= len(source_faces):
                 source_face_index = 0
             
-            source_face = source_faces[source_face_index]
+            source_face_data = source_faces[source_face_index]
             
-            # 타겟 이미지에서 얼굴 감지
-            target_faces = self.face_analyzer.get(target_np)
+            # 타겟 이미지에서 얼굴 감지 (API 사용)
+            target_faces = self.face_analysis_service.detect_faces(target_np)
             if len(target_faces) == 0:
                 print("⚠️  타겟 이미지에서 얼굴을 찾을 수 없습니다.")
                 return None
@@ -171,101 +122,18 @@ class FaceSwapService:
             if target_face_index >= len(target_faces):
                 target_face_index = 0
             
-            target_face = target_faces[target_face_index]
+            target_face_data = target_faces[target_face_index]
             
-            # INSwapper로 페이스스왑
-            # INSwapper의 get 메서드 사용
-            if hasattr(self.swapper, 'get'):
-                result_np = self.swapper.get(target_np, target_face, source_face, paste_back=True)
-            else:
-                # 대체 방법
-                result_np = self._swap_face_with_inswapper(source_face, target_face, target_np)
-            
-            if result_np is None:
-                return None
-            
-            # BGR -> RGB로 변환 후 PIL Image로 변환
-            result_rgb = cv2.cvtColor(result_np, cv2.COLOR_BGR2RGB)
-            result_image = Image.fromarray(result_rgb)
-            
-            return result_image
+            # INSwapper로 페이스스왑 (로컬 모델 필요)
+            # API에서 받은 얼굴 데이터를 INSwapper 형식으로 변환 필요
+            # 현재는 INSwapper 모델이 없으므로 원본 이미지 반환
+            print("⚠️  페이스스왑 기능은 INSwapper 모델이 필요합니다.")
+            return target_image
             
         except Exception as e:
             print(f"페이스스왑 오류: {e}")
             import traceback
             traceback.print_exc()
-            return None
-    
-    def _swap_face_with_inswapper(
-        self,
-        source_face: "insightface.types.Face",
-        target_face: "insightface.types.Face",
-        target_image: np.ndarray
-    ) -> Optional[np.ndarray]:
-        """
-        INSwapper 모델을 사용하여 페이스스왑 수행
-        
-        Args:
-            source_face: 소스 얼굴 객체
-            target_face: 타겟 얼굴 객체
-            target_image: 타겟 이미지 (BGR)
-            
-        Returns:
-            페이스스왑된 이미지 (BGR) 또는 None
-        """
-        try:
-            # INSwapper의 get 메서드를 사용하여 페이스스왑 수행
-            # InsightFace의 INSwapper는 간단한 인터페이스를 제공
-            result_image = self.swapper.get(target_image, target_face, source_face, paste_back=True)
-            
-            return result_image
-            
-        except Exception as e:
-            print(f"INSwapper 추론 오류: {e}")
-            import traceback
-            traceback.print_exc()
-            # 대체 방법: 직접 구현
-            return self._swap_face_manual(source_face, target_face, target_image)
-    
-    def _swap_face_manual(
-        self,
-        source_face: "insightface.types.Face",
-        target_face: "insightface.types.Face",
-        target_image: np.ndarray
-    ) -> Optional[np.ndarray]:
-        """
-        수동으로 페이스스왑 수행 (INSwapper 실패 시 대체 방법)
-        """
-        try:
-            # 소스 얼굴 임베딩
-            source_embedding = source_face.embedding
-            
-            # 타겟 얼굴 영역 크롭
-            target_bbox = target_face.bbox.astype(int)
-            x1, y1, x2, y2 = target_bbox
-            w, h = x2 - x1, y2 - y1
-            
-            # 얼굴 영역 확장
-            scale = 1.3
-            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-            w_new, h_new = int(w * scale), int(h * scale)
-            
-            x1_new = max(0, int(cx - w_new / 2))
-            y1_new = max(0, int(cy - h_new / 2))
-            x2_new = min(target_image.shape[1], int(cx + w_new / 2))
-            y2_new = min(target_image.shape[0], int(cy + h_new / 2))
-            
-            # 타겟 얼굴 영역
-            face_roi = target_image[y1_new:y2_new, x1_new:x2_new].copy()
-            
-            # 간단한 블렌딩 (실제로는 INSwapper 모델이 필요)
-            # 여기서는 원본 이미지 반환 (나중에 모델이 제대로 로드되면 작동)
-            result = target_image.copy()
-            
-            return result
-            
-        except Exception as e:
-            print(f"수동 페이스스왑 오류: {e}")
             return None
     
     
@@ -289,51 +157,36 @@ class FaceSwapService:
             
             # 얼굴 크기 비율 계산
             source_np = np.array(image.convert('RGB'))[:, :, ::-1]  # RGB -> BGR
-            faces = self.face_analyzer.get(source_np)
+            faces = self.face_analysis_service.detect_faces(source_np)
             
             face_ratio = 0.0
             if len(faces) > 0:
                 face = faces[0]
-                face_bbox = face.bbox
+                # API 응답 형식에 따라 bbox 추출
+                if isinstance(face, dict):
+                    face_bbox = face.get("bbox", [0, 0, 0, 0])
+                else:
+                    face_bbox = [0, 0, 0, 0]
                 face_area = (face_bbox[2] - face_bbox[0]) * (face_bbox[3] - face_bbox[1])
                 image_area = width * height
                 face_ratio = face_area / image_area if image_area > 0 else 0.0
             
-            # 포즈 랜드마크로 하체 감지 시도
+            # 포즈 랜드마크로 하체 감지 시도 (API 사용)
             has_lower_body = False
             try:
-                import mediapipe as mp
-                from mediapipe.tasks import python
-                from mediapipe.tasks.python import vision
+                # PoseLandmarkService를 통해 포즈 감지
+                landmarks = self.pose_landmark_service.extract_landmarks(image)
                 
-                # MediaPipe Pose Landmarker로 포즈 감지
-                model_path = Path(__file__).parent.parent / 'models' / 'body_analysis' / 'pose_landmarker_lite.task'
-                if model_path.exists():
-                    base_options = python.BaseOptions(model_asset_path=str(model_path))
-                    options = vision.PoseLandmarkerOptions(
-                        base_options=base_options,
-                        output_segmentation_masks=False,
-                        min_pose_detection_confidence=0.5,
-                        min_pose_presence_confidence=0.5,
-                        min_tracking_confidence=0.5
+                if landmarks:
+                    # 하체 랜드마크 확인 (발목: 27, 28, 무릎: 25, 26, 엉덩이: 23, 24)
+                    lower_body_ids = [23, 24, 25, 26, 27, 28]
+                    visible_lower_body = sum(
+                        1 for landmark in landmarks
+                        if landmark.get("id") in lower_body_ids and landmark.get("visibility", 0) > 0.5
                     )
-                    pose_landmarker = vision.PoseLandmarker.create_from_options(options)
-                    
-                    # 이미지 변환
-                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.array(image))
-                    detection_result = pose_landmarker.detect(mp_image)
-                    
-                    if detection_result.pose_landmarks:
-                        landmarks = detection_result.pose_landmarks[0]
-                        # 하체 랜드마크 확인 (발목: 27, 28, 무릎: 25, 26, 엉덩이: 23, 24)
-                        lower_body_landmarks = [23, 24, 25, 26, 27, 28]
-                        visible_lower_body = sum(
-                            1 for i in lower_body_landmarks 
-                            if i < len(landmarks) and landmarks[i].visibility > 0.5
-                        )
-                        has_lower_body = visible_lower_body >= 3  # 최소 3개 이상 보이면 하체 있음
+                    has_lower_body = visible_lower_body >= 3  # 최소 3개 이상 보이면 하체 있음
             except Exception as e:
-                # MediaPipe가 없거나 실패하면 다른 방법 사용
+                # 포즈 감지 실패 시 다른 방법 사용
                 pass
             
             # 판단 로직

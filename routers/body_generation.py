@@ -49,7 +49,8 @@ async def face_swap(
     """
     템플릿 이미지에 사용자 얼굴 교체
     
-    InsightFace + INSwapper를 사용하여 템플릿 이미지의 얼굴을 사용자 얼굴로 교체합니다.
+    HuggingFace Inference Endpoint를 사용하여 템플릿 이미지의 얼굴을 사용자 얼굴로 교체합니다.
+    주의: 실제 페이스스왑 기능은 INSwapper 모델이 필요합니다.
     
     Args:
         file: 사용자 얼굴 이미지 파일
@@ -94,7 +95,7 @@ async def face_swap(
             return JSONResponse({
                 "success": False,
                 "error": "Service unavailable",
-                "message": "페이스스왑 서비스를 사용할 수 없습니다. InsightFace가 설치되어 있는지 확인해주세요."
+                "message": "페이스스왑 서비스를 사용할 수 없습니다. HuggingFace Inference Endpoint 설정을 확인해주세요."
             }, status_code=500)
         
         # 템플릿 이미지 가져오기

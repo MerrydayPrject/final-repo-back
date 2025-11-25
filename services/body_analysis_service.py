@@ -1,91 +1,30 @@
 """
 체형 분석 서비스 클래스
-MediaPipe Pose Landmarker를 사용한 체형 분석
+HuggingFace Spaces API를 사용한 체형 분석
 """
-import mediapipe as mp
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
 from PIL import Image
 import numpy as np
 from typing import Dict, Optional, List, Tuple
-from pathlib import Path
-import os
+from services.pose_landmark_service import PoseLandmarkService
 
 
 class BodyAnalysisService:
     """체형 분석 서비스"""
     
-    def __init__(self, model_path: Optional[str] = None):
+    def __init__(self, space_url: Optional[str] = None):
         """
         초기화
         
         Args:
-            model_path: MediaPipe 모델 파일 경로 (None이면 자동 다운로드)
+            space_url: HuggingFace Spaces URL (None이면 설정에서 가져옴)
         """
-        self.model_path = model_path
-        self.pose_landmarker = None
-        self.is_initialized = False
+        self.pose_landmark_service = PoseLandmarkService(space_url=space_url)
+        self.is_initialized = self.pose_landmark_service.is_initialized
         
-        # MediaPipe 초기화
-        self._init_mediapipe()
-    
-    def _init_mediapipe(self):
-        """MediaPipe Pose Landmarker 초기화"""
-        try:
-            # 모델 파일 경로 설정
-            if self.model_path is None:
-                # 기본 모델 경로 (자동 다운로드 시 사용)
-                model_path = self._get_default_model_path()
-            else:
-                model_path = Path(self.model_path)
-            
-            # 모델 파일이 없으면 다운로드
-            if not model_path.exists():
-                print("모델 파일이 없습니다. 다운로드를 시도합니다...")
-                self._download_model(model_path)
-            
-            # Pose Landmarker 옵션 설정
-            base_options = python.BaseOptions(model_asset_path=str(model_path))
-            options = vision.PoseLandmarkerOptions(
-                base_options=base_options,
-                output_segmentation_masks=False,
-                min_pose_detection_confidence=0.5,
-                min_pose_presence_confidence=0.5,
-                min_tracking_confidence=0.5
-            )
-            
-            # Pose Landmarker 생성
-            self.pose_landmarker = vision.PoseLandmarker.create_from_options(options)
-            self.is_initialized = True
+        if self.is_initialized:
             print("체형 분석 서비스 초기화 완료!")
-            
-        except Exception as e:
-            print(f"MediaPipe 초기화 오류: {e}")
-            self.is_initialized = False
-    
-    def _get_default_model_path(self) -> Path:
-        """기본 모델 경로 반환"""
-        # 프로젝트 루트 기준으로 models/body_analysis/ 경로 사용
-        project_root = Path(__file__).parent.parent
-        models_dir = project_root / "models" / "body_analysis"
-        models_dir.mkdir(parents=True, exist_ok=True)
-        return models_dir / "pose_landmarker_lite.task"
-    
-    def _download_model(self, model_path: Path):
-        """MediaPipe 모델 다운로드"""
-        try:
-            import urllib.request
-            
-            model_url = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
-            
-            print(f"모델 다운로드 중: {model_url}")
-            model_path.parent.mkdir(parents=True, exist_ok=True)
-            urllib.request.urlretrieve(model_url, str(model_path))
-            print(f"모델 다운로드 완료: {model_path}")
-            
-        except Exception as e:
-            print(f"모델 다운로드 실패: {e}")
-            raise
+        else:
+            print("⚠️  체형 분석 서비스 초기화 실패")
     
     def extract_landmarks(self, image: Image.Image) -> Optional[List[Dict]]:
         """
@@ -101,44 +40,8 @@ class BodyAnalysisService:
             print("서비스가 초기화되지 않았습니다.")
             return None
         
-        try:
-            # PIL Image를 numpy array로 변환
-            image_array = np.array(image)
-            
-            # RGB 형식으로 변환 (MediaPipe는 RGB 필요)
-            if len(image_array.shape) == 3 and image_array.shape[2] == 4:
-                # RGBA -> RGB
-                image_array = image_array[:, :, :3]
-            
-            # MediaPipe 형식으로 변환
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_array)
-            
-            # 랜드마크 추출
-            detection_result = self.pose_landmarker.detect(mp_image)
-            
-            # 랜드마크가 없으면 None 반환
-            if not detection_result.pose_landmarks:
-                return None
-            
-            # 첫 번째 포즈의 랜드마크 사용
-            pose_landmarks = detection_result.pose_landmarks[0]
-            
-            # 랜드마크를 딕셔너리 리스트로 변환
-            landmarks = []
-            for idx, landmark in enumerate(pose_landmarks):
-                landmarks.append({
-                    "id": idx,
-                    "x": landmark.x,
-                    "y": landmark.y,
-                    "z": landmark.z,
-                    "visibility": landmark.visibility
-                })
-            
-            return landmarks
-            
-        except Exception as e:
-            print(f"랜드마크 추출 오류: {e}")
-            return None
+        # PoseLandmarkService를 통해 랜드마크 추출
+        return self.pose_landmark_service.extract_landmarks(image)
     
     def calculate_measurements(self, landmarks: List[Dict]) -> Dict:
         """
