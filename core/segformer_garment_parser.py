@@ -5,8 +5,8 @@ import requests
 import traceback
 import time
 import numpy as np
-import torch
-import torch.nn.functional as F
+# import torch  # 주석 처리: torch/transformers 미사용 (HuggingFace API 사용)
+# import torch.nn.functional as F  # 주석 처리: torch/transformers 미사용 (HuggingFace API 사용)
 from typing import Dict, Optional
 from io import BytesIO
 from PIL import Image

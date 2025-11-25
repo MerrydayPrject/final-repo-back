@@ -74,5 +74,5 @@ app.include_router(review.router)
 # Startup 이벤트
 @app.on_event("startup")
 async def startup_event():
-    """애플리케이션 시작 시 모델 로드"""
+    """애플리케이션 시작 시 DB 초기화 및 서비스 초기화"""
     await load_models()
