@@ -12,7 +12,7 @@ from core.xai_client import generate_prompt_from_images
 from core.s3_client import upload_log_to_s3
 from services.image_service import preprocess_dress_image
 from services.log_service import save_test_log
-from services.garment_nukki_service import remove_garment_background
+# from services.garment_nukki_service import remove_garment_background  # 주석 처리: torch/transformers 미사용
 from services.tryon_service import (
     load_v3_stage2_prompt,
     load_v3_stage3_prompt,
@@ -73,9 +73,12 @@ def generate_unified_tryon_custom_v3(
         
         print("\n[Stage 0] 의상 이미지 누끼 처리 시작...")
         try:
-            garment_nukki = remove_garment_background(garment_img)
-            print("[Stage 0] 의상 이미지 누끼 처리 완료")
-            print(f"[Stage 0] 누끼 처리된 이미지 크기: {garment_nukki.size[0]}x{garment_nukki.size[1]}, 모드: {garment_nukki.mode}")
+            # garment_nukki = remove_garment_background(garment_img)  # 주석 처리: torch/transformers 미사용
+            # print("[Stage 0] 의상 이미지 누끼 처리 완료")
+            # print(f"[Stage 0] 누끼 처리된 이미지 크기: {garment_nukki.size[0]}x{garment_nukki.size[1]}, 모드: {garment_nukki.mode}")
+            # 누끼 처리 기능이 주석 처리되었으므로 원본 이미지를 그대로 사용
+            garment_nukki = garment_img.convert('RGB')
+            print("[Stage 0] 원본 의상 이미지를 그대로 사용합니다 (누끼 처리 기능 비활성화)")
         except Exception as e:
             print(f"[Stage 0] 누끼 처리 실패: {e}")
             print("[Stage 0] 원본 의상 이미지를 그대로 사용합니다.")
