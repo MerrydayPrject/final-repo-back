@@ -144,7 +144,9 @@ async def get_admin_logs(
                         idx as id,
                         model,
                         run_time,
-                        result_url
+                        result_url,
+                        person_url,
+                        dress_url
                     FROM result_logs
                     {where_clause}
                     ORDER BY idx DESC
@@ -199,8 +201,12 @@ async def get_admin_log_detail(log_id: int):
         
         try:
             with connection.cursor() as cursor:
-                # created_at 필드 포함해서 쿼리 시도 (없으면 제외)
-                try:
+                # 먼저 테이블 구조 확인 (created_at 컬럼 존재 여부)
+                cursor.execute("SHOW COLUMNS FROM result_logs LIKE 'created_at'")
+                has_created_at = cursor.fetchone() is not None
+                
+                # created_at 컬럼이 있으면 포함, 없으면 제외
+                if has_created_at:
                     cursor.execute("""
                         SELECT 
                             idx as id,
@@ -215,8 +221,7 @@ async def get_admin_log_detail(log_id: int):
                         FROM result_logs
                         WHERE idx = %s
                     """, (log_id,))
-                except Exception:
-                    # created_at 필드가 없으면 제외하고 조회
+                else:
                     cursor.execute("""
                         SELECT 
                             idx as id,
@@ -240,18 +245,38 @@ async def get_admin_log_detail(log_id: int):
                         "message": f"로그 ID {log_id}를 찾을 수 없습니다."
                     }, status_code=404)
                 
+                # 안전하게 필드 접근
+                created_at = log.get('created_at')
+                if created_at and hasattr(created_at, 'isoformat'):
+                    created_at = created_at.isoformat()
+                elif created_at:
+                    created_at = str(created_at)
+                else:
+                    created_at = None
+                
+                # run_time 안전하게 처리
+                run_time = log.get('run_time')
+                if run_time is not None:
+                    try:
+                        run_time_float = float(run_time)
+                        processing_time = f"{run_time_float:.2f}초"
+                    except (ValueError, TypeError):
+                        processing_time = str(run_time) if run_time else "-"
+                else:
+                    processing_time = "-"
+                
                 return JSONResponse({
                     "success": True,
                     "data": {
-                        "id": log['id'],
+                        "id": log.get('id') or log.get('idx'),
                         "person_url": log.get('person_url'),
                         "dress_url": log.get('dress_url'),
                         "result_url": log.get('result_url'),
                         "model": log.get('model'),
                         "prompt": log.get('prompt'),
                         "success": log.get('success'),
-                        "processing_time": f"{log.get('run_time', 0):.2f}초",
-                        "created_at": log.get('created_at')
+                        "processing_time": processing_time,
+                        "created_at": created_at
                     }
                 })
         finally:
@@ -259,10 +284,12 @@ async def get_admin_log_detail(log_id: int):
             
     except Exception as e:
         import traceback
-        print(f"로그 상세 조회 오류: {traceback.format_exc()}")
+        error_detail = traceback.format_exc()
+        print(f"로그 상세 조회 오류: {error_detail}")
         return JSONResponse({
             "success": False,
             "error": str(e),
+            "error_detail": error_detail,
             "message": f"로그 상세 조회 중 오류 발생: {str(e)}"
         }, status_code=500)
 

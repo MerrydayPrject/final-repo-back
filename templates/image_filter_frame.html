@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이미지 필터 & 프레임</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/image_filter_frame.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div>
+                    <h1 style="margin: 0;">이미지 필터 & 프레임</h1>
+                    <p style="margin: 10px 0 0 0;">이미지에 필터와 프레임을 적용하여 꾸며보세요</p>
+                </div>
+                <a href="/" class="btn-home">홈으로</a>
+            </div>
+        </header>
+
+        <main>
+            <section class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📤</div>
+                    <p class="upload-text">이미지를 드래그하거나 클릭하여 업로드하세요</p>
+                    <input type="file" id="fileInput" accept="image/*" hidden>
+                    <button class="upload-button" id="uploadButton">이미지 선택</button>
+                </div>
+                <div id="previewContainer" style="display: none; margin-top: 10px;">
+                    <div class="image-comparison">
+                        <div class="image-container">
+                            <h3>원본</h3>
+                            <div style="position: relative; display: inline-block;">
+                                <img id="originalImage" alt="원본 이미지" style="max-width: 100%; max-height: 800px; border: 1px solid #ddd; border-radius: 8px; display: block;">
+                            </div>
+                        </div>
+                        <div class="image-container">
+                            <h3>결과</h3>
+                            <div style="position: relative; display: inline-block;">
+                                <div id="imageWrapper" style="position: relative; display: inline-block;">
+                                    <img id="previewImage" alt="처리된 이미지" style="max-width: 100%; max-height: 800px; border: 1px solid #ddd; border-radius: 8px; display: block;">
+                                    <div id="loadingOverlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 10;">
+                                        <div class="spinner" style="width: 50px; height: 50px; border: 4px solid rgba(255, 255, 255, 0.3); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                                        <p style="color: white; margin-top: 15px; font-size: 16px; font-weight: bold;">처리 중...</p>
+                                    </div>
+                                </div>
+                                <button class="btn-primary" id="downloadBtn" style="position: absolute; bottom: 10px; right: 10px; padding: 8px 16px; font-size: 14px; display: none;">다운로드</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="controls-section" id="controlsSection" style="display: none;">
+                <div class="controls-grid">
+                    <!-- 필터 프리셋 -->
+                    <div class="control-group">
+                        <h3>필터 프리셋</h3>
+                        <div class="filter-buttons">
+                            <button class="filter-btn" data-preset="none">원본</button>
+                            <button class="filter-btn" data-preset="grayscale">흑백</button>
+                            <button class="filter-btn" data-preset="vintage">빈티지</button>
+                            <button class="filter-btn" data-preset="warm">따뜻한 톤</button>
+                            <button class="filter-btn" data-preset="cool">차가운 톤</button>
+                            <button class="filter-btn" data-preset="high_contrast">고대비</button>
+                        </div>
+                    </div>
+
+                    <!-- 프레임 프리셋 -->
+                    <div class="control-group">
+                        <h3>프레임 프리셋</h3>
+                        <div class="frame-buttons">
+                            <button class="frame-btn" data-preset="none">없음</button>
+                            <button class="frame-btn" data-preset="black">검은색</button>
+                            <button class="frame-btn" data-preset="white">흰색</button>
+                            <button class="frame-btn" data-preset="gold">금색</button>
+                            <button class="frame-btn" data-preset="red">빨간색</button>
+                            <button class="frame-btn" data-preset="blue">파란색</button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn-secondary" id="resetBtn">초기화</button>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/image_filter_frame.js"></script>
+</body>
+</html>
+

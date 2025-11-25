@@ -207,102 +207,60 @@ def generate_prompt_from_images(
     person_data_url = f"data:image/png;base64,{person_b64}"
     dress_data_url = f"data:image/png;base64,{dress_b64}"
     
-    # 시스템 프롬프트
-    system_prompt = f"""You are creating a detailed instruction prompt for a virtual try-on task.
+    # 시스템 프롬프트 (VISUAL OVERWRITE 섹션 추가 및 잔상 제거 강화)
+    system_prompt = f"""
+You are an expert AI fashion director creating a precise image generation prompt.
+Your goal is to visualize the person from Image 1 wearing the NEW outfit from Image 2.
 
-COMMON REQUIREMENT (MUST FOLLOW):
+COMMON REQUIREMENT:
 {COMMON_PROMPT_REQUIREMENT}
 
-Analyze these two images:
-Image 1 (Person): A woman in her current outfit
-Image 2 (Dress): A formal dress/gown that will replace her current outfit
+**STEP 1: ANALYZE INPUTS**
+1. **Identify Old Clothes (Image 1):** Note the specific texture/color (e.g., white sweater, black pants). These MUST be the primary targets for destruction.
+2. **Analyze New Outfit (Image 2):** Length, Style, and Footwear needs.
 
-First, carefully observe and describe:
-1. Image 1 - List ALL clothing items she is wearing:
-   - What type of top/shirt? (long sleeves, short sleeves, or sleeveless?)
-   - What type of bottom? (pants, jeans, skirt, shorts?)
-   - What shoes is she wearing?
-   - Which body parts are currently covered by clothing?
+**STEP 2: GENERATE THE PROMPT**
 
-2. Image 2 - Describe the dress in detail:
-   - What color and style is the dress?
-   - Does it have sleeves, or is it sleeveless?
-   - What is the length? (short, knee-length, floor-length?)
-   - What is the neckline style?
-   - Which body parts will the dress cover, and which will be exposed?
+--- PROMPT STRUCTURE ---
 
-Now, create a detailed prompt using this EXACT structure:
+**OPENING:**
+"A photorealistic full-body shot of the person from Image 1, now wearing the outfit from Image 2."
 
-OPENING STATEMENT:
-"You are performing a virtual try-on task. Create an image of the woman from Image 1 wearing the dress from Image 2."
+**VISUAL OVERWRITE (CRITICAL):**
+"The original [White/Thick] top is completely replaced by the [New Material] of the new outfit.
+The original [Black/Dark] bottom is completely erased.
+The new outfit creates a brand new silhouette, ignoring the bulk/wrinkles of the old clothing."
 
-CRITICAL INSTRUCTION:
-"The woman in Image 1 is currently wearing [list specific items: e.g., a long-sleeved shirt, jeans, and sneakers]. You MUST completely remove and erase ALL of this original clothing before applying the new dress. The original clothing must be 100% invisible in the final result."
+**OUTFIT DESCRIPTION:**
+"The person is dressed in a [Color] [Material] [Outfit Name] exactly as shown in Image 2.
+The outfit features [Sleeve details], [Neckline details]."
 
-STEP 1 - REMOVE ALL ORIGINAL CLOTHING:
-List each specific item to remove:
-"Delete and erase from Image 1:
-- The [specific top description] (including all sleeves)
-- The [specific bottom description]
-- The [specific shoes description]
-- Any other visible clothing items
+**LENGTH & BODY LOGIC (SELECT ONE BLOCK):**
 
-Treat the original clothing as if it never existed. The woman should be conceptually nude before you apply the dress."
+> **[OPTION A: SHORT / KNEE-LENGTH / MIDI]**
+> "The hemline ends at the [Thigh/Knee], explicitly revealing the legs.
+> **LEGS:** The area below the hemline shows **NATURAL BARE SKIN**.
+> **ERASURE:** The original black pants are GONE. Do NOT render black textures on the legs.
+> **SHOES:** The original sneakers are replaced with [High Heels/Sandals] showing skin texture on the feet."
 
-STEP 2 - APPLY THE DRESS FROM IMAGE 2:
-Describe the dress application:
-"Take ONLY the dress garment from Image 2 and apply it to the woman's body:
-- This is a [color] [style] dress that is [sleeveless/has sleeves/etc.]
-- The dress is [length description]
-- Copy the exact dress design, color, pattern, and style from Image 2
-- Maintain the same coverage as shown in Image 2
-- Fit the dress naturally to her body shape and pose from Image 1"
+> **[OPTION B: LONG / FLOOR-LENGTH / MAXI]**
+> "The skirt is floor-length and opaque.
+> **COVERAGE:** The fabric falls to the floor, completely blocking the view of the legs and original shoes.
+> **SILHOUETTE:** The skirt flares out naturally, overriding the shape of the original pants. No gap between legs should be visible if the dress is a full gown."
 
-STEP 3 - GENERATE NATURAL SKIN FOR EXPOSED BODY PARTS:
-For each body part that will be exposed, write specific instructions:
+**POSE & INTEGRATION:**
+"Maintain the crossed-arms pose, but adapt the new sleeves/bodice to fold naturally around the arms.
+Ensure lighting and shadows match the environment."
 
-"For every body part that is NOT covered by the dress, you must generate natural skin:
+**SAFETY & VOCABULARY:**
+- Use: "Bare legs", "Skin texture", "Replaced by", "Concealed".
+- Do NOT use: "Nude", "Naked", "Undress".
 
-[If applicable] If the dress is sleeveless:
-- Generate natural BARE ARMS with realistic skin
-- Match the exact skin tone from her face, neck, and hands in Image 1
-- Include realistic skin texture with natural color variations, shadows, and highlights
-- IMPORTANT: Do NOT show any fabric from the original [sleeve description]
-
-[If applicable] If the dress is short or knee-length:
-- Generate natural BARE LEGS with realistic skin
-- Match the exact skin tone from her face, neck, and hands in Image 1
-- Include realistic skin texture with natural color variations, shadows, and highlights
-- IMPORTANT: Do NOT show any fabric from the original [pants/jeans description]
-
-[If applicable] If the dress exposes shoulders or back:
-- Generate natural BARE SHOULDERS/BACK with realistic skin
-- Match the exact skin tone from her face, neck, and hands in Image 1
-- IMPORTANT: Do NOT show any fabric from the original clothing"
-
-RULES - WHAT NOT TO DO:
-"- NEVER keep any part of the [original top] from Image 1
-- NEVER keep any part of the [original bottom] from Image 1
-- NEVER keep the original sleeves on arms that should show skin
-- NEVER show original clothing fabric where skin should be visible
-- NEVER mix elements from the original outfit with the new dress"
-
-RULES - WHAT TO DO:
-"- ALWAYS show natural skin on body parts not covered by the dress
-- ALWAYS match skin tone to the visible skin in her face/neck/hands from Image 1
-- ALWAYS ensure the original clothing is completely erased before applying the dress
-- ALWAYS maintain consistent and realistic skin texture on exposed areas"
-
-OTHER REQUIREMENTS:
-"- Preserve her face, facial features, hair, and body pose exactly as in Image 1
-- Use a pure white background
-- Replace footwear with elegant heels that match or complement the dress color
-- The final image should look photorealistic and natural"
-
-Output ONLY the final prompt text with this complete structure. Be extremely specific about which clothing items to remove and which body parts need natural skin generation."""
+Output ONLY the final prompt text.
+"""
     
     # 사용자 메시지
-    user_message = "Analyze Image 1 (person) and Image 2 (dress), then generate the prompt following the exact structure provided."
+    user_message = "Analyze Image 1 (person) and Image 2 (outfit), then generate the prompt following the exact structure provided."
     
     # API 요청 데이터 (OpenAI 스타일의 chat completions 형식)
     payload = {

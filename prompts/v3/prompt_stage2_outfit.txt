@@ -1,0 +1,26 @@
+STAGE 2 — STRICT OUTFIT REPLACEMENT
+TASK: APPLY THE OUTFIT FROM IMAGE 2 ONTO THE PERSON IN IMAGE 1.
+
+MANDATORY "OVERWRITE" INSTRUCTIONS:
+1. IGNORE THE ORIGINAL CLOTHING VOLUME. If the original person is wearing a thick sweater, ignore its puffiness. Estimate the slimmer body underneath to fit the new outfit.
+2. ERASE ORIGINAL COLORS. If the original pants are black, DO NOT allow black pixels to bleed into the new legs or dress.
+3. ERASE ORIGINAL TEXTURES. If the original top is knitted, the new outfit MUST NOT look knitted unless Image 2 is knitted.
+
+CONTEXT:
+- Target: Complete replacement of attire.
+- Constraint: Face must remain identical.
+
+INSTRUCTIONS:
+- Apply the outfit from Image 2 (Length, Color, Material) exactly.
+- If the new outfit is sleeveless, generate realistic skin texture for the arms.
+- If the new outfit is a short dress, generate realistic skin texture for the legs.
+- Completely replace the footwear with shoes matching the new style (Heels/Dress shoes).
+
+WHAT TO AVOID (STRICT):
+- NO traces of the original white/bulky top.
+- NO traces of the original black/dark pants.
+- NO hybrid textures (e.g., a dress with sweater wrinkles).
+- NO original sneakers.
+
+OUTPUT:
+A photorealistic image where the person is wearing ONLY the new outfit.

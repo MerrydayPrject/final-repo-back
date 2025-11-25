@@ -501,6 +501,25 @@ async def import_dresses(file: UploadFile = File(...)):
                 "message": "파일이 비어있습니다."
             }, status_code=400)
         
+        # JSON 파일이 {"success": true, "data": [...]} 형식인 경우 처리
+        if isinstance(data, dict) and 'data' in data:
+            data = data['data']
+        
+        # 배열이 아닌 경우 에러 반환
+        if not isinstance(data, list):
+            return JSONResponse({
+                "success": False,
+                "error": "Invalid data format",
+                "message": "JSON 파일은 배열 형식이거나 {'data': [...]} 형식이어야 합니다."
+            }, status_code=400)
+        
+        if len(data) == 0:
+            return JSONResponse({
+                "success": False,
+                "error": "Empty data",
+                "message": "가져올 데이터가 없습니다."
+            }, status_code=400)
+        
         connection = get_db_connection()
         if not connection:
             return JSONResponse({

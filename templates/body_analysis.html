@@ -1,20 +1,24 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>체형 분석 - Marryday</title>
-    <link rel="stylesheet" href="{{ url_for('body_analysis_static', path='body_analysis_test.css') }}">
+    <link rel="stylesheet" href="{{ url_for('body_analysis_static', path='body_analysis.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div class="app-container">
         <header class="test-header">
             <div class="header-content">
                 <h1 class="logo-text">Marryday</h1>
                 <div class="header-badge">체형 분석 서비스</div>
+                <a href="/" class="btn-home">홈으로</a>
             </div>
         </header>
 
@@ -41,7 +45,8 @@
                                 <input type="file" id="fileInput" accept="image/*" style="display: none;">
                                 <div class="upload-content" id="uploadContent">
                                     <div class="upload-icon">
-                                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
                                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                             <polyline points="17 8 12 3 7 8"></polyline>
                                             <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -58,28 +63,20 @@
 
                             <div class="input-group" style="margin-top: 20px; display: flex; gap: 15px;">
                                 <div style="flex: 1;">
-                                    <label for="heightInput" style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">키 (cm) <span style="color: red;">*</span></label>
-                                    <input 
-                                        type="number" 
-                                        id="heightInput" 
-                                        placeholder="예: 165" 
-                                        min="100" 
-                                        max="250" 
+                                    <label for="heightInput"
+                                        style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">키
+                                        (cm) <span style="color: red;">*</span></label>
+                                    <input type="number" id="heightInput" placeholder="예: 165" min="100" max="250"
                                         required
-                                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;"
-                                    >
+                                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
                                 </div>
                                 <div style="flex: 1;">
-                                    <label for="weightInput" style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">몸무게 (kg) <span style="color: red;">*</span></label>
-                                    <input 
-                                        type="number" 
-                                        id="weightInput" 
-                                        placeholder="예: 55" 
-                                        min="30" 
-                                        max="200" 
+                                    <label for="weightInput"
+                                        style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">몸무게
+                                        (kg) <span style="color: red;">*</span></label>
+                                    <input type="number" id="weightInput" placeholder="예: 55" min="30" max="200"
                                         required
-                                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;"
-                                    >
+                                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
                                 </div>
                             </div>
 
@@ -113,7 +110,7 @@
         </main>
     </div>
 
-    <script src="{{ url_for('body_analysis_static', path='body_analysis_test.js') }}"></script>
+    <script src="{{ url_for('body_analysis_static', path='body_analysis.js') }}"></script>
 </body>
-</html>
 
+</html>

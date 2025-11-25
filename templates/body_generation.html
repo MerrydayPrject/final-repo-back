@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>페이스스왑 - Marryday</title>
+    <link rel="stylesheet" href="/static/body_generation.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="test-header">
+            <div class="header-content">
+                <h1 class="logo-text">Marryday</h1>
+                <div class="header-badge">페이스스왑 서비스</div>
+                <a href="/" class="btn-home">홈으로</a>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="test-container">
+                <div class="title-section">
+                    <h2 class="page-title">페이스스왑</h2>
+                    <p class="page-description">얼굴 사진을 업로드하면 템플릿 이미지에 얼굴이 교체됩니다</p>
+                    <div class="page-warning">
+                        <span class="warning-icon-small">ℹ️</span>
+                        <span>InsightFace + INSwapper를 사용하여 자연스러운 페이스스왑을 제공합니다.</span>
+                    </div>
+                </div>
+
+                <div class="content-wrapper">
+                    <div class="left-section">
+                        <div class="upload-container">
+                            <div class="upload-header">
+                                <h3>얼굴 사진 업로드</h3>
+                                <p>얼굴 사진을 업로드하면 전신 이미지가 생성됩니다</p>
+                            </div>
+
+                            <div class="upload-area" id="uploadArea">
+                                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                                <div class="upload-content" id="uploadContent">
+                                    <div class="upload-icon">
+                                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="17 8 12 3 7 8"></polyline>
+                                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                                        </svg>
+                                    </div>
+                                    <p class="upload-text">얼굴 사진을 업로드 해주세요</p>
+                                    <p class="upload-subtext">클릭하거나 드래그하여 업로드</p>
+                                </div>
+                                <div class="preview-container" id="previewContainer" style="display: none;">
+                                    <img id="previewImage" src="" alt="Preview">
+                                    <button class="remove-button" id="removeButton">✕</button>
+                                </div>
+                            </div>
+
+                            <div class="template-selector" id="templateSelector" style="display: none;">
+                                <label for="templateSelect">템플릿 선택:</label>
+                                <select id="templateSelect" class="template-select">
+                                    <option value="">로딩 중...</option>
+                                </select>
+                            </div>
+
+                            <button class="generate-button" id="generateButton" disabled>
+                                페이스스왑 실행하기
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="right-section">
+                        <div class="result-container">
+                            <div class="result-header">
+                                <h3>생성 결과</h3>
+                            </div>
+
+                            <div class="result-content" id="resultContent">
+                                <div class="result-placeholder">
+                                    <div class="placeholder-icon">🖼️</div>
+                                    <p class="placeholder-text">이미지를 업로드하고 생성 버튼을 클릭하세요</p>
+                                </div>
+                            </div>
+
+                            <div class="loading-container" id="loadingContainer" style="display: none;">
+                                <div class="spinner"></div>
+                                <p>페이스스왑 처리 중...</p>
+                                <p class="loading-subtext">잠시만 기다려주세요 (약 2-5초 소요)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/body_generation.js"></script>
+</body>
+
+</html>
