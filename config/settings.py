@@ -26,6 +26,13 @@ XAI_PROMPT_MODEL = os.getenv("XAI_PROMPT_MODEL", "grok-2-vision-1212")
 AWS_S3_BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME")
 AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-2")
 
+# MediaPipe Spaces API 설정
+MEDIAPIPE_SPACE_URL = os.getenv("MEDIAPIPE_SPACE_URL", "https://jjunyuongv-mediapipe-pose-api.hf.space")
+
+# InsightFace Inference Endpoint 설정
+INSIGHTFACE_ENDPOINT_URL = os.getenv("INSIGHTFACE_ENDPOINT_URL", "")
+INSIGHTFACE_API_KEY = os.getenv("INSIGHTFACE_API_KEY", "")
+
 # 레이블 정보
 LABELS = {
     0: "Background", 1: "Hat", 2: "Hair", 3: "Sunglasses",

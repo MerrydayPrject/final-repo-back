@@ -9,12 +9,10 @@ jinja2==3.1.2
 # ============================================
 # 프론트엔드에서 실제 사용하는 모델 의존성
 # ============================================
-# MediaPipe (사람 감지 및 포즈 인식)
-mediapipe>=0.10.0  # 얼굴 감지 및 포즈 인식 (체형 분석 기능)
-
-# InsightFace (얼굴 감지)
-insightface>=0.7.3  # 페이스스왑 (InsightFace + INSwapper)
-onnxruntime>=1.16.0  # InsightFace 의존성
+# MediaPipe 및 InsightFace는 HuggingFace Spaces/Inference Endpoint API를 사용하므로
+# 로컬 모델 의존성이 제거되었습니다.
+# - MediaPipe: HuggingFace Spaces API 사용 (MEDIAPIPE_SPACE_URL)
+# - InsightFace: HuggingFace Inference Endpoint 사용 (INSIGHTFACE_ENDPOINT_URL, INSIGHTFACE_API_KEY)
 
 # ============================================
 # 이미지 처리

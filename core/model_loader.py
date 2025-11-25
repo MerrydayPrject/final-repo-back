@@ -100,12 +100,12 @@ async def load_models():
     print("데이터베이스 초기화 중...")
     await loop.run_in_executor(None, init_database)
 
-    # 체형 분석 서비스 초기화
+    # 체형 분석 서비스 초기화 (API 기반)
     try:
         print("체형 분석 서비스 초기화 중...")
-        body_analysis_service = await loop.run_in_executor(None, BodyAnalysisService)
+        body_analysis_service = BodyAnalysisService()
         if body_analysis_service and body_analysis_service.is_initialized:
-            print("✅ 체형 분석 서비스 초기화 완료")
+            print("✅ 체형 분석 서비스 초기화 완료 (API 기반)")
         else:
             print("⚠️  체형 분석 서비스 초기화 실패")
     except Exception as exc:
