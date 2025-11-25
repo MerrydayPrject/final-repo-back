@@ -22,31 +22,26 @@ async def validate_person(
     file: UploadFile = File(..., description="이미지 파일")
 ):
     """
-    이미지에서 사람이 감지되는지 확인
+    이미지에서 사람이 감지되는지 확인 (체형분석용 - 전신 랜드마크 필수)
     
-    MediaPipe Image Classifier를 사용하여 이미지에 사람이 있는지 검증합니다.
-    ImageNet의 1000개 클래스를 분류하여 사람 관련 클래스를 감지합니다.
+    체형분석에서는 전신 랜드마크가 필수이므로, 전신 랜드마크가 없으면 차단합니다.
     """
     try:
         # 이미지 읽기
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
         
-        is_person = False
-        detection_type = None
         classification_result = None
-        is_animal_detected = False  # 동물 감지 플래그
+        is_animal_detected = False
         
-        # 1. 이미지 분류 서비스로 사람 감지 (우선 검증)
-        image_classifier_result = None
+        # 1. 동물 감지 검증 (우선 검증)
         try:
             image_classifier_service = get_image_classifier_service()
             if image_classifier_service and image_classifier_service.is_initialized:
                 classification_result = image_classifier_service.classify_image(image)
-                image_classifier_result = classification_result
                 
                 if classification_result:
-                    # 동물 키워드 먼저 확인 (즉시 차단)
+                    # 동물 키워드 확인 (즉시 차단)
                     animal_keywords = [
                         "animal", "dog", "cat", "bear", "monkey", "ape", "gorilla",
                         "orangutan", "chimpanzee", "elephant", "lion", "tiger",
@@ -63,99 +58,131 @@ async def validate_person(
                             print(f"❌ 동물 감지: {category['category_name']} (신뢰도: {category['score']:.2f}) - 즉시 차단")
                             break
                     
-                    # 동물이 감지되면 즉시 차단 (여기서 바로 return)
+                    # 동물이 감지되면 즉시 차단
                     if is_animal_detected:
-                        print(f"❌ 동물 감지로 인해 즉시 차단 (이미지 분류 단계)")
+                        print(f"❌ 동물 감지로 인해 즉시 차단")
                         return JSONResponse({
                             "success": True,
                             "is_person": False,
+                            "is_face_only": False,
                             "face_detected": False,
                             "landmarks_count": 0,
                             "detection_type": None,
                             "classification_result": classification_result[:3],
                             "message": "동물이 감지되었습니다. 사람이 포함된 이미지를 업로드해주세요."
                         })
-                    else:
-                        # 이미지 분류 결과 확인
-                        is_person_from_classifier = image_classifier_service.is_person(image, threshold=0.3)
-                        if is_person_from_classifier:
-                            # 이미지 분류로 사람 감지 성공
-                            # 하지만 전신 랜드마크가 있으면 추가 검증 필요
-                            print(f"✅ 이미지 분류로 사람 감지 성공 - 전신 랜드마크 추가 검증")
-                            is_person = True  # 일단 True로 설정, 전신 랜드마크 검증 후 결정
-                            detection_type = "image_classifier"
-                        else:
-                            print(f"❌ 이미지 분류로 사람 감지 실패")
-                            is_person = False
-                else:
-                    print(f"❌ 이미지 분류 결과 없음")
-                    is_person = False
         except Exception as e:
-            print(f"이미지 분류 오류: {e}")
-            import traceback
-            traceback.print_exc()
-            is_person = False
+            print(f"동물 감지 검증 오류 (무시): {e}")
         
-        # 2. 동물이 감지되면 즉시 차단 (얼굴 감지 단계로 넘어가지 않음)
-        if is_animal_detected:
-            print(f"❌ 동물 감지로 인해 즉시 차단")
+        # 2. 전신 랜드마크 확인 (가장 중요 - 체형분석에서는 전신 랜드마크가 필수)
+        body_analysis_service = get_body_analysis_service()
+        if body_analysis_service and body_analysis_service.is_initialized:
+            landmarks = body_analysis_service.extract_landmarks(image)
+            if landmarks is None or len(landmarks) == 0:
+                # 전신 랜드마크가 없으면 무조건 차단
+                print(f"❌ 전신 랜드마크 없음 - 차단")
+                return JSONResponse({
+                    "success": True,
+                    "is_person": False,
+                    "is_face_only": True,
+                    "face_detected": False,
+                    "landmarks_count": 0,
+                    "detection_type": None,
+                    "classification_result": classification_result[:3] if classification_result else None,
+                    "message": "전신 사진을 넣어주세요."
+                })
+            
+            # 전신 랜드마크가 제대로 감지되었는지 확인
+            # MediaPipe Pose는 33개의 랜드마크를 사용
+            # 전신 사진인지 확인하려면 하체 랜드마크가 감지되었는지 확인
+            # 랜드마크 ID: 23(왼쪽 엉덩이), 24(오른쪽 엉덩이), 25(왼쪽 무릎), 26(오른쪽 무릎), 27(왼쪽 발목), 28(오른쪽 발목)
+            # 또는 어깨와 발목의 y 좌표 차이로 전신 여부 판단
+            
+            # 하체 랜드마크 ID (엉덩이, 무릎, 발목)
+            lower_body_ids = [23, 24, 25, 26, 27, 28]
+            upper_body_ids = [11, 12]  # 어깨
+            
+            # 하체 랜드마크가 감지되었는지 확인
+            lower_body_detected = False
+            upper_body_y = None
+            lower_body_y = None
+            
+            for landmark in landmarks:
+                landmark_id = landmark.get("id")
+                visibility = landmark.get("visibility", 0)
+                y = landmark.get("y", 0)
+                
+                # visibility가 0.3 이상이면 감지된 것으로 판단
+                if visibility >= 0.3:
+                    if landmark_id in upper_body_ids:
+                        # 어깨의 y 좌표 (상체)
+                        if upper_body_y is None or y < upper_body_y:
+                            upper_body_y = y
+                    
+                    if landmark_id in lower_body_ids:
+                        # 하체 랜드마크 감지
+                        lower_body_detected = True
+                        # 하체의 y 좌표 (하체)
+                        if lower_body_y is None or y > lower_body_y:
+                            lower_body_y = y
+            
+            # 하체 랜드마크가 감지되지 않으면 차단
+            if not lower_body_detected:
+                print(f"❌ 하체 랜드마크 없음 (얼굴/상체만 감지됨) - 차단")
+                return JSONResponse({
+                    "success": True,
+                    "is_person": False,
+                    "is_face_only": True,
+                    "face_detected": False,
+                    "landmarks_count": len(landmarks) if landmarks else 0,
+                    "detection_type": None,
+                    "classification_result": classification_result[:3] if classification_result else None,
+                    "message": "전신 사진을 넣어주세요."
+                })
+            
+            # 어깨와 하체의 y 좌표 차이로 전신 여부 추가 확인
+            # 전신 사진이라면 하체가 어깨보다 아래에 있어야 함
+            if upper_body_y is not None and lower_body_y is not None:
+                body_height_ratio = lower_body_y - upper_body_y
+                # y 좌표 차이가 0.2 미만이면 전신이 아닌 것으로 판단 (너무 작은 차이)
+                if body_height_ratio < 0.2:
+                    print(f"❌ 전신 비율 부족 (상체-하체 차이: {body_height_ratio:.3f}) - 차단")
+                    return JSONResponse({
+                        "success": True,
+                        "is_person": False,
+                        "is_face_only": True,
+                        "face_detected": False,
+                        "landmarks_count": len(landmarks) if landmarks else 0,
+                        "detection_type": None,
+                        "classification_result": classification_result[:3] if classification_result else None,
+                        "message": "전신 사진을 넣어주세요."
+                    })
+            
+            # 전신 랜드마크가 제대로 감지되었으면 통과
+            print(f"✅ 전신 랜드마크 확인됨 (하체 포함) - 통과")
+            return JSONResponse({
+                "success": True,
+                "is_person": True,
+                "is_face_only": False,
+                "face_detected": False,
+                "landmarks_count": len(landmarks) if landmarks else 0,
+                "detection_type": "full_body",
+                "classification_result": classification_result[:3] if classification_result else None,
+                "message": "전신 사진이 확인되었습니다."
+            })
+        else:
+            # 체형 분석 서비스가 없으면 차단
+            print(f"❌ 체형 분석 서비스 없음 - 차단")
             return JSONResponse({
                 "success": True,
                 "is_person": False,
+                "is_face_only": True,
                 "face_detected": False,
                 "landmarks_count": 0,
                 "detection_type": None,
                 "classification_result": classification_result[:3] if classification_result else None,
-                "message": "동물이 감지되었습니다. 사람이 포함된 이미지를 업로드해주세요."
+                "message": "전신 사진을 넣어주세요."
             })
-        
-        # 3. 이미지 분류가 실패하면 얼굴 감지 시도 (얼굴만 있는 사진 허용)
-        if not is_person:
-            try:
-                # 이미지를 numpy array로 변환 (BGR 형식)
-                image_array = np.array(image)
-                if len(image_array.shape) == 3:
-                    # RGB -> BGR (OpenCV/InsightFace 형식)
-                    image_bgr = image_array[:, :, ::-1]
-                else:
-                    image_bgr = image_array
-                
-                face_swap_service = FaceSwapService()
-                if face_swap_service.is_available():
-                    face = face_swap_service.detect_face(image_bgr)
-                    if face is not None:
-                        # 얼굴만 감지된 경우 - 얼굴만 있는 사진으로 판단
-                        is_person = True
-                        detection_type = "face_only"
-                        print(f"✅ 얼굴만으로 사람 감지 성공")
-            except Exception as e:
-                print(f"얼굴 감지 오류 (무시): {e}")
-                import traceback
-                traceback.print_exc()
-        
-        # 3. 둘 다 실패하면 사람이 아님
-        if not is_person:
-            print(f"❌ 사람 감지 실패")
-            return JSONResponse({
-                "success": True,
-                "is_person": False,
-                "face_detected": False,
-                "landmarks_count": 0,
-                "detection_type": None,
-                "classification_result": classification_result[:3] if classification_result else None,  # 상위 3개만
-                "message": "이미지에서 사람을 감지할 수 없습니다. 사람이 포함된 이미지를 업로드해주세요."
-            })
-        
-        # 4. 사람이 감지됨
-        return JSONResponse({
-            "success": True,
-            "is_person": True,
-            "face_detected": detection_type == "face",
-            "landmarks_count": 0,
-            "detection_type": detection_type,
-            "classification_result": classification_result[:3] if classification_result else None,  # 상위 3개만
-            "message": "사람이 감지되었습니다."
-        })
         
     except Exception as e:
         import traceback
@@ -196,14 +223,50 @@ async def analyze_body(
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
         
-        # 1. 포즈 랜드마크 추출
+        # 0. 동물 감지 검증 (validatePerson과 동일한 방식)
+        is_animal_detected = False
+        image_classifier_service = get_image_classifier_service()
+        if image_classifier_service and image_classifier_service.is_initialized:
+            try:
+                classification_result = image_classifier_service.classify_image(image)
+                
+                if classification_result:
+                    # 동물 키워드 확인 (즉시 차단)
+                    animal_keywords = [
+                        "animal", "dog", "cat", "bear", "monkey", "ape", "gorilla",
+                        "orangutan", "chimpanzee", "elephant", "lion", "tiger",
+                        "bird", "fish", "horse", "cow", "pig", "sheep", "goat",
+                        "rabbit", "mouse", "rat", "hamster", "squirrel", "deer",
+                        "wolf", "fox", "panda", "koala", "kangaroo", "zebra",
+                        "giraffe", "camel", "donkey", "mule", "llama", "alpaca"
+                    ]
+                    
+                    for category in classification_result:
+                        category_name_lower = category["category_name"].lower()
+                        if any(keyword in category_name_lower for keyword in animal_keywords):
+                            is_animal_detected = True
+                            print(f"❌ 동물 감지: {category['category_name']} (신뢰도: {category['score']:.2f}) - 즉시 차단")
+                            break
+                    
+                    # 동물이 감지되면 즉시 차단
+                    if is_animal_detected:
+                        return JSONResponse({
+                            "success": False,
+                            "error": "Animal detected",
+                            "is_animal": True,
+                            "message": "동물이 감지되었습니다. 사람이 포함된 이미지를 업로드해주세요."
+                        }, status_code=400)
+            except Exception as e:
+                print(f"동물 감지 검증 오류 (무시): {e}")
+        
+        # 1. 포즈 랜드마크 추출 (전신 감지)
         landmarks = body_analysis_service.extract_landmarks(image)
         
         if landmarks is None:
             return JSONResponse({
                 "success": False,
                 "error": "No pose detected",
-                "message": "이미지에서 포즈를 감지할 수 없습니다. 전신이 보이는 이미지를 업로드해주세요."
+                "message": "전신 사진을 넣어주세요."
             }, status_code=400)
         
         # 2. 체형 측정값 계산
