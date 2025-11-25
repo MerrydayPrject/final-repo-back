@@ -190,7 +190,7 @@ async def validate_person(
         return JSONResponse({
             "success": False,
             "is_person": False,
-            "message": f"사람 감지 중 오류가 발생했습니다: {str(e)}"
+            "message": "얼굴사진을 넣어주세요."
         }, status_code=500)
 
 
