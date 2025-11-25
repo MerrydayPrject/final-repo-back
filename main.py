@@ -54,8 +54,6 @@ from routers import (
     proxy, models, generation
 )
 
-conversion_3d_router = importlib.import_module('routers.conversion_3d')
-
 app.include_router(info.router)
 app.include_router(web.router)
 app.include_router(segmentation.router)
@@ -65,7 +63,6 @@ app.include_router(body_analysis.router)
 app.include_router(admin.router)
 app.include_router(dress_management.router)
 app.include_router(image_processing.router)
-app.include_router(conversion_3d_router.router)
 app.include_router(proxy.router)
 app.include_router(models.router)
 app.include_router(generation.router)
