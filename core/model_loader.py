@@ -3,7 +3,7 @@ import torch
 import mediapipe as mp
 import os
 from transformers import SegformerImageProcessor, AutoModelForSemanticSegmentation
-from body_analysis_test.body_analysis import BodyAnalysisService
+from services.body_analysis_service import BodyAnalysisService
 from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler, StableDiffusionXLPipeline
 
 logging.basicConfig(level=logging.INFO)

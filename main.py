@@ -42,7 +42,7 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount(
     "/body-analysis-static",
-    StaticFiles(directory="body_analysis_test/static"),
+    StaticFiles(directory="static"),
     name="body_analysis_static"
 )
 templates = Jinja2Templates(directory="templates")
