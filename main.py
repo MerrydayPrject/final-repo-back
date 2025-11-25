@@ -1,4 +1,7 @@
-# main.py
+"""FastAPI 메인 애플리케이션"""
+
+from dotenv import load_dotenv    
+load_dotenv() 
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
