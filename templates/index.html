@@ -6,18 +6,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>관리자 페이지</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
-    <header class="admin-header">
-        <div class="admin-header-content">
-            <h1>Admin</h1>
-            <span class="admin-subtitle">관리자용 페이지 입니다</span>
+    <!-- 로그인 폼 (로그인 전에만 표시) -->
+    <div id="login-container" style="display: none;">
+        <div class="login-wrapper">
+            <div class="login-box">
+                <h1>관리자 로그인</h1>
+                <form id="login-form" action="#" method="post">
+                    <div class="form-group">
+                        <label for="email">이메일</label>
+                        <input type="email" id="email" name="email" required autocomplete="email">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">비밀번호</label>
+                        <input type="password" id="password" name="password" required autocomplete="current-password">
+                    </div>
+                    <div id="login-error" class="error-message" style="display: none;"></div>
+                    <button type="submit" class="login-button">로그인</button>
+                </form>
+            </div>
         </div>
-    </header>
+    </div>
 
-    <main class="admin-main">
-        <div class="test-pages-grid">
+    <!-- 관리자 메뉴 (로그인 후에만 표시) -->
+    <div id="admin-container" style="display: none;">
+        <header class="admin-header">
+            <div class="admin-header-content">
+                <h1>Admin</h1>
+                <span class="admin-subtitle">관리자용 페이지 입니다</span>
+                <div class="admin-user-info">
+                    <span id="user-email"></span>
+                    <button id="logout-button" class="logout-button">로그아웃</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="admin-main">
+            <div class="test-pages-grid">
             <!-- 누끼 서비스 -->
             <a href="/nukki" class="test-page-card">
                 <span>
@@ -107,8 +135,16 @@
                     <p>이미지에 필터와 프레임을 적용하여 꾸며보세요</p>
                 </span>
             </a>
-        </div>
-    </main>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // 서버에서 전달된 인증 상태를 전역 변수로 설정 (admin_login.js에서 사용)
+        window.isAuthenticated = {% if is_authenticated %}true{% else %}false{% endif %};
+        window.userEmail = {% if user_email %}'{{ user_email }}'{% else %}null{% endif %};
+    </script>
+    <script src="/static/admin_login.js"></script>
 </body>
 
 </html>

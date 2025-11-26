@@ -50,10 +50,11 @@ from routers import (
     info, web, segmentation, composition, prompt, 
     body_analysis, admin, dress_management, image_processing,
     proxy, models, tryon_router, body_generation, fitting_router,
-    custom_v3_router, custom_v4_router, review
+    custom_v3_router, custom_v4_router, review, auth
 )
 
 app.include_router(info.router)
+app.include_router(auth.router)
 app.include_router(web.router)
 app.include_router(segmentation.router)
 app.include_router(composition.router)
