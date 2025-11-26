@@ -19,7 +19,7 @@ from config.settings import GEMINI_3_FLASH_MODEL, XAI_PROMPT_MODEL
 from core.gemini_client import get_gemini_client_pool
 
 
-def generate_unified_tryon_custom_v4(
+async def generate_unified_tryon_custom_v4(
     person_img: Image.Image,
     garment_img: Image.Image,
     background_img: Image.Image,
@@ -193,7 +193,7 @@ def generate_unified_tryon_custom_v4(
         stage2_start_time = time.time()
         
         try:
-            stage2_response = client_pool.generate_content_with_retry(
+            stage2_response = await client_pool.generate_content_with_retry_async(
                 model=GEMINI_3_FLASH_MODEL,
                 contents=[person_img, garment_nukki_rgb, background_img_processed, unified_prompt]
             )

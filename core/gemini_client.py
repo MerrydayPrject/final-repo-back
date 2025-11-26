@@ -1,4 +1,5 @@
 """Gemini API 클라이언트 풀 관리자 (다중 API 키 지원)"""
+import asyncio
 import threading
 from typing import List, Optional, Callable, Any
 from google import genai
@@ -69,6 +70,7 @@ class GeminiClientPool:
     ) -> Any:
         """
         여러 API 키를 사용하여 Gemini API 호출 (자동 재시도 포함)
+        동기 버전 - 기존 호환성 유지
         
         Args:
             model: 사용할 모델명 (예: "gemini-3-pro-image-preview")
@@ -84,27 +86,115 @@ class GeminiClientPool:
         if max_retries is None:
             max_retries = len(self.api_keys)
         
+        # 각 요청마다 라운드로빈으로 시작 키 선택
+        with self.lock:
+            start_key = self.api_keys[self.current_index]
+            start_index = self.current_index
+            self.current_index = (self.current_index + 1) % len(self.api_keys)
+        
         last_error = None
         tried_keys = set()
         
         for attempt in range(max_retries):
-            # 라운드로빈으로 다음 키 선택
-            api_key = self._get_next_key()
+            # 시작 키부터 순차적으로 시도
+            key_index = (start_index + attempt) % len(self.api_keys)
+            api_key = self.api_keys[key_index]
             
-            # 이미 시도한 키는 건너뛰기 (모든 키를 한 번씩 시도한 경우에만)
-            if len(tried_keys) < len(self.api_keys) and api_key in tried_keys:
+            # 이미 시도한 키는 건너뛰기
+            if api_key in tried_keys:
                 continue
             
             tried_keys.add(api_key)
             client = self.clients[api_key]
             
             try:
-                print(f"[GeminiClientPool] API 키 {attempt + 1}/{max_retries} 사용 중 (키 인덱스: {self.api_keys.index(api_key)})")
+                print(f"[GeminiClientPool] API 키 {attempt + 1}/{max_retries} 사용 중 (키 인덱스: {key_index})")
                 response = client.models.generate_content(
                     model=model,
                     contents=contents
                 )
-                print(f"[GeminiClientPool] API 호출 성공 (키 인덱스: {self.api_keys.index(api_key)})")
+                print(f"[GeminiClientPool] API 호출 성공 (키 인덱스: {key_index})")
+                return response
+                
+            except Exception as e:
+                last_error = e
+                error_msg = str(e)
+                print(f"[GeminiClientPool] API 키 {attempt + 1}/{max_retries} 실패: {error_msg[:100]}")
+                
+                # 재시도 불가능한 에러면 즉시 종료
+                if not self._is_retryable_error(e):
+                    print(f"[GeminiClientPool] 재시도 불가능한 에러로 인해 중단")
+                    raise e
+                
+                # 마지막 시도가 아니면 다음 키로 재시도
+                if attempt < max_retries - 1:
+                    print(f"[GeminiClientPool] 다음 API 키로 재시도...")
+                    continue
+                else:
+                    # 모든 시도 실패
+                    print(f"[GeminiClientPool] 모든 API 키 시도 실패")
+                    raise last_error
+        
+        # 모든 시도 실패
+        if last_error:
+            raise last_error
+        else:
+            raise Exception("Gemini API 호출 실패: 알 수 없는 오류")
+    
+    async def generate_content_with_retry_async(
+        self,
+        model: str,
+        contents: List[Any],
+        max_retries: Optional[int] = None
+    ) -> Any:
+        """
+        여러 API 키를 사용하여 Gemini API 호출 (자동 재시도 포함)
+        비동기 버전 - 실제 병렬 처리 가능
+        
+        Args:
+            model: 사용할 모델명 (예: "gemini-3-pro-image-preview")
+            contents: 생성할 콘텐츠 리스트
+            max_retries: 최대 재시도 횟수 (None이면 모든 키 시도)
+            
+        Returns:
+            Gemini API 응답 객체
+            
+        Raises:
+            Exception: 모든 키 실패 시 마지막 에러
+        """
+        if max_retries is None:
+            max_retries = len(self.api_keys)
+        
+        # 각 요청마다 라운드로빈으로 시작 키 선택
+        with self.lock:
+            start_key = self.api_keys[self.current_index]
+            start_index = self.current_index
+            self.current_index = (self.current_index + 1) % len(self.api_keys)
+        
+        last_error = None
+        tried_keys = set()
+        
+        for attempt in range(max_retries):
+            # 시작 키부터 순차적으로 시도
+            key_index = (start_index + attempt) % len(self.api_keys)
+            api_key = self.api_keys[key_index]
+            
+            # 이미 시도한 키는 건너뛰기
+            if api_key in tried_keys:
+                continue
+            
+            tried_keys.add(api_key)
+            client = self.clients[api_key]
+            
+            try:
+                print(f"[GeminiClientPool] API 키 {attempt + 1}/{max_retries} 사용 중 (키 인덱스: {key_index})")
+                # 동기 호출을 비동기로 실행 (별도 스레드에서 실행되어 블로킹되지 않음)
+                response = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model=model,
+                    contents=contents
+                )
+                print(f"[GeminiClientPool] API 호출 성공 (키 인덱스: {key_index})")
                 return response
                 
             except Exception as e:
