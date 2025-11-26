@@ -16,6 +16,21 @@ GEMINI_PROMPT_MODEL = os.getenv("GEMINI_PROMPT_MODEL", "gemini-2.0-flash-exp")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_3_API_KEY = os.getenv("GEMINI_3_API_KEY", "")
 
+def get_gemini_3_api_keys() -> list[str]:
+    """
+    GEMINI_3_API_KEY 환경변수에서 쉼표로 구분된 여러 API 키를 파싱하여 리스트로 반환
+    
+    Returns:
+        list[str]: API 키 리스트 (빈 리스트일 수 있음)
+    """
+    api_key_str = os.getenv("GEMINI_3_API_KEY", "")
+    if not api_key_str:
+        return []
+    
+    # 쉼표로 구분하여 파싱하고 공백 제거
+    keys = [key.strip() for key in api_key_str.split(",") if key.strip()]
+    return keys
+
 # x.ai API 설정
 XAI_API_KEY = os.getenv("XAI_API_KEY", "")
 XAI_API_BASE_URL = os.getenv("XAI_API_BASE_URL", "https://api.x.ai/v1")

@@ -15,6 +15,7 @@ from core.segformer_garment_parser import parse_garment_image
 from services.image_service import preprocess_dress_image
 from services.log_service import save_test_log
 from config.settings import GEMINI_FLASH_MODEL, GEMINI_3_FLASH_MODEL, XAI_PROMPT_MODEL
+from core.gemini_client import get_gemini_client_pool
 
 
 def generate_unified_tryon(
@@ -2052,9 +2053,10 @@ def generate_unified_tryon_v4(
         # ============================================================
         # Stage 2: Gemini 3 Flash로 의상 교체 + 배경 합성 통합 처리
         # ============================================================
-        api_key = os.getenv("GEMINI_3_API_KEY")
-        if not api_key:
-            error_msg = ".env 파일에 GEMINI_3_API_KEY가 설정되지 않았습니다."
+        try:
+            client_pool = get_gemini_client_pool()
+        except ValueError as e:
+            error_msg = f".env 파일에 GEMINI_3_API_KEY가 설정되지 않았습니다: {str(e)}"
             run_time = time.time() - start_time
             
             save_test_log(
@@ -2076,10 +2078,8 @@ def generate_unified_tryon_v4(
                 "error": "gemini_api_key_not_found"
             }
         
-        client = genai.Client(api_key=api_key)
-        
         print("\n" + "="*80)
-        print("[Stage 2] Gemini 3 Flash - 의상 교체 + 배경 합성 통합 처리")
+        print("[Stage 2] Gemini 3 Flash - 의상 교체 + 배경 합성 통합 처리 (다중 API 키 풀 사용)")
         print("="*80)
         
         # 통합 프롬프트 로드 (Stage 2 + Stage 3 순서대로 결합)
@@ -2090,12 +2090,12 @@ def generate_unified_tryon_v4(
         print(unified_prompt)
         print("="*80 + "\n")
         
-        print("[Stage 2] Gemini API 호출 시작...")
+        print("[Stage 2] Gemini API 호출 시작 (다중 키 풀 사용)...")
         print(f"[Stage 2] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_img ({garment_img.size[0]}x{garment_img.size[1]}), background_img ({background_img_processed.size[0]}x{background_img_processed.size[1]})")
         stage2_start_time = time.time()
         
         try:
-            stage2_response = client.models.generate_content(
+            stage2_response = client_pool.generate_content_with_retry(
                 model=GEMINI_3_FLASH_MODEL,
                 contents=[person_img, garment_img, background_img_processed, unified_prompt]
             )
