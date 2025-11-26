@@ -313,10 +313,25 @@ uploadAllBtn.addEventListener('click', async () => {
         });
         formData.append('styles', JSON.stringify(stylesData));
         
+        // FormData를 사용하는 경우 Authorization 헤더만 추가 (Content-Type은 브라우저가 자동 설정)
+        const token = localStorage.getItem('admin_access_token');
+        const headers = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
         const response = await fetch('/api/admin/dresses/upload', {
             method: 'POST',
+            headers: headers,
             body: formData
         });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
         
         const data = await response.json();
         
@@ -436,7 +451,18 @@ function showInfo(message, type) {
 // 카테고리 규칙 로드
 async function loadCategoryRules() {
     try {
-        const response = await fetch('/api/admin/category-rules');
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch('/api/admin/category-rules', {
+            headers: headers
+        });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+        
         const data = await response.json();
         
         if (data.success) {
@@ -494,16 +520,24 @@ async function handleAddRule() {
     addRuleBtn.textContent = '추가 중...';
     
     try {
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {
+            'Content-Type': 'application/json',
+        };
         const response = await fetch('/api/admin/category-rules', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: headers,
             body: JSON.stringify({
                 prefix: prefix,
                 style: style
             })
         });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
         
         const data = await response.json();
         
@@ -536,15 +570,23 @@ async function handleDeleteRule(prefix) {
     }
     
     try {
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {
+            'Content-Type': 'application/json',
+        };
         const response = await fetch('/api/admin/category-rules', {
             method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: headers,
             body: JSON.stringify({
                 prefix: prefix
             })
         });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
         
         const data = await response.json();
         
@@ -621,7 +663,43 @@ function reDetectStyles() {
 }
 
 // 페이지 로드 시 규칙 로드
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // admin_login.js가 로드될 때까지 대기
+    let retryCount = 0;
+    const maxRetries = 10;
+    
+    while (!window.getAuthHeaders && retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retryCount++;
+    }
+    
+    // 토큰 확인
+    const token = localStorage.getItem('admin_access_token');
+    if (!token) {
+        alert('로그인이 필요합니다. 로그인 페이지로 이동합니다.');
+        window.location.href = '/';
+        return;
+    }
+    
+    // 토큰 검증
+    try {
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch('/api/auth/verify', {
+            headers: headers
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+    } catch (error) {
+        console.error('토큰 검증 오류:', error);
+        alert('인증 확인 중 오류가 발생했습니다. 로그인 페이지로 이동합니다.');
+        window.location.href = '/';
+        return;
+    }
+    
     loadCategoryRules();
 });
 

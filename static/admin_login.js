@@ -256,5 +256,6 @@ function getAuthHeaders() {
 // 전역으로 사용 가능하도록 window 객체에 추가 (필요한 경우)
 if (typeof window !== 'undefined') {
     window.getAuthHeaders = getAuthHeaders;
+    window.verifyToken = verifyToken;
 }
 

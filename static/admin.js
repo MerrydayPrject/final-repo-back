@@ -7,7 +7,43 @@ let currentBodyPage = 1;
 let currentReviewsPage = 1;
 
 // 페이지 로드 시 초기화
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // admin_login.js가 로드될 때까지 대기
+    let retryCount = 0;
+    const maxRetries = 10;
+    
+    while (!window.getAuthHeaders && retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retryCount++;
+    }
+    
+    // 토큰 확인
+    const token = localStorage.getItem('admin_access_token');
+    if (!token) {
+        alert('로그인이 필요합니다. 로그인 페이지로 이동합니다.');
+        window.location.href = '/';
+        return;
+    }
+    
+    // 토큰 검증
+    try {
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch('/api/auth/verify', {
+            headers: headers
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+    } catch (error) {
+        console.error('토큰 검증 오류:', error);
+        alert('인증 확인 중 오류가 발생했습니다. 로그인 페이지로 이동합니다.');
+        window.location.href = '/';
+        return;
+    }
+    
     loadLogs(currentPage);
     
     // 탭 버튼 이벤트 리스너
@@ -111,7 +147,10 @@ function switchTab(tab) {
 // 통계 로드
 async function loadStats() {
     try {
-        const response = await fetch('/api/admin/stats');
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch('/api/admin/stats', {
+            headers: headers
+        });
         const data = await response.json();
         
         if (data.success) {
@@ -136,7 +175,18 @@ async function loadLogs(page, model = null) {
             url += `&model=${encodeURIComponent(model.trim())}`;
         }
         
-        const response = await fetch(url);
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch(url, {
+            headers: headers
+        });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+        
         const data = await response.json();
         
         if (data.success) {
@@ -145,12 +195,14 @@ async function loadLogs(page, model = null) {
             updateLogsCount(data.pagination.total);
             currentPage = page;
         } else {
-            showError('로그를 불러오는 중 오류가 발생했습니다.');
+            showError(data.message || '로그를 불러오는 중 오류가 발생했습니다.');
         }
     } catch (error) {
         console.error('로그 로드 오류:', error);
-        document.getElementById('logs-tbody').innerHTML = 
-            '<tr><td colspan="4" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        const tbody = document.getElementById('logs-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="4" class="loading" style="color: #ef4444;">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        }
     }
 }
 
@@ -308,14 +360,25 @@ function loadLogsWithSearch(page) {
 // 로그 상세 보기
 async function showDetail(logId) {
     try {
-        const response = await fetch(`/api/admin/logs/${logId}`);
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch(`/api/admin/logs/${logId}`, {
+            headers: headers
+        });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+        
         const data = await response.json();
         
         if (data.success) {
             renderDetailModal(data.data);
             openModal();
         } else {
-            alert('로그를 불러오는 중 오류가 발생했습니다.');
+            alert(data.message || '로그를 불러오는 중 오류가 발생했습니다.');
         }
     } catch (error) {
         console.error('상세 로그 로드 오류:', error);
@@ -474,7 +537,18 @@ async function loadBodyLogs(page) {
     try {
         const url = `/api/admin/body-logs?page=${page}&limit=${itemsPerPage}`;
         
-        const response = await fetch(url);
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch(url, {
+            headers: headers
+        });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+        
         const data = await response.json();
         
         if (data.success) {
@@ -483,13 +557,13 @@ async function loadBodyLogs(page) {
             updateBodyLogsCount(data.pagination.total);
             currentBodyPage = page;
         } else {
-            showError('체형 분석 로그를 불러오는 중 오류가 발생했습니다.');
+            showError(data.message || '체형 분석 로그를 불러오는 중 오류가 발생했습니다.');
         }
     } catch (error) {
         console.error('체형 분석 로그 로드 오류:', error);
         const tbody = document.getElementById('body-logs-tbody');
         if (tbody) {
-            tbody.innerHTML = '<tr><td colspan="7" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="loading" style="color: #ef4444;">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
         }
     }
 }
@@ -631,14 +705,25 @@ function renderBodyPagination(pagination) {
 // 체형 분석 로그 상세 보기
 async function showBodyDetail(logId) {
     try {
-        const response = await fetch(`/api/admin/body-logs/${logId}`);
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch(`/api/admin/body-logs/${logId}`, {
+            headers: headers
+        });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+        
         const data = await response.json();
         
         if (data.success) {
             renderBodyDetailModal(data.data);
             openModal();
         } else {
-            alert('로그를 불러오는 중 오류가 발생했습니다.');
+            alert(data.message || '로그를 불러오는 중 오류가 발생했습니다.');
         }
     } catch (error) {
         console.error('체형 분석 상세 로그 로드 오류:', error);
