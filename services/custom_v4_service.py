@@ -94,21 +94,25 @@ async def generate_unified_tryon_custom_v4(
         background_img_processed = background_img
         
         # S3에 입력 이미지 업로드
-        person_buffered = io.BytesIO()
-        person_img.save(person_buffered, format="PNG")
-        person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+        # person_buffered = io.BytesIO()
+        # person_img.save(person_buffered, format="PNG")
+        # person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+        person_s3_url = ""
         
-        garment_buffered = io.BytesIO()
-        garment_nukki_rgb.save(garment_buffered, format="PNG")
-        garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
+        # garment_buffered = io.BytesIO()
+        # garment_nukki_rgb.save(garment_buffered, format="PNG")
+        # garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
+        garment_s3_url = ""
         
-        garment_nukki_buffered = io.BytesIO()
-        garment_nukki_rgb.save(garment_nukki_buffered, format="PNG")
-        garment_nukki_s3_url = upload_log_to_s3(garment_nukki_buffered.getvalue(), model_id, "garment_nukki") or ""
+        # garment_nukki_buffered = io.BytesIO()
+        # garment_nukki_rgb.save(garment_nukki_buffered, format="PNG")
+        # garment_nukki_s3_url = upload_log_to_s3(garment_nukki_buffered.getvalue(), model_id, "garment_nukki") or ""
+        garment_nukki_s3_url = ""
         
-        background_buffered = io.BytesIO()
-        background_img_processed.save(background_buffered, format="PNG")
-        background_s3_url = upload_log_to_s3(background_buffered.getvalue(), model_id, "background") or ""
+        # background_buffered = io.BytesIO()
+        # background_img_processed.save(background_buffered, format="PNG")
+        # background_s3_url = upload_log_to_s3(background_buffered.getvalue(), model_id, "background") or ""
+        background_s3_url = ""
         
         # ============================================================
         # Stage 1: X.AI 프롬프트 생성 (누끼 처리된 의상 이미지 사용)
@@ -123,15 +127,15 @@ async def generate_unified_tryon_custom_v4(
             error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")
             run_time = time.time() - start_time
             
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt="",
-                success=False,
-                run_time=run_time
-            )
+            # save_test_log(
+            #     person_url=person_s3_url or "",
+            #     dress_url=garment_s3_url or None,
+            #     result_url="",
+            #     model=model_id,
+            #     prompt="",
+            #     success=False,
+            #     run_time=run_time
+            # )
             
             return {
                 "success": False,
@@ -153,15 +157,15 @@ async def generate_unified_tryon_custom_v4(
             error_msg = f".env 파일에 GEMINI_3_API_KEY가 설정되지 않았습니다: {str(e)}"
             run_time = time.time() - start_time
             
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
+            # save_test_log(
+            #     person_url=person_s3_url or "",
+            #     dress_url=garment_s3_url or None,
+            #     result_url="",
+            #     model=model_id,
+            #     prompt=used_prompt,
+            #     success=False,
+            #     run_time=run_time
+            # )
             
             return {
                 "success": False,
@@ -190,15 +194,15 @@ async def generate_unified_tryon_custom_v4(
             )
         except Exception as exc:
             run_time = time.time() - start_time
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
+            # save_test_log(
+            #     person_url=person_s3_url or "",
+            #     dress_url=garment_s3_url or None,
+            #     result_url="",
+            #     model=model_id,
+            #     prompt=used_prompt,
+            #     success=False,
+            #     run_time=run_time
+            # )
             
             print(f"[Stage 2] Gemini API 호출 실패: {exc}")
             traceback.print_exc()
@@ -219,15 +223,15 @@ async def generate_unified_tryon_custom_v4(
             error_msg = "Stage 2: Gemini API가 응답을 생성하지 못했습니다."
             run_time = time.time() - start_time
             
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
+            # save_test_log(
+            #     person_url=person_s3_url or "",
+            #     dress_url=garment_s3_url or None,
+            #     result_url="",
+            #     model=model_id,
+            #     prompt=used_prompt,
+            #     success=False,
+            #     run_time=run_time
+            # )
             
             return {
                 "success": False,
@@ -243,15 +247,15 @@ async def generate_unified_tryon_custom_v4(
             error_msg = "Stage 2: Gemini API 응답에 content가 없습니다."
             run_time = time.time() - start_time
             
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
+            # save_test_log(
+            #     person_url=person_s3_url or "",
+            #     dress_url=garment_s3_url or None,
+            #     result_url="",
+            #     model=model_id,
+            #     prompt=used_prompt,
+            #     success=False,
+            #     run_time=run_time
+            # )
             
             return {
                 "success": False,
@@ -266,15 +270,15 @@ async def generate_unified_tryon_custom_v4(
             error_msg = "Stage 2: Gemini API 응답에 parts가 없습니다."
             run_time = time.time() - start_time
             
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
+            # save_test_log(
+            #     person_url=person_s3_url or "",
+            #     dress_url=garment_s3_url or None,
+            #     result_url="",
+            #     model=model_id,
+            #     prompt=used_prompt,
+            #     success=False,
+            #     run_time=run_time
+            # )
             
             return {
                 "success": False,
@@ -296,15 +300,15 @@ async def generate_unified_tryon_custom_v4(
             error_msg = "Stage 2: Gemini API가 이미지를 생성하지 못했습니다."
             run_time = time.time() - start_time
             
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url="",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
+            # save_test_log(
+            #     person_url=person_s3_url or "",
+            #     dress_url=garment_s3_url or None,
+            #     result_url="",
+            #     model=model_id,
+            #     prompt=used_prompt,
+            #     success=False,
+            #     run_time=run_time
+            # )
             
             return {
                 "success": False,
@@ -324,9 +328,10 @@ async def generate_unified_tryon_custom_v4(
         # ============================================================
         result_image_base64 = base64.b64encode(stage2_image_parts[0]).decode()
         
-        result_buffered = io.BytesIO()
-        final_img.save(result_buffered, format="PNG")
-        result_s3_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
+        # result_buffered = io.BytesIO()
+        # final_img.save(result_buffered, format="PNG")
+        # result_s3_url = upload_log_to_s3(result_buffered.getvalue(), model_id, "result") or ""
+        result_s3_url = ""
         
         run_time = time.time() - start_time
         
@@ -339,15 +344,15 @@ async def generate_unified_tryon_custom_v4(
         print("="*80 + "\n")
         
         # 성공 로그 저장
-        save_test_log(
-            person_url=person_s3_url or "",
-            dress_url=garment_s3_url or None,
-            result_url=result_s3_url or "",
-            model=model_id,
-            prompt=used_prompt,
-            success=True,
-            run_time=run_time
-        )
+        # save_test_log(
+        #     person_url=person_s3_url or "",
+        #     dress_url=garment_s3_url or None,
+        #     result_url=result_s3_url or "",
+        #     model=model_id,
+        #     prompt=used_prompt,
+        #     success=True,
+        #     run_time=run_time
+        # )
         
         return {
             "success": True,
@@ -364,15 +369,15 @@ async def generate_unified_tryon_custom_v4(
         print(f"[CustomV4] 파이프라인 오류: {e}")
         print(error_detail)
         
-        save_test_log(
-            person_url=person_s3_url or "",
-            dress_url=garment_s3_url or None,
-            result_url="",
-            model=model_id,
-            prompt=used_prompt,
-            success=False,
-            run_time=run_time
-        )
+        # save_test_log(
+        #     person_url=person_s3_url or "",
+        #     dress_url=garment_s3_url or None,
+        #     result_url="",
+        #     model=model_id,
+        #     prompt=used_prompt,
+        #     success=False,
+        #     run_time=run_time
+        # )
         
         return {
             "success": False,
