@@ -73,7 +73,7 @@ async def unified_tryon(
             )
         
         # 통합 트라이온 서비스 호출 (상체/얼굴 사진인 경우, 배경 포함)
-        result = generate_unified_tryon(person_img, dress_img, background_img)
+        result = await generate_unified_tryon(person_img, dress_img, background_img)
         
         # 결과에 이미지 타입 정보 추가
         if isinstance(result, dict):
@@ -147,7 +147,7 @@ async def compose_xai_gemini_v2(
         background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
         
         # V2 통합 트라이온 서비스 호출
-        result = generate_unified_tryon_v2(person_img, garment_img, background_img)
+        result = await generate_unified_tryon_v2(person_img, garment_img, background_img)
         
         if result["success"]:
             return JSONResponse(result)

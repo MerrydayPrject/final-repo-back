@@ -54,7 +54,7 @@ async def compose_custom_v3_endpoint(
         background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
         
         # CustomV3 통합 트라이온 서비스 호출
-        result = generate_unified_tryon_custom_v3(person_img, garment_img, background_img)
+        result = await generate_unified_tryon_custom_v3(person_img, garment_img, background_img)
         
         if result["success"]:
             return JSONResponse(result)

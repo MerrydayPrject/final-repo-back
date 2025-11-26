@@ -18,7 +18,7 @@ from config.settings import GEMINI_FLASH_MODEL, GEMINI_3_FLASH_MODEL, XAI_PROMPT
 from core.gemini_client import get_gemini_client_pool
 
 
-def generate_unified_tryon(
+async def generate_unified_tryon(
     person_img: Image.Image,
     dress_img: Image.Image,
     background_img: Image.Image,
@@ -88,7 +88,7 @@ def generate_unified_tryon(
         print("X.AI 프롬프트 생성 시작")
         print("="*80)
         
-        xai_result = generate_prompt_from_images(person_img, dress_img_processed)
+        xai_result = await generate_prompt_from_images(person_img, dress_img_processed)
         
         if not xai_result.get("success"):
             error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")
@@ -361,7 +361,7 @@ BACKGROUND RULES:
         }
 
 
-def generate_unified_tryon_v2(
+async def generate_unified_tryon_v2(
     person_img: Image.Image,
     garment_img: Image.Image,
     background_img: Image.Image,
@@ -512,7 +512,7 @@ def generate_unified_tryon_v2(
         print("X.AI 프롬프트 생성 시작 (V2: garment_only 이미지 사용)")
         print("="*80)
         
-        xai_result = generate_prompt_from_images(person_img, garment_only_img)
+        xai_result = await generate_prompt_from_images(person_img, garment_only_img)
         
         if not xai_result.get("success"):
             error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")
@@ -787,7 +787,7 @@ BACKGROUND RULES:
         }
 
 
-def generate_custom_tryon_v2(
+async def generate_custom_tryon_v2(
     person_img: Image.Image,
     dress_img: Image.Image,
     model_id: str = "xai-gemini-custom-v2"
@@ -925,7 +925,7 @@ def generate_custom_tryon_v2(
         print("X.AI 프롬프트 생성 시작 (커스텀 피팅: garment_only 이미지 사용)")
         print("="*80)
         
-        xai_result = generate_prompt_from_images(person_img, garment_only_img)
+        xai_result = await generate_prompt_from_images(person_img, garment_only_img)
         
         if not xai_result.get("success"):
             error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")
@@ -1441,7 +1441,7 @@ def load_v4_unified_prompt(xai_prompt: str) -> str:
 # V3 파이프라인 메인 함수
 # ============================================================
 
-def generate_unified_tryon_v3(
+async def generate_unified_tryon_v3(
     person_img: Image.Image,
     garment_img: Image.Image,
     background_img: Image.Image,
@@ -2019,7 +2019,7 @@ async def generate_unified_tryon_v4(
         print("[Stage 1] X.AI 프롬프트 생성 시작 (V4: 원본 의상 이미지 사용)")
         print("="*80)
         
-        xai_result = generate_prompt_from_images(person_img, garment_img)
+        xai_result = await generate_prompt_from_images(person_img, garment_img)
         
         if not xai_result.get("success"):
             error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")

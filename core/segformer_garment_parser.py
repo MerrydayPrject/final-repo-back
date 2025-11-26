@@ -2,6 +2,8 @@
 import os
 import base64
 import requests
+import httpx
+import asyncio
 import traceback
 import time
 import numpy as np
@@ -624,7 +626,7 @@ def parse_garment_image_v3(
         }
 
 
-def parse_garment_image_v4(
+async def parse_garment_image_v4(
     garment_img: Image.Image
 ) -> Dict[str, Optional[Image.Image]]:
     """
@@ -687,13 +689,13 @@ def parse_garment_image_v4(
         print(f"[SegFormer B2 Clothes Parser V4] 모델: {SEGFORMER_MODEL_ID_V3}")
         print(f"[SegFormer B2 Clothes Parser V4] 원본 이미지 크기: {original_size[0]}x{original_size[1]}")
         
-        # HuggingFace Inference API 호출
-        response = requests.post(
-            SEGFORMER_API_URL_V3,
-            headers=headers,
-            json=payload,
-            timeout=API_TIMEOUT
-        )
+        # HuggingFace Inference API 호출 (비동기)
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(
+                SEGFORMER_API_URL_V3,
+                headers=headers,
+                json=payload
+            )
         
         print(f"[SegFormer B2 Clothes Parser V4] 응답 상태 코드: {response.status_code}")
         
@@ -749,16 +751,16 @@ def parse_garment_image_v4(
             except:
                 estimated_time = 10
             print(f"[SegFormer B2 Clothes Parser V4] 모델 로딩 중... 예상 대기 시간: {estimated_time}초")
-            time.sleep(min(estimated_time + 2, 30))
+            await asyncio.sleep(min(estimated_time + 2, 30))
             
             # 재시도
             print(f"[SegFormer B2 Clothes Parser V4] 재시도 중...")
-            response = requests.post(
-                SEGFORMER_API_URL_V3,
-                headers=headers,
-                json=payload,
-                timeout=API_TIMEOUT
-            )
+            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+                response = await client.post(
+                    SEGFORMER_API_URL_V3,
+                    headers=headers,
+                    json=payload
+                )
             print(f"[SegFormer B2 Clothes Parser V4] 재시도 후 응답 상태 코드: {response.status_code}")
         
         # 성공 응답 처리
@@ -898,7 +900,7 @@ def parse_garment_image_v4(
                 "error": f"api_error_{response.status_code}"
             }
             
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         print(f"[SegFormer B2 Clothes Parser V4] 타임아웃 오류")
         return {
             "success": False,

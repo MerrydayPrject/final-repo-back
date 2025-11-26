@@ -2,6 +2,7 @@
 import os
 import base64
 import requests
+import httpx
 import traceback
 from typing import Dict, Optional
 from io import BytesIO
@@ -154,7 +155,7 @@ def generate_image_from_text(
         }
 
 
-def generate_prompt_from_images(
+async def generate_prompt_from_images(
     person_img: Image.Image,
     dress_img: Image.Image,
     model: Optional[str] = None
@@ -305,12 +306,13 @@ Output ONLY the final prompt text.
         print(f"[x.ai API] 엔드포인트: {XAI_API_BASE_URL}/chat/completions")
         print(f"[x.ai API] API 키 설정: {'O' if XAI_API_KEY else 'X'}")
         
-        response = requests.post(
-            f"{XAI_API_BASE_URL}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
+        # 비동기 HTTP 요청
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{XAI_API_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload
+            )
         
         print(f"[x.ai API] 응답 상태 코드: {response.status_code}")
         
@@ -351,7 +353,7 @@ Output ONLY the final prompt text.
                 "message": error_detail or f"x.ai API 호출 실패 (상태 코드: {response.status_code})"
             }
             
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         print(f"[x.ai API] 타임아웃 오류")
         return {
             "success": False,

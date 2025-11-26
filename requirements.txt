@@ -27,6 +27,7 @@ opencv-python>=4.8.0  # 이미지 필터, Color Harmonization
 openai>=1.3.0  # X.AI API 클라이언트 (프롬프트 생성)
 google-genai>=0.2.0  # Gemini API (이미지 합성 및 체형 분석)
 requests>=2.31.0  # HuggingFace Inference API 호출
+httpx>=0.25.0  # 비동기 HTTP 클라이언트 (병렬 처리용)
 
 # ============================================
 # 데이터베이스

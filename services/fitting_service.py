@@ -210,7 +210,7 @@ def blend_face_patch(
     return final_img
 
 
-def compose_v2_5(
+async def compose_v2_5(
     person_img: Image.Image,
     garment_img: Image.Image,
     background_img: Image.Image,
@@ -424,7 +424,7 @@ def compose_v2_5(
         print("X.AI 프롬프트 생성 시작")
         print("="*80)
         
-        xai_result = generate_prompt_from_images(person_img, garment_only_img)
+        xai_result = await generate_prompt_from_images(person_img, garment_only_img)
         
         if not xai_result.get("success"):
             error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")
