@@ -2045,10 +2045,6 @@ async def generate_unified_tryon_v4(
             }
         
         used_prompt = xai_result.get("prompt", "")
-        print("\n[Stage 1] 생성된 프롬프트:")
-        print("-"*80)
-        print(used_prompt)
-        print("="*80 + "\n")
         
         # ============================================================
         # Stage 2: Gemini 3 Flash로 의상 교체 + 배경 합성 통합 처리
@@ -2084,11 +2080,6 @@ async def generate_unified_tryon_v4(
         
         # 통합 프롬프트 로드 (Stage 2 + Stage 3 순서대로 결합)
         unified_prompt = load_v4_unified_prompt(used_prompt)
-        
-        print("[Stage 2] 통합 프롬프트:")
-        print("-"*80)
-        print(unified_prompt)
-        print("="*80 + "\n")
         
         print("[Stage 2] Gemini API 호출 시작 (다중 키 풀 사용)...")
         print(f"[Stage 2] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_img ({garment_img.size[0]}x{garment_img.size[1]}), background_img ({background_img_processed.size[0]}x{background_img_processed.size[1]})")
