@@ -26,7 +26,8 @@ class GeminiClientPool:
         self.api_keys = api_keys
         self.clients = {key: genai.Client(api_key=key) for key in api_keys}
         self.current_index = 0
-        self.lock = threading.Lock()
+        self.lock = threading.Lock()  # 동기 버전용
+        self.async_lock = asyncio.Lock()  # 비동기 버전용
         print(f"[GeminiClientPool] {len(self.api_keys)}개의 API 키로 초기화 완료")
     
     def _get_next_key(self) -> str:
@@ -165,11 +166,12 @@ class GeminiClientPool:
         if max_retries is None:
             max_retries = len(self.api_keys)
         
-        # 각 요청마다 라운드로빈으로 시작 키 선택
-        with self.lock:
+        # 각 요청마다 라운드로빈으로 시작 키 선택 (비동기 lock 사용)
+        async with self.async_lock:
             start_key = self.api_keys[self.current_index]
             start_index = self.current_index
             self.current_index = (self.current_index + 1) % len(self.api_keys)
+            print(f"[GeminiClientPool] 요청 시작 - 시작 키 인덱스: {start_index}, 다음 인덱스: {self.current_index}")
         
         last_error = None
         tried_keys = set()
