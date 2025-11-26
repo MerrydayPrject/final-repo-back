@@ -3,38 +3,6 @@
 body {
     width: 100%;
     height: 100%;
-    background-color: #111111;
-    background-image: linear-gradient(32deg,
-            rgba(8, 8, 8, 0.74) 30px,
-            transparent);
-    background-size: 60px 60px;
-    background-position: -5px -5px;
-    min-height: 100vh;
-    color: #e0e0e0;
-}
-
-.upload-section {
-    margin-bottom: 20px;
-}
-
-.upload-area {
-    padding: 20px 15px !important;
-    min-height: 80px !important;
-}
-
-.upload-icon {
-    font-size: 28px;
-    margin-bottom: 5px;
-}
-
-.upload-text {
-    font-size: 13px;
-    margin-bottom: 8px;
-}
-
-.upload-button {
-    padding: 6px 16px;
-    font-size: 13px;
 }
 
 .controls-section {
