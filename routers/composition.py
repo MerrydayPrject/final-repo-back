@@ -65,7 +65,7 @@ async def compose_dress(
         dress_img = Image.open(io.BytesIO(dress_contents)).convert("RGB")
         
         # 커스텀 트라이온 V2 서비스 호출
-        result = generate_custom_tryon_v2(person_img, dress_img)
+        result = await generate_custom_tryon_v2(person_img, dress_img)
         
         # 응답 형식 맞추기 (기존 API와 호환)
         if result["success"]:

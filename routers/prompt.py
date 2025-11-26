@@ -403,7 +403,7 @@ async def generate_xai_prompt(
         print("="*80)
         
         try:
-            result = generate_prompt_from_images(person_img, dress_img)
+            result = await generate_prompt_from_images(person_img, dress_img)
             
             if result["success"]:
                 return JSONResponse({

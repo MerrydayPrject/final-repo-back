@@ -21,7 +21,7 @@ from services.tryon_service import (
 from config.settings import GEMINI_FLASH_MODEL, XAI_PROMPT_MODEL
 
 
-def generate_unified_tryon_custom_v3(
+async def generate_unified_tryon_custom_v3(
     person_img: Image.Image,
     garment_img: Image.Image,
     background_img: Image.Image,
@@ -124,7 +124,7 @@ def generate_unified_tryon_custom_v3(
         print("[Stage 1] X.AI 프롬프트 생성 시작 (CustomV3: 누끼 처리된 의상 이미지 사용)")
         print("="*80)
         
-        xai_result = generate_prompt_from_images(person_img, garment_nukki_rgb)
+        xai_result = await generate_prompt_from_images(person_img, garment_nukki_rgb)
         
         if not xai_result.get("success"):
             error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")

@@ -68,7 +68,7 @@ async def generate_unified_tryon_custom_v4(
         print("="*80)
         
         print("\n[Stage 0] 의상 이미지 누끼 처리 시작 (HuggingFace API)...")
-        parsing_result = parse_garment_image_v4(garment_img)
+        parsing_result = await parse_garment_image_v4(garment_img)
         
         if not parsing_result.get("success"):
             error_msg = parsing_result.get("message", "의상 이미지 누끼 처리에 실패했습니다.")
@@ -117,7 +117,7 @@ async def generate_unified_tryon_custom_v4(
         print("[Stage 1] X.AI 프롬프트 생성 시작 (CustomV4: 누끼 처리된 의상 이미지 사용)")
         print("="*80)
         
-        xai_result = generate_prompt_from_images(person_img, garment_nukki_rgb)
+        xai_result = await generate_prompt_from_images(person_img, garment_nukki_rgb)
         
         if not xai_result.get("success"):
             error_msg = xai_result.get("message", "X.AI 프롬프트 생성에 실패했습니다.")

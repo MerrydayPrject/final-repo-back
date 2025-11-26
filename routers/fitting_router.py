@@ -177,7 +177,7 @@ async def compose_v2_5_endpoint(
         use_preprocess = use_person_preprocess.lower() == "true"
         
         # V2.5 통합 트라이온 서비스 호출
-        result = compose_v2_5(
+        result = await compose_v2_5(
             person_img,
             garment_img,
             background_img,
@@ -249,7 +249,7 @@ async def compose_v3_endpoint(
         background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
         
         # V3 통합 트라이온 서비스 호출
-        result = generate_unified_tryon_v3(person_img, garment_img, background_img)
+        result = await generate_unified_tryon_v3(person_img, garment_img, background_img)
         
         if result["success"]:
             return JSONResponse(result)
