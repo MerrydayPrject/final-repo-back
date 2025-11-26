@@ -3,6 +3,7 @@ import time
 from fastapi import APIRouter
 from core.model_loader import processor, model
 from config.settings import LABELS
+from config.server_session import get_server_session
 
 router = APIRouter()
 
@@ -13,15 +14,20 @@ async def health_check():
     서버 상태 확인
     
     서버와 모델의 로딩 상태를 확인합니다.
+    서버 재시작 감지를 위한 세션 ID도 포함합니다.
     
     Returns:
-        dict: 서버 상태 및 모델 로딩 여부
+        dict: 서버 상태 및 모델 로딩 여부, 서버 세션 ID
     """
+    session_info = get_server_session()
+    
     return {
         "status": "healthy",
         "model_loaded": model is not None and processor is not None,
         "model_name": "mattmdjaga/segformer_b2_clothes",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "server_session_id": session_info["server_session_id"],
+        "server_start_time": session_info["server_start_time"]
     }
 
 

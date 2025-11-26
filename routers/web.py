@@ -1,7 +1,9 @@
 """웹 인터페이스 라우터"""
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import APIRouter, Request, HTTPException, status
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from config.auth_middleware import get_current_user
+from core.supabase_client import is_admin_user as check_admin
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -13,8 +15,17 @@ async def home(request: Request):
     메인 웹 인터페이스
     
     테스트 페이지 선택 페이지를 반환합니다.
+    로그인 상태를 확인하여 로그인 폼 또는 관리자 메뉴를 표시합니다.
     """
-    return templates.TemplateResponse("index.html", {"request": request})
+    # 로그인 상태 확인 (선택적 - 실패해도 계속 진행)
+    user_data = await get_current_user(request)
+    is_authenticated = user_data is not None and check_admin(user_data) if user_data else False
+    
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "is_authenticated": is_authenticated,
+        "user_email": user_data.get("email") if user_data else None
+    })
 
 
 @router.get("/nukki", response_class=HTMLResponse, tags=["Web Interface"])
@@ -92,6 +103,12 @@ async def admin_page(request: Request):
     
     로그 목록과 통계를 확인할 수 있는 관리자 페이지
     """
+    # 인증 확인
+    user_data = await get_current_user(request)
+    if not user_data or not check_admin(user_data):
+        # 로그인 페이지로 리다이렉트
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    
     return templates.TemplateResponse("admin.html", {"request": request})
 
 
@@ -100,6 +117,11 @@ async def dress_insert_page(request: Request):
     """
     드레스 이미지 삽입 관리자 페이지
     """
+    # 인증 확인
+    user_data = await get_current_user(request)
+    if not user_data or not check_admin(user_data):
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    
     return templates.TemplateResponse("dress_insert.html", {"request": request})
 
 
@@ -110,6 +132,11 @@ async def dress_manage_page(request: Request):
     
     드레스 정보 목록 조회 및 추가가 가능한 관리자 페이지
     """
+    # 인증 확인
+    user_data = await get_current_user(request)
+    if not user_data or not check_admin(user_data):
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    
     return templates.TemplateResponse("dress_manage.html", {"request": request})
 
 

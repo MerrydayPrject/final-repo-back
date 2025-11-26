@@ -15,17 +15,21 @@ from fastapi.responses import JSONResponse
 from typing import Optional
 from services.database import get_db_connection
 from services.category_service import load_category_rules, save_category_rules
+from config.auth_middleware import require_admin
 
 router = APIRouter()
 
 
 @router.get("/api/admin/stats", tags=["관리자"])
-async def get_admin_stats():
+async def get_admin_stats(request: Request):
     """
     관리자 통계 정보 조회
     
     result_logs 테이블에서 통계 정보를 조회합니다.
     """
+    # 인증 확인
+    await require_admin(request)
+    
     try:
         connection = get_db_connection()
         if not connection:
@@ -99,6 +103,7 @@ async def get_admin_stats():
 
 @router.get("/api/admin/logs", tags=["관리자"])
 async def get_admin_logs(
+    request: Request,
     page: int = Query(1, ge=1, description="페이지 번호"),
     limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수"),
     model: Optional[str] = Query(None, description="모델명으로 검색")
@@ -108,6 +113,9 @@ async def get_admin_logs(
     
     result_logs 테이블에서 로그 목록을 조회합니다.
     """
+    # 인증 확인
+    await require_admin(request)
+    
     try:
         connection = get_db_connection()
         if not connection:
@@ -184,12 +192,15 @@ async def get_admin_logs(
 
 
 @router.get("/api/admin/logs/{log_id}", tags=["관리자"])
-async def get_admin_log_detail(log_id: int):
+async def get_admin_log_detail(request: Request, log_id: int):
     """
     관리자 로그 상세 정보 조회
     
     특정 로그의 상세 정보를 조회합니다.
     """
+    # 인증 확인
+    await require_admin(request)
+    
     try:
         connection = get_db_connection()
         if not connection:
@@ -295,10 +306,13 @@ async def get_admin_log_detail(log_id: int):
 
 
 @router.get("/api/admin/category-rules", tags=["카테고리 규칙"])
-async def get_category_rules():
+async def get_category_rules(request: Request):
     """
     카테고리 규칙 목록 조회
     """
+    # 인증 확인
+    await require_admin(request)
+    
     try:
         rules = load_category_rules()
         return JSONResponse({
@@ -319,6 +333,9 @@ async def add_category_rule(request: Request):
     """
     새 카테고리 규칙 추가
     """
+    # 인증 확인
+    await require_admin(request)
+    
     try:
         body = await request.json()
         prefix = body.get("prefix")
@@ -370,6 +387,9 @@ async def delete_category_rule(request: Request):
     """
     카테고리 규칙 삭제
     """
+    # 인증 확인
+    await require_admin(request)
+    
     try:
         body = await request.json()
         prefix = body.get("prefix")

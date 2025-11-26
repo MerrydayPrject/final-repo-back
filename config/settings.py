@@ -48,6 +48,11 @@ MEDIAPIPE_SPACE_URL = os.getenv("MEDIAPIPE_SPACE_URL", "https://jjunyuongv-media
 INSIGHTFACE_ENDPOINT_URL = os.getenv("INSIGHTFACE_ENDPOINT_URL", "")
 INSIGHTFACE_API_KEY = os.getenv("INSIGHTFACE_API_KEY", "")
 
+# Supabase 설정
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+
 # 레이블 정보
 LABELS = {
     0: "Background", 1: "Hat", 2: "Hair", 3: "Sunglasses",
