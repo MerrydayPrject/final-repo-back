@@ -316,7 +316,7 @@ async def compose_v4_endpoint(
         background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
         
         # V4 통합 트라이온 서비스 호출
-        result = generate_unified_tryon_v4(person_img, garment_img, background_img)
+        result = await generate_unified_tryon_v4(person_img, garment_img, background_img)
         
         if result["success"]:
             return JSONResponse(result)
