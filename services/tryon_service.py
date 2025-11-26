@@ -2245,15 +2245,15 @@ async def generate_unified_tryon_v4(
         print("="*80 + "\n")
         
         # 성공 로그 저장
-        save_test_log(
-            person_url=person_s3_url or "",
-            dress_url=garment_s3_url or None,
-            result_url=result_s3_url or "",
-            model=model_id,
-            prompt=used_prompt,
-            success=True,
-            run_time=run_time
-        )
+        # save_test_log(
+        #     person_url=person_s3_url or "",
+        #     dress_url=garment_s3_url or None,
+        #     result_url=result_s3_url or "",
+        #     model=model_id,
+        #     prompt=used_prompt,
+        #     success=True,
+        #     run_time=run_time
+        # )
         
         return {
             "success": True,
@@ -2268,18 +2268,18 @@ async def generate_unified_tryon_v4(
         run_time = time.time() - start_time
         
         # 오류 로그 저장
-        try:
-            save_test_log(
-                person_url=person_s3_url or "",
-                dress_url=garment_s3_url or None,
-                result_url=result_s3_url or "",
-                model=model_id,
-                prompt=used_prompt,
-                success=False,
-                run_time=run_time
-            )
-        except:
-            pass  # 로그 저장 실패해도 계속 진행
+        # try:
+        #     save_test_log(
+        #         person_url=person_s3_url or "",
+        #         dress_url=garment_s3_url or None,
+        #         result_url=result_s3_url or "",
+        #         model=model_id,
+        #         prompt=used_prompt,
+        #         success=False,
+        #         run_time=run_time
+        #     )
+        # except:
+        #     pass  # 로그 저장 실패해도 계속 진행
         
         print(f"통합 트라이온 파이프라인 V4 오류: {e}")
         traceback.print_exc()
