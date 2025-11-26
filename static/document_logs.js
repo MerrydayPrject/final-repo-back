@@ -4,7 +4,43 @@ const itemsPerPage = 20;
 let currentSearchModel = null;
 
 // 페이지 로드 시 초기화
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // admin_login.js가 로드될 때까지 대기
+    let retryCount = 0;
+    const maxRetries = 10;
+    
+    while (!window.getAuthHeaders && retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retryCount++;
+    }
+    
+    // 토큰 확인
+    const token = localStorage.getItem('admin_access_token');
+    if (!token) {
+        alert('로그인이 필요합니다. 로그인 페이지로 이동합니다.');
+        window.location.href = '/';
+        return;
+    }
+    
+    // 토큰 검증
+    try {
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch('/api/auth/verify', {
+            headers: headers
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+    } catch (error) {
+        console.error('토큰 검증 오류:', error);
+        alert('인증 확인 중 오류가 발생했습니다. 로그인 페이지로 이동합니다.');
+        window.location.href = '/';
+        return;
+    }
+    
     loadLogs(currentPage);
     
     // 검색 입력 필드에 Enter 키 이벤트 추가
@@ -26,7 +62,26 @@ async function loadLogs(page, model = null) {
             url += `&model=${encodeURIComponent(model.trim())}`;
         }
         
-        const response = await fetch(url);
+        // 토큰 가져오기
+        const token = localStorage.getItem('admin_access_token');
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(url, {
+            headers: headers
+        });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+        
         const data = await response.json();
         
         if (data.success) {
@@ -35,12 +90,14 @@ async function loadLogs(page, model = null) {
             updateLogsCount(data.pagination.total);
             currentPage = page;
         } else {
-            showError('로그를 불러오는 중 오류가 발생했습니다.');
+            showError(data.message || '로그를 불러오는 중 오류가 발생했습니다.');
         }
     } catch (error) {
         console.error('로그 로드 오류:', error);
-        document.getElementById('logs-tbody').innerHTML = 
-            '<tr><td colspan="4" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        const tbody = document.getElementById('logs-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="4" class="loading" style="color: #ef4444;">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        }
     }
 }
 
@@ -230,14 +287,33 @@ function loadLogsWithSearch(page) {
 // 로그 상세 보기
 async function showDetail(logId) {
     try {
-        const response = await fetch(`/api/admin/logs/${logId}`);
+        // 토큰 가져오기
+        const token = localStorage.getItem('admin_access_token');
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(`/api/admin/logs/${logId}`, {
+            headers: headers
+        });
+        
+        // 401 오류 처리
+        if (response.status === 401) {
+            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            window.location.href = '/';
+            return;
+        }
+        
         const data = await response.json();
         
         if (data.success) {
             renderDetailModal(data.data);
             openModal();
         } else {
-            alert('로그를 불러오는 중 오류가 발생했습니다.');
+            alert(data.message || '로그를 불러오는 중 오류가 발생했습니다.');
         }
     } catch (error) {
         console.error('상세 로그 로드 오류:', error);

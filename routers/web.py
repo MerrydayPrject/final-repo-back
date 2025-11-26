@@ -102,13 +102,9 @@ async def admin_page(request: Request):
     관리자 페이지
     
     로그 목록과 통계를 확인할 수 있는 관리자 페이지
+    페이지 접근은 허용하고, JavaScript에서 토큰 확인 후 API 호출 시 인증을 확인합니다.
     """
-    # 인증 확인
-    user_data = await get_current_user(request)
-    if not user_data or not check_admin(user_data):
-        # 로그인 페이지로 리다이렉트
-        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-    
+    # 페이지는 인증 없이 접근 가능 (JavaScript에서 토큰 확인)
     return templates.TemplateResponse("admin.html", {"request": request})
 
 
@@ -116,12 +112,9 @@ async def admin_page(request: Request):
 async def dress_insert_page(request: Request):
     """
     드레스 이미지 삽입 관리자 페이지
+    페이지 접근은 허용하고, JavaScript에서 토큰 확인 후 API 호출 시 인증을 확인합니다.
     """
-    # 인증 확인
-    user_data = await get_current_user(request)
-    if not user_data or not check_admin(user_data):
-        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-    
+    # 페이지는 인증 없이 접근 가능 (JavaScript에서 토큰 확인)
     return templates.TemplateResponse("dress_insert.html", {"request": request})
 
 
@@ -131,12 +124,9 @@ async def dress_manage_page(request: Request):
     드레스 관리자 페이지
     
     드레스 정보 목록 조회 및 추가가 가능한 관리자 페이지
+    페이지 접근은 허용하고, JavaScript에서 토큰 확인 후 API 호출 시 인증을 확인합니다.
     """
-    # 인증 확인
-    user_data = await get_current_user(request)
-    if not user_data or not check_admin(user_data):
-        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-    
+    # 페이지는 인증 없이 접근 가능 (JavaScript에서 토큰 확인)
     return templates.TemplateResponse("dress_manage.html", {"request": request})
 
 
