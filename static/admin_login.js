@@ -33,44 +33,48 @@ async function checkServerRestart() {
 // 방문자 수 로드
 async function loadVisitorCount() {
     try {
-        // 방문자 수 조회만
-        const response = await fetch('/visitor/today', {
+        // 오늘 방문자 수 조회
+        const todayResponse = await fetch('/visitor/today', {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        // 전체 방문자 수 조회
+        const totalResponse = await fetch('/visitor/total', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
         });
 
-        let count = 0;
-        if (response.ok) {
-            const data = await response.json();
-            count = data.count || 0;
-        } else {
-            // 조회 실패 시 재시도
-            const getResponse = await fetch('/visitor/today', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            });
-            if (getResponse.ok) {
-                const data = await getResponse.json();
-                count = data.count || 0;
-            }
+        let todayCount = 0;
+        let totalCount = 0;
+        
+        if (todayResponse.ok) {
+            const data = await todayResponse.json();
+            todayCount = data.count || 0;
+        }
+        
+        if (totalResponse.ok) {
+            const data = await totalResponse.json();
+            totalCount = data.total || 0;
         }
 
-        // 관리자 메뉴의 방문자 수 업데이트
+        // 오늘 방문자 수 업데이트
         const visitorCountElement = document.getElementById('visitor-count');
         if (visitorCountElement) {
-            visitorCountElement.textContent = count;
+            visitorCountElement.textContent = todayCount;
+        }
+        
+        // 전체 방문자 수 업데이트
+        const visitorTotalElement = document.getElementById('visitor-total');
+        if (visitorTotalElement) {
+            visitorTotalElement.textContent = totalCount;
         }
     } catch (error) {
         console.error('방문자 수 로드 오류:', error);
-        // 오류 시에도 기본값 표시
         const visitorCountElement = document.getElementById('visitor-count');
-        if (visitorCountElement) {
-            visitorCountElement.textContent = '0';
-        }
+        if (visitorCountElement) visitorCountElement.textContent = '0';
+        const visitorTotalElement = document.getElementById('visitor-total');
+        if (visitorTotalElement) visitorTotalElement.textContent = '0';
     }
 }
 

@@ -47,3 +47,19 @@ async def get_today_visitors():
     finally:
         connection.close()
 
+
+@router.get("/total")
+async def get_total_visitors():
+    """전체 방문자 수 조회"""
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="DB 연결 실패")
+    
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT SUM(count) as total FROM daily_visitors")
+            result = cursor.fetchone()
+            return {"total": result['total'] or 0}
+    finally:
+        connection.close()
+
