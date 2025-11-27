@@ -135,6 +135,44 @@ header.admin-header,
     border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
+/* Today 카운터 - 파란색 그라데이션 배경 */
+#visitor-counter {
+    background: linear-gradient(135deg, #0830e6 0%, #7b5b9b 100%);
+    border: 2px solid rgba(102, 126, 234, 0.5);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+#visitor-counter .visitor-label {
+    color: #ffffff;
+    opacity: 0.95;
+    font-weight: 700;
+}
+
+#visitor-counter .visitor-count {
+    color: #ffffff;
+    font-size: 1.3em;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Total 카운터 - 회색/보라색 그라데이션 배경 */
+#visitor-counter-total {
+    background: linear-gradient(135deg, #6c757d 0%, #1c1c1d 100%);
+    border: 2px solid rgba(108, 117, 125, 0.5);
+    box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+}
+
+#visitor-counter-total .visitor-label {
+    color: #ffffff;
+    opacity: 0.95;
+    font-weight: 700;
+}
+
+#visitor-counter-total .visitor-count {
+    color: #ffffff;
+    font-size: 1.3em;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
 .visitor-counter-top {
     position: fixed;
     top: 20px;
