@@ -176,6 +176,19 @@ def init_database():
             cursor.execute(create_reviews_table)
             connection.commit()
             print("DB 테이블 생성 완료: reviews")
+            
+            # daily_visitors 테이블 생성
+            create_daily_visitors_table = """
+            CREATE TABLE IF NOT EXISTS daily_visitors (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                visit_date DATE NOT NULL UNIQUE,
+                count INT DEFAULT 0,
+                INDEX idx_visit_date (visit_date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='일별 방문자 수';
+            """
+            cursor.execute(create_daily_visitors_table)
+            connection.commit()
+            print("DB 테이블 생성 완료: daily_visitors")
     except Exception as e:
         print(f"테이블 생성 오류: {e}")
     finally:
