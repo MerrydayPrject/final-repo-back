@@ -47,9 +47,16 @@
             <div class="admin-header-content">
                 <h1>Admin</h1>
                 <span class="admin-subtitle">관리자용 페이지 입니다</span>
-                <div class="admin-user-info">
-                    <span id="user-email"></span>
-                    <button id="logout-button" class="logout-button">로그아웃</button>
+                <div class="admin-header-right">
+                    <!-- 방문자 수 표시 -->
+                    <div class="visitor-counter" id="visitor-counter">
+                        <span class="visitor-label">Today</span>
+                        <span class="visitor-count" id="visitor-count">-</span>
+                    </div>
+                    <div class="admin-user-info">
+                        <span id="user-email"></span>
+                        <button id="logout-button" class="logout-button">로그아웃</button>
+                    </div>
                 </div>
             </div>
         </header>

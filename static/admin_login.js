@@ -30,10 +30,57 @@ async function checkServerRestart() {
     return true;
 }
 
+// 방문자 수 로드
+async function loadVisitorCount() {
+    try {
+        // 방문자 수 증가 및 조회
+        const response = await fetch('/visitor/visit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        let count = 0;
+        if (response.ok) {
+            const data = await response.json();
+            count = data.count || 0;
+        } else {
+            // 증가 실패 시 조회만 시도
+            const getResponse = await fetch('/visitor/today', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            if (getResponse.ok) {
+                const data = await getResponse.json();
+                count = data.count || 0;
+            }
+        }
+
+        // 관리자 메뉴의 방문자 수 업데이트
+        const visitorCountElement = document.getElementById('visitor-count');
+        if (visitorCountElement) {
+            visitorCountElement.textContent = count;
+        }
+    } catch (error) {
+        console.error('방문자 수 로드 오류:', error);
+        // 오류 시에도 기본값 표시
+        const visitorCountElement = document.getElementById('visitor-count');
+        if (visitorCountElement) {
+            visitorCountElement.textContent = '0';
+        }
+    }
+}
+
 // 페이지 로드 시 저장된 토큰 확인
 document.addEventListener('DOMContentLoaded', async function () {
     // URL에서 민감한 정보 제거
     cleanUrl();
+
+    // 방문자 수 로드 (로그인 여부와 관계없이 표시)
+    loadVisitorCount();
 
     // localStorage에서 토큰 확인
     const savedToken = localStorage.getItem('admin_access_token');
