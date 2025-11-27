@@ -1339,6 +1339,10 @@ def load_v4_stage2_prompt(xai_prompt: str) -> str:
         with open(prompt_path, "r", encoding="utf-8") as f:
             template = f.read().strip()
 
+        # 템플릿 로드 성공 여부 확인
+        template_status = "O" if len(template) > 0 else "X"
+        print(f"[V4] Stage 2 템플릿 로드: {template_status} (길이: {len(template)} 문자)")
+
         # 템플릿 + X.AI 분석 + [강력한 최종 제약사항 (샌드위치 기법)]
         combined = (
             template
@@ -1352,9 +1356,14 @@ def load_v4_stage2_prompt(xai_prompt: str) -> str:
             + "5. SHOE FIX: Original sneakers are BANNED. Render appropriate formal footwear."
         )
 
+        # 최종 프롬프트 결합 성공 여부 확인
+        combined_status = "O" if len(combined) > len(xai_prompt) else "X"
+        print(f"[V4] Stage 2 최종 프롬프트 결합: {combined_status} (길이: {len(combined)} 문자)")
+
         return combined
     except FileNotFoundError:
         print(f"[V4] WARNING: Stage 2 프롬프트 템플릿을 찾을 수 없습니다: {abs_prompt_path}")
+        print(f"[V4] Stage 2 템플릿 로드: X")
         # Fallback: 기본 프롬프트 반환
         return f"""STAGE 2 — STRICT OUTFIT REPLACEMENT
 THIS STAGE MUST REMOVE THE ORIGINAL OUTFIT COMPLETELY.
@@ -1384,6 +1393,7 @@ The original clothing MUST NOT appear in the final image.
 4. LENGTH LOGIC: If the dress is short, legs/shoes must be realistic. If long, cover everything underneath."""
     except Exception as e:
         print(f"[V4] ERROR loading prompt file: {e}")
+        print(f"[V4] Stage 2 템플릿 로드: X")
         return xai_prompt
 
 
@@ -1404,9 +1414,16 @@ def load_v4_stage3_prompt() -> str:
     
     try:
         with open(prompt_path, "r", encoding="utf-8") as f:
-            return f.read()
+            content = f.read()
+        
+        # 템플릿 로드 성공 여부 확인
+        template_status = "O" if len(content) > 0 else "X"
+        print(f"[V4] Stage 3 템플릿 로드: {template_status} (길이: {len(content)} 문자)")
+        
+        return content
     except FileNotFoundError:
         print(f"[V4] WARNING: Stage 3 프롬프트 템플릿을 찾을 수 없습니다: {abs_prompt_path}")
+        print(f"[V4] Stage 3 템플릿 로드: X")
         # Fallback: 기본 프롬프트 반환
         return """LIGHTING CORRECTION STAGE — DO NOT CHANGE IDENTITY OR OUTFIT
 
@@ -1426,6 +1443,7 @@ LIGHTING MATCHING REQUIREMENTS:
 - Match color temperature (warm/cool) to environment."""
     except Exception as e:
         print(f"[V4] ERROR: Stage 3 프롬프트 로드 실패: {e}")
+        print(f"[V4] Stage 3 템플릿 로드: X")
         return "Adjust lighting to match background. Keep face and outfit unchanged."
 
 
@@ -1453,6 +1471,10 @@ def load_v4_unified_prompt(xai_prompt: str) -> str:
         + "\n"
         + stage3_prompt
     )
+    
+    # 통합 프롬프트 생성 성공 여부 확인
+    unified_status = "O" if len(stage2_prompt) > 0 and len(stage3_prompt) > 0 else "X"
+    print(f"[V4] 통합 프롬프트 생성: {unified_status} (총 길이: {len(unified_prompt)} 문자)")
     
     return unified_prompt
 
