@@ -1217,9 +1217,13 @@ def load_v3_stage2_prompt(xai_prompt: str) -> str:
     """
     V3 Stage 2 프롬프트 템플릿 로드 + X.AI 프롬프트 결합 + 강력한 최종 제약사항 추가
     """
-    prompt_path = os.path.join(
-        os.path.dirname(__file__), "..", "prompts", "v3", "prompt_stage2_outfit.txt"
-    )
+    # 프로젝트 루트 기준 절대 경로 사용 (Docker WORKDIR /app 기준)
+    prompt_path = os.path.join(os.getcwd(), "prompts", "v3", "prompt_stage2_outfit.txt")
+    abs_prompt_path = os.path.abspath(prompt_path)
+    
+    # 디버깅: 경로 정보 출력
+    print(f"[V3] Stage 2 프롬프트 경로: {abs_prompt_path}")
+    print(f"[V3] 파일 존재 여부: {os.path.exists(abs_prompt_path)}")
 
     try:
         with open(prompt_path, "r", encoding="utf-8") as f:
@@ -1240,7 +1244,7 @@ def load_v3_stage2_prompt(xai_prompt: str) -> str:
 
         return combined
     except FileNotFoundError:
-        print(f"[V3] WARNING: Stage 2 프롬프트 템플릿을 찾을 수 없습니다: {prompt_path}")
+        print(f"[V3] WARNING: Stage 2 프롬프트 템플릿을 찾을 수 없습니다: {abs_prompt_path}")
         # Fallback: 기본 프롬프트 반환
         return f"""STAGE 2 — STRICT OUTFIT REPLACEMENT
 THIS STAGE MUST REMOVE THE ORIGINAL OUTFIT COMPLETELY.
@@ -1280,13 +1284,19 @@ def load_v3_stage3_prompt() -> str:
     Returns:
         str: Stage 3 프롬프트
     """
-    prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "v3", "prompt_stage3_background_lighting.txt")
+    # 프로젝트 루트 기준 절대 경로 사용 (Docker WORKDIR /app 기준)
+    prompt_path = os.path.join(os.getcwd(), "prompts", "v3", "prompt_stage3_background_lighting.txt")
+    abs_prompt_path = os.path.abspath(prompt_path)
+    
+    # 디버깅: 경로 정보 출력
+    print(f"[V3] Stage 3 프롬프트 경로: {abs_prompt_path}")
+    print(f"[V3] 파일 존재 여부: {os.path.exists(abs_prompt_path)}")
     
     try:
         with open(prompt_path, "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        print(f"[V3] WARNING: Stage 3 프롬프트 템플릿을 찾을 수 없습니다: {prompt_path}")
+        print(f"[V3] WARNING: Stage 3 프롬프트 템플릿을 찾을 수 없습니다: {abs_prompt_path}")
         # Fallback: 기본 프롬프트 반환
         return """LIGHTING CORRECTION STAGE — DO NOT CHANGE IDENTITY OR OUTFIT
 
@@ -1317,9 +1327,13 @@ def load_v4_stage2_prompt(xai_prompt: str) -> str:
     """
     V4 Stage 2 프롬프트 템플릿 로드 + X.AI 프롬프트 결합 + 강력한 최종 제약사항 추가
     """
-    prompt_path = os.path.join(
-        os.path.dirname(__file__), "..", "prompts", "v4", "prompt_stage2_outfit.txt"
-    )
+    # 프로젝트 루트 기준 절대 경로 사용 (Docker WORKDIR /app 기준)
+    prompt_path = os.path.join(os.getcwd(), "prompts", "v4", "prompt_stage2_outfit.txt")
+    abs_prompt_path = os.path.abspath(prompt_path)
+    
+    # 디버깅: 경로 정보 출력
+    print(f"[V4] Stage 2 프롬프트 경로: {abs_prompt_path}")
+    print(f"[V4] 파일 존재 여부: {os.path.exists(abs_prompt_path)}")
 
     try:
         with open(prompt_path, "r", encoding="utf-8") as f:
@@ -1340,7 +1354,7 @@ def load_v4_stage2_prompt(xai_prompt: str) -> str:
 
         return combined
     except FileNotFoundError:
-        print(f"[V4] WARNING: Stage 2 프롬프트 템플릿을 찾을 수 없습니다: {prompt_path}")
+        print(f"[V4] WARNING: Stage 2 프롬프트 템플릿을 찾을 수 없습니다: {abs_prompt_path}")
         # Fallback: 기본 프롬프트 반환
         return f"""STAGE 2 — STRICT OUTFIT REPLACEMENT
 THIS STAGE MUST REMOVE THE ORIGINAL OUTFIT COMPLETELY.
@@ -1380,13 +1394,19 @@ def load_v4_stage3_prompt() -> str:
     Returns:
         str: Stage 3 프롬프트
     """
-    prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "v4", "prompt_stage3_background_lighting.txt")
+    # 프로젝트 루트 기준 절대 경로 사용 (Docker WORKDIR /app 기준)
+    prompt_path = os.path.join(os.getcwd(), "prompts", "v4", "prompt_stage3_background_lighting.txt")
+    abs_prompt_path = os.path.abspath(prompt_path)
+    
+    # 디버깅: 경로 정보 출력
+    print(f"[V4] Stage 3 프롬프트 경로: {abs_prompt_path}")
+    print(f"[V4] 파일 존재 여부: {os.path.exists(abs_prompt_path)}")
     
     try:
         with open(prompt_path, "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        print(f"[V4] WARNING: Stage 3 프롬프트 템플릿을 찾을 수 없습니다: {prompt_path}")
+        print(f"[V4] WARNING: Stage 3 프롬프트 템플릿을 찾을 수 없습니다: {abs_prompt_path}")
         # Fallback: 기본 프롬프트 반환
         return """LIGHTING CORRECTION STAGE — DO NOT CHANGE IDENTITY OR OUTFIT
 
