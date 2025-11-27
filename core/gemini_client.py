@@ -175,6 +175,7 @@ class GeminiClientPool:
         
         last_error = None
         tried_keys = set()
+        consecutive_503_count = 0  # 503 에러 연속 발생 횟수 추적
         
         for attempt in range(max_retries):
             # 시작 키부터 순차적으로 시도
@@ -197,12 +198,37 @@ class GeminiClientPool:
                     contents=contents
                 )
                 print(f"[GeminiClientPool] API 호출 성공 (키 인덱스: {key_index})")
+                consecutive_503_count = 0  # 성공 시 카운터 리셋
                 return response
                 
             except Exception as e:
                 last_error = e
-                error_msg = str(e)
-                print(f"[GeminiClientPool] API 키 {attempt + 1}/{max_retries} 실패: {error_msg[:100]}")
+                error_msg = str(e).lower()
+                print(f"[GeminiClientPool] API 키 {attempt + 1}/{max_retries} 실패: {str(e)[:100]}")
+                
+                # 503 에러 또는 overloaded 메시지 체크
+                is_503_error = "503" in str(e) or "overloaded" in error_msg
+                
+                if is_503_error:
+                    consecutive_503_count += 1
+                    print(f"[Warning] 503 Overloaded. API Key {key_index} Failed. Retrying with next key...")
+                    
+                    # 503 에러가 연속으로 5번 발생하면 포기
+                    if consecutive_503_count >= 5:
+                        print(f"[Warning] 503 Overloaded occurred 5 times consecutively. Giving up.")
+                        raise last_error
+                    
+                    await asyncio.sleep(2)
+                    # 마지막 시도가 아니면 다음 키로 재시도
+                    if attempt < max_retries - 1:
+                        continue
+                    else:
+                        # 모든 시도 실패
+                        print(f"[GeminiClientPool] 모든 API 키 시도 실패")
+                        raise last_error
+                else:
+                    # 503이 아닌 다른 에러면 카운터 리셋
+                    consecutive_503_count = 0
                 
                 # 재시도 불가능한 에러면 즉시 종료
                 if not self._is_retryable_error(e):
