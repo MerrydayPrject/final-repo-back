@@ -4,42 +4,51 @@ const itemsPerPage = 10;
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', async () => {
-    // admin_login.js가 로드될 때까지 대기
-    let retryCount = 0;
-    const maxRetries = 10;
-    
-    while (!window.getAuthHeaders && retryCount < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        retryCount++;
-    }
-    
     // 토큰 확인
     const token = localStorage.getItem('admin_access_token');
     if (!token) {
-        alert('로그인이 필요합니다. 로그인 페이지로 이동합니다.');
+        // 토큰이 없으면 조용히 로그인 페이지로 이동
         window.location.href = '/';
         return;
     }
-    
+
     // 토큰 검증
     try {
-        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        // 직접 토큰을 사용하여 검증
         const response = await fetch('/api/auth/verify', {
-            headers: headers
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            }
         });
-        const data = await response.json();
+
+        // 응답이 JSON인지 확인
+        let data;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            // JSON이 아닌 경우 텍스트로 읽기
+            const text = await response.text();
+            console.error('토큰 검증 응답이 JSON이 아닙니다:', text);
+            window.location.href = '/';
+            return;
+        }
+
         if (!response.ok || !data.success) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 토큰이 유효하지 않으면 조용히 로그인 페이지로 이동
+            console.log('토큰 검증 실패:', data.message || data.error);
             window.location.href = '/';
             return;
         }
     } catch (error) {
         console.error('토큰 검증 오류:', error);
-        alert('인증 확인 중 오류가 발생했습니다. 로그인 페이지로 이동합니다.');
+        // 네트워크 오류 등으로 검증 실패 시 조용히 로그인 페이지로 이동
         window.location.href = '/';
         return;
     }
-    
+
     loadDresses(currentPage);
     setupEventListeners();
 });
@@ -163,14 +172,14 @@ async function loadDresses(page) {
         const response = await fetch(`/api/admin/dresses?page=${page}&limit=${itemsPerPage}`, {
             headers: headers
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
-        
+
         const data = await response.json();
 
         if (data.success) {
@@ -213,16 +222,16 @@ function renderDresses(dresses) {
                 <td class="image-name-cell">${escapeHtml(dress.image_name)}</td>
                 <td><span class="style-badge ${styleClass}">${escapeHtml(dress.style)}</span></td>
                 <td class="image-preview-cell">
-                    ${imageUrl 
-                        ? `<img 
+                    ${imageUrl
+                ? `<img 
                             src="${imageUrl}" 
                             alt="${escapeHtml(dress.image_name)}"
                             class="image-preview"
                             onerror="console.error('이미지 로드 실패:', '${imageUrl}', event); this.onerror=null; this.parentElement.innerHTML='<div class=\\'image-preview error\\' title=\\'${imageUrl}\\'>이미지 없음</div>';"
                             loading="lazy"
                         >`
-                        : '<div class="image-preview error">S3 URL 없음</div>'
-                    }
+                : '<div class="image-preview error">S3 URL 없음</div>'
+            }
                 </td>
                 <td class="action-cell">
                     <button 
@@ -289,10 +298,10 @@ async function handleAddDress() {
                 style: style
             })
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
@@ -375,10 +384,10 @@ async function handleDeleteDress(dressId, imageName) {
             method: 'DELETE',
             headers: headers
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
@@ -405,7 +414,7 @@ async function handleImportData(e) {
     if (!file) {
         return;
     }
-    
+
     // 파일 형식 확인
     const fileName = file.name.toLowerCase();
     if (!fileName.endsWith('.json') && !fileName.endsWith('.csv')) {
@@ -413,15 +422,15 @@ async function handleImportData(e) {
         e.target.value = '';
         return;
     }
-    
+
     if (!confirm(`파일 "${file.name}"을(를) 가져오시겠습니까?\n\n중복된 항목은 자동으로 건너뜁니다.`)) {
         e.target.value = '';
         return;
     }
-    
+
     const formData = new FormData();
     formData.append('file', file);
-    
+
     try {
         // FormData를 사용하는 경우 Authorization 헤더만 추가 (Content-Type은 브라우저가 자동 설정)
         const token = localStorage.getItem('admin_access_token');
@@ -429,46 +438,46 @@ async function handleImportData(e) {
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }
-        
+
         const response = await fetch('/api/admin/dresses/import', {
             method: 'POST',
             headers: headers,
             body: formData
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             const summary = data.summary;
             const failedResults = data.results.filter(r => !r.success);
-            
+
             let message = `✅ 가져오기 완료\n\n`;
             message += `총: ${summary.total}개\n`;
             message += `성공: ${summary.success}개\n`;
             message += `실패: ${summary.failed}개`;
-            
+
             if (failedResults.length > 0) {
                 const errorMessages = failedResults.slice(0, 5).map(r => {
                     const dressName = r.row.dress_name || r.row.dressName || '알 수 없음';
                     return `• ${dressName}: ${r.error || '가져오기 실패'}`;
                 }).join('\n');
-                
+
                 if (failedResults.length > 5) {
                     message += `\n\n실패한 항목 (최대 5개):\n${errorMessages}\n...`;
                 } else {
                     message += `\n\n실패한 항목:\n${errorMessages}`;
                 }
             }
-            
+
             alert(message);
-            
+
             // 목록 새로고침
             setTimeout(() => {
                 currentPage = 1;
@@ -489,49 +498,49 @@ async function handleImportData(e) {
 async function handleExportData() {
     // 형식 선택
     const format = confirm('JSON 형식으로 내보내시겠습니까?\n\n확인: JSON\n취소: CSV') ? 'json' : 'csv';
-    
+
     try {
         const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
         const response = await fetch(`/api/admin/dresses/export?format=${format}`, {
             headers: headers
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
-        
+
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: '내보내기 실패' }));
             alert(`❌ 내보내기 실패\n\n${errorData.message || '데이터 내보내기 중 오류가 발생했습니다.'}`);
             return;
         }
-        
+
         // 파일 다운로드
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        
+
         // Content-Disposition 헤더에서 파일명 추출
         const contentDisposition = response.headers.get('Content-Disposition');
         let filename = `dresses_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${format}`;
-        
+
         if (contentDisposition) {
             const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
             if (filenameMatch && filenameMatch[1]) {
                 filename = filenameMatch[1].replace(/['"]/g, '');
             }
         }
-        
+
         a.download = filename;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
+
         alert(`✅ 내보내기 완료\n\n파일명: ${filename}`);
     } catch (error) {
         console.error('내보내기 오류:', error);
@@ -542,12 +551,12 @@ async function handleExportData() {
 // 페이지네이션 렌더링
 function renderPagination(pagination) {
     const paginationDiv = document.getElementById('pagination');
-    
+
     if (pagination.total_pages === 0) {
         paginationDiv.innerHTML = '';
         return;
     }
-    
+
     // 페이지네이션 버튼 생성 함수
     const createPageButton = (pageNum, text, disabled = false, active = false) => {
         if (disabled) {
@@ -556,39 +565,39 @@ function renderPagination(pagination) {
         const activeClass = active ? ' class="active"' : '';
         return `<button onclick="loadDresses(${pageNum})"${activeClass}>${text}</button>`;
     };
-    
+
     let html = createPageButton(1, '처음', pagination.page === 1);
-    
+
     // 이전 페이지
     if (pagination.page > 1) {
         html += createPageButton(pagination.page - 1, '이전');
     }
-    
+
     // 페이지 번호들
     const startPage = Math.max(1, pagination.page - 2);
     const endPage = Math.min(pagination.total_pages, pagination.page + 2);
-    
+
     if (startPage > 1) {
         html += '<button disabled>...</button>';
     }
-    
+
     for (let i = startPage; i <= endPage; i++) {
         html += createPageButton(i, i.toString(), false, i === pagination.page);
     }
-    
+
     if (endPage < pagination.total_pages) {
         html += '<button disabled>...</button>';
     }
-    
+
     // 다음 페이지
     if (pagination.page < pagination.total_pages) {
         html += createPageButton(pagination.page + 1, '다음');
     }
-    
+
     html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
-    
+
     html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
-    
+
     paginationDiv.innerHTML = html;
 }
 

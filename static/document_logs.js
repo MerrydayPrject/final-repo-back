@@ -5,44 +5,53 @@ let currentSearchModel = null;
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', async () => {
-    // admin_login.js가 로드될 때까지 대기
-    let retryCount = 0;
-    const maxRetries = 10;
-    
-    while (!window.getAuthHeaders && retryCount < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        retryCount++;
-    }
-    
     // 토큰 확인
     const token = localStorage.getItem('admin_access_token');
     if (!token) {
-        alert('로그인이 필요합니다. 로그인 페이지로 이동합니다.');
+        // 토큰이 없으면 조용히 로그인 페이지로 이동
         window.location.href = '/';
         return;
     }
-    
+
     // 토큰 검증
     try {
-        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        // 직접 토큰을 사용하여 검증
         const response = await fetch('/api/auth/verify', {
-            headers: headers
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            }
         });
-        const data = await response.json();
+
+        // 응답이 JSON인지 확인
+        let data;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            // JSON이 아닌 경우 텍스트로 읽기
+            const text = await response.text();
+            console.error('토큰 검증 응답이 JSON이 아닙니다:', text);
+            window.location.href = '/';
+            return;
+        }
+
         if (!response.ok || !data.success) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 토큰이 유효하지 않으면 조용히 로그인 페이지로 이동
+            console.log('토큰 검증 실패:', data.message || data.error);
             window.location.href = '/';
             return;
         }
     } catch (error) {
         console.error('토큰 검증 오류:', error);
-        alert('인증 확인 중 오류가 발생했습니다. 로그인 페이지로 이동합니다.');
+        // 네트워크 오류 등으로 검증 실패 시 조용히 로그인 페이지로 이동
         window.location.href = '/';
         return;
     }
-    
+
     loadLogs(currentPage);
-    
+
     // 검색 입력 필드에 Enter 키 이벤트 추가
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
@@ -61,7 +70,7 @@ async function loadLogs(page, model = null) {
         if (model && model.trim() !== '') {
             url += `&model=${encodeURIComponent(model.trim())}`;
         }
-        
+
         // 토큰 가져오기
         const token = localStorage.getItem('admin_access_token');
         const headers = {
@@ -70,20 +79,20 @@ async function loadLogs(page, model = null) {
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }
-        
+
         const response = await fetch(url, {
             headers: headers
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             renderLogs(data.data);
             renderPagination(data.pagination);
@@ -106,15 +115,15 @@ function handleSearch() {
     const searchInput = document.getElementById('search-input');
     const searchValue = searchInput ? searchInput.value.trim() : '';
     const clearButton = document.getElementById('search-clear-button');
-    
+
     currentSearchModel = searchValue || null;
     currentPage = 1; // 검색 시 첫 페이지로 이동
-    
+
     // 검색어가 있으면 초기화 버튼 표시
     if (clearButton) {
         clearButton.style.display = searchValue ? 'inline-block' : 'none';
     }
-    
+
     loadLogs(currentPage, currentSearchModel);
 }
 
@@ -122,14 +131,14 @@ function handleSearch() {
 function clearSearch() {
     const searchInput = document.getElementById('search-input');
     const clearButton = document.getElementById('search-clear-button');
-    
+
     if (searchInput) {
         searchInput.value = '';
     }
     if (clearButton) {
         clearButton.style.display = 'none';
     }
-    
+
     currentSearchModel = null;
     currentPage = 1;
     loadLogs(currentPage);
@@ -146,47 +155,47 @@ function updateLogsCount(count) {
 // 로그 테이블 렌더링
 function renderLogs(logs) {
     const tbody = document.getElementById('logs-tbody');
-    
+
     if (logs.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="loading">로그가 없습니다.</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = logs.map(log => {
         const model = log.model !== undefined ? log.model : '-';
         const personUrl = log.person_url !== undefined ? log.person_url : '';
         const dressUrl = log.dress_url !== undefined ? log.dress_url : '';
         const resultUrl = log.result_url !== undefined ? log.result_url : '';
         const id = log.id !== undefined ? log.id : '-';
-        
+
         // 이미지 URL 생성
-        const personImageUrl = personUrl 
+        const personImageUrl = personUrl
             ? `/api/admin/s3-image-proxy?url=${encodeURIComponent(personUrl)}`
             : '';
-        const dressImageUrl = dressUrl 
+        const dressImageUrl = dressUrl
             ? `/api/admin/s3-image-proxy?url=${encodeURIComponent(dressUrl)}`
             : '';
-        
+
         // 결과 이미지 URL 생성
-        const resultImageUrl = resultUrl 
+        const resultImageUrl = resultUrl
             ? `/api/admin/s3-image-proxy?url=${encodeURIComponent(resultUrl)}`
             : '';
-        
+
         // 인물사진 셀
-        const personImageCell = personImageUrl 
+        const personImageCell = personImageUrl
             ? `<img src="${personImageUrl}" alt="인물사진" class="table-image" onerror="handleImageError(this)" loading="lazy">`
             : '<span class="no-image">-</span>';
-        
+
         // 의상사진 셀
-        const dressImageCell = dressImageUrl 
+        const dressImageCell = dressImageUrl
             ? `<img src="${dressImageUrl}" alt="의상사진" class="table-image" onerror="handleImageError(this)" loading="lazy">`
             : '<span class="no-image">-</span>';
-        
+
         // 결과 이미지 셀
-        const resultImageCell = resultImageUrl 
+        const resultImageCell = resultImageUrl
             ? `<img src="${resultImageUrl}" alt="결과 이미지" class="table-image" onerror="handleImageError(this)" loading="lazy">`
             : '<span class="no-image">-</span>';
-        
+
         return `
         <tr>
             <td class="model-cell">${escapeHtml(model)}</td>
@@ -212,7 +221,7 @@ function handleModalImageError(img, url) {
     img.style.display = 'none';
     const loading = document.getElementById('image-loading');
     const error = document.getElementById('image-error');
-    
+
     if (loading) loading.style.display = 'none';
     if (error) {
         error.style.display = 'block';
@@ -229,12 +238,12 @@ function handleModalImageError(img, url) {
 // 페이지네이션 렌더링
 function renderPagination(pagination) {
     const paginationDiv = document.getElementById('pagination');
-    
+
     if (pagination.total_pages === 0) {
         paginationDiv.innerHTML = '';
         return;
     }
-    
+
     // 페이지네이션 버튼 생성 함수
     const createPageButton = (pageNum, text, disabled = false, active = false) => {
         if (disabled) {
@@ -243,39 +252,39 @@ function renderPagination(pagination) {
         const activeClass = active ? ' class="active"' : '';
         return `<button onclick="loadLogsWithSearch(${pageNum})"${activeClass}>${text}</button>`;
     };
-    
+
     let html = createPageButton(1, '처음', pagination.page === 1);
-    
+
     // 이전 페이지
     if (pagination.page > 1) {
         html += createPageButton(pagination.page - 1, '이전');
     }
-    
+
     // 페이지 번호들
     const startPage = Math.max(1, pagination.page - 2);
     const endPage = Math.min(pagination.total_pages, pagination.page + 2);
-    
+
     if (startPage > 1) {
         html += '<button disabled>...</button>';
     }
-    
+
     for (let i = startPage; i <= endPage; i++) {
         html += createPageButton(i, i.toString(), false, i === pagination.page);
     }
-    
+
     if (endPage < pagination.total_pages) {
         html += '<button disabled>...</button>';
     }
-    
+
     // 다음 페이지
     if (pagination.page < pagination.total_pages) {
         html += createPageButton(pagination.page + 1, '다음');
     }
-    
+
     html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
-    
+
     html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
-    
+
     paginationDiv.innerHTML = html;
 }
 
@@ -295,20 +304,20 @@ async function showDetail(logId) {
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }
-        
+
         const response = await fetch(`/api/admin/logs/${logId}`, {
             headers: headers
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             renderDetailModal(data.data);
             openModal();
@@ -324,7 +333,7 @@ async function showDetail(logId) {
 // 상세 모달 렌더링
 function renderDetailModal(log) {
     const modalBody = document.getElementById('modal-body');
-    
+
     // result_url이 있으면 이미지 표시, 없으면 메시지 표시
     const resultImageHtml = log.result_url ? `
         <div class="detail-item">
@@ -356,19 +365,19 @@ function renderDetailModal(log) {
             </div>
         </div>
     `;
-    
+
     modalBody.innerHTML = `
         <div class="detail-grid">
             ${resultImageHtml}
         </div>
     `;
-    
+
     // 이미지 로드 상태 확인
     if (log.result_url) {
         setTimeout(() => {
             const img = document.getElementById('result-image');
             const loading = document.getElementById('image-loading');
-            
+
             if (img) {
                 // 이미지가 이미 로드되어 있으면 loading 숨기기
                 if (img.complete && img.naturalHeight !== 0) {

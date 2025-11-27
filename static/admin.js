@@ -8,49 +8,58 @@ let currentReviewsPage = 1;
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', async () => {
-    // admin_login.js가 로드될 때까지 대기
-    let retryCount = 0;
-    const maxRetries = 10;
-    
-    while (!window.getAuthHeaders && retryCount < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        retryCount++;
-    }
-    
     // 토큰 확인
     const token = localStorage.getItem('admin_access_token');
     if (!token) {
-        alert('로그인이 필요합니다. 로그인 페이지로 이동합니다.');
+        // 토큰이 없으면 조용히 로그인 페이지로 이동
         window.location.href = '/';
         return;
     }
-    
+
     // 토큰 검증
     try {
-        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        // 직접 토큰을 사용하여 검증
         const response = await fetch('/api/auth/verify', {
-            headers: headers
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            }
         });
-        const data = await response.json();
+
+        // 응답이 JSON인지 확인
+        let data;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            // JSON이 아닌 경우 텍스트로 읽기
+            const text = await response.text();
+            console.error('토큰 검증 응답이 JSON이 아닙니다:', text);
+            window.location.href = '/';
+            return;
+        }
+
         if (!response.ok || !data.success) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 토큰이 유효하지 않으면 조용히 로그인 페이지로 이동
+            console.log('토큰 검증 실패:', data.message || data.error);
             window.location.href = '/';
             return;
         }
     } catch (error) {
         console.error('토큰 검증 오류:', error);
-        alert('인증 확인 중 오류가 발생했습니다. 로그인 페이지로 이동합니다.');
+        // 네트워크 오류 등으로 검증 실패 시 조용히 로그인 페이지로 이동
         window.location.href = '/';
         return;
     }
-    
+
     loadLogs(currentPage);
-    
+
     // 탭 버튼 이벤트 리스너
     const tabSynthesis = document.getElementById('tabSynthesis');
     const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
     const tabReviews = document.getElementById('tabReviews');
-    
+
     if (tabSynthesis) {
         tabSynthesis.addEventListener('click', () => switchTab('synthesis'));
     }
@@ -60,7 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (tabReviews) {
         tabReviews.addEventListener('click', () => switchTab('reviews'));
     }
-    
+
     // 검색 입력 필드에 Enter 키 이벤트 추가
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
@@ -75,7 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 탭 전환
 function switchTab(tab) {
     currentTab = tab;
-    
+
     const synthesisSection = document.getElementById('synthesis-logs-section');
     const bodySection = document.getElementById('body-logs-section');
     const reviewsSection = document.getElementById('reviews-logs-section');
@@ -85,12 +94,12 @@ function switchTab(tab) {
     const sectionTitle = document.getElementById('section-title');
     const logsCountLabel = document.getElementById('logs-count-label');
     const searchContainer = document.querySelector('.search-container');
-    
+
     // 모든 섹션 숨기기
     if (synthesisSection) synthesisSection.style.display = 'none';
     if (bodySection) bodySection.style.display = 'none';
     if (reviewsSection) reviewsSection.style.display = 'none';
-    
+
     // 모든 탭 버튼 초기화
     if (tabSynthesis) {
         tabSynthesis.classList.remove('active');
@@ -107,7 +116,7 @@ function switchTab(tab) {
         tabReviews.style.background = '#fff';
         tabReviews.style.color = '#333';
     }
-    
+
     if (tab === 'synthesis') {
         if (synthesisSection) synthesisSection.style.display = 'block';
         if (tabSynthesis) {
@@ -152,7 +161,7 @@ async function loadStats() {
             headers: headers
         });
         const data = await response.json();
-        
+
         if (data.success) {
             const stats = data.data;
             document.getElementById('stat-total').textContent = stats.total;
@@ -174,21 +183,21 @@ async function loadLogs(page, model = null) {
         if (model && model.trim() !== '') {
             url += `&model=${encodeURIComponent(model.trim())}`;
         }
-        
+
         const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
         const response = await fetch(url, {
             headers: headers
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             renderLogs(data.data);
             renderPagination(data.pagination);
@@ -211,15 +220,15 @@ function handleSearch() {
     const searchInput = document.getElementById('search-input');
     const searchValue = searchInput ? searchInput.value.trim() : '';
     const clearButton = document.getElementById('search-clear-button');
-    
+
     currentSearchModel = searchValue || null;
     currentPage = 1; // 검색 시 첫 페이지로 이동
-    
+
     // 검색어가 있으면 초기화 버튼 표시
     if (clearButton) {
         clearButton.style.display = searchValue ? 'inline-block' : 'none';
     }
-    
+
     loadLogs(currentPage, currentSearchModel);
 }
 
@@ -227,14 +236,14 @@ function handleSearch() {
 function clearSearch() {
     const searchInput = document.getElementById('search-input');
     const clearButton = document.getElementById('search-clear-button');
-    
+
     if (searchInput) {
         searchInput.value = '';
     }
     if (clearButton) {
         clearButton.style.display = 'none';
     }
-    
+
     currentSearchModel = null;
     currentPage = 1;
     loadLogs(currentPage);
@@ -251,12 +260,12 @@ function updateLogsCount(count) {
 // 로그 테이블 렌더링
 function renderLogs(logs) {
     const tbody = document.getElementById('logs-tbody');
-    
+
     if (logs.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="loading">로그가 없습니다.</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = logs.map(log => {
         // 백엔드에서 반환하는 필드명 그대로 사용
         // 백엔드: idx as id, model, run_time, result_url
@@ -264,7 +273,7 @@ function renderLogs(logs) {
         const model = log.model !== undefined ? log.model : '-';
         const runTime = log.run_time !== undefined ? log.run_time : null;
         const resultUrl = log.result_url !== undefined ? log.result_url : '';
-        
+
         // 처리 시간 포맷팅 (숫자일 경우 소수점 2자리까지)
         let timeDisplay = '-';
         if (runTime !== null && runTime !== undefined) {
@@ -274,7 +283,7 @@ function renderLogs(logs) {
                 timeDisplay = String(runTime);
             }
         }
-        
+
         return `
         <tr>
             <td>${id}</td>
@@ -302,12 +311,12 @@ function renderStatusBadge(success) {
 // 페이지네이션 렌더링
 function renderPagination(pagination) {
     const paginationDiv = document.getElementById('pagination');
-    
+
     if (pagination.total_pages === 0) {
         paginationDiv.innerHTML = '';
         return;
     }
-    
+
     // 페이지네이션 버튼 생성 함수
     const createPageButton = (pageNum, text, disabled = false, active = false) => {
         if (disabled) {
@@ -316,39 +325,39 @@ function renderPagination(pagination) {
         const activeClass = active ? ' class="active"' : '';
         return `<button onclick="loadLogsWithSearch(${pageNum})"${activeClass}>${text}</button>`;
     };
-    
+
     let html = createPageButton(1, '처음', pagination.page === 1);
-    
+
     // 이전 페이지
     if (pagination.page > 1) {
         html += createPageButton(pagination.page - 1, '이전');
     }
-    
+
     // 페이지 번호들
     const startPage = Math.max(1, pagination.page - 2);
     const endPage = Math.min(pagination.total_pages, pagination.page + 2);
-    
+
     if (startPage > 1) {
         html += '<button disabled>...</button>';
     }
-    
+
     for (let i = startPage; i <= endPage; i++) {
         html += createPageButton(i, i.toString(), false, i === pagination.page);
     }
-    
+
     if (endPage < pagination.total_pages) {
         html += '<button disabled>...</button>';
     }
-    
+
     // 다음 페이지
     if (pagination.page < pagination.total_pages) {
         html += createPageButton(pagination.page + 1, '다음');
     }
-    
+
     html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
-    
+
     html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
-    
+
     paginationDiv.innerHTML = html;
 }
 
@@ -364,16 +373,16 @@ async function showDetail(logId) {
         const response = await fetch(`/api/admin/logs/${logId}`, {
             headers: headers
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             renderDetailModal(data.data);
             openModal();
@@ -389,7 +398,7 @@ async function showDetail(logId) {
 // 상세 모달 렌더링
 function renderDetailModal(log) {
     const modalBody = document.getElementById('modal-body');
-    
+
     // result_url이 있으면 이미지 표시, 없으면 메시지 표시
     const resultImageHtml = log.result_url ? `
         <div class="detail-item">
@@ -421,19 +430,19 @@ function renderDetailModal(log) {
             </div>
         </div>
     `;
-    
+
     modalBody.innerHTML = `
         <div class="detail-grid">
             ${resultImageHtml}
         </div>
     `;
-    
+
     // 이미지 로드 상태 확인
     if (log.result_url) {
         setTimeout(() => {
             const img = document.getElementById('result-image');
             const loading = document.getElementById('image-loading');
-            
+
             if (img) {
                 // 이미지가 이미 로드되어 있으면 loading 숨기기
                 if (img.complete && img.naturalHeight !== 0) {
@@ -460,7 +469,7 @@ function handleImageError(img, url) {
     img.style.display = 'none';
     const loading = document.getElementById('image-loading');
     const error = document.getElementById('image-error');
-    
+
     if (loading) loading.style.display = 'none';
     if (error) {
         error.style.display = 'block';
@@ -536,21 +545,21 @@ function showError(message) {
 async function loadBodyLogs(page) {
     try {
         const url = `/api/admin/body-logs?page=${page}&limit=${itemsPerPage}`;
-        
+
         const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
         const response = await fetch(url, {
             headers: headers
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             renderBodyLogs(data.data);
             renderBodyPagination(data.pagination);
@@ -579,14 +588,14 @@ function updateBodyLogsCount(count) {
 // 체형 분석 로그 테이블 렌더링
 function renderBodyLogs(logs) {
     const tbody = document.getElementById('body-logs-tbody');
-    
+
     if (!tbody) return;
-    
+
     if (logs.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="loading">로그가 없습니다.</td></tr>';
         return;
     }
-    
+
     // 체형 특징을 부드러운 표현으로 변환하는 함수
     const softFeatureMap = {
         '키가 작은 체형': '키가 작으신 체형',
@@ -599,14 +608,14 @@ function renderBodyLogs(logs) {
         '팔 라인이 신경 쓰이는 체형': '팔라인이 신경쓰이는 체형',
         '복부가 신경 쓰이는 체형': '' // 표시하지 않음
     };
-    
+
     tbody.innerHTML = logs.map(log => {
         const id = log.id !== undefined ? log.id : '-';
         const model = log.model !== undefined ? log.model : '-';
         const height = log.height !== undefined && log.height !== null ? log.height + ' cm' : '-';
         const weight = log.weight !== undefined && log.weight !== null ? log.weight + ' kg' : '-';
         const bmi = log.bmi !== undefined && log.bmi !== null ? log.bmi.toFixed(1) : '-';
-        
+
         // 체형 특징 파싱 및 변환
         let features = [];
         if (log.characteristic) {
@@ -623,15 +632,15 @@ function renderBodyLogs(logs) {
                 features = [log.characteristic];
             }
         }
-        
+
         // 부드러운 표현으로 변환
         const softFeatures = features.map(feature => {
             return softFeatureMap[feature] !== undefined ? softFeatureMap[feature] : feature;
         }).filter(f => f !== ''); // 빈 문자열 제거
-        
+
         const featuresDisplay = softFeatures.length > 0 ? softFeatures.join(', ') : '-';
         const processingTime = log.processing_time || '-';
-        
+
         return `
         <tr>
             <td>${id}</td>
@@ -654,14 +663,14 @@ function renderBodyLogs(logs) {
 // 체형 분석 로그 페이지네이션 렌더링
 function renderBodyPagination(pagination) {
     const paginationDiv = document.getElementById('body-pagination');
-    
+
     if (!paginationDiv) return;
-    
+
     if (pagination.total_pages === 0) {
         paginationDiv.innerHTML = '';
         return;
     }
-    
+
     const createPageButton = (pageNum, text, disabled = false, active = false) => {
         if (disabled) {
             return `<button disabled>${text}</button>`;
@@ -669,36 +678,36 @@ function renderBodyPagination(pagination) {
         const activeClass = active ? ' class="active"' : '';
         return `<button onclick="loadBodyLogs(${pageNum})"${activeClass}>${text}</button>`;
     };
-    
+
     let html = createPageButton(1, '처음', pagination.page === 1);
-    
+
     if (pagination.page > 1) {
         html += createPageButton(pagination.page - 1, '이전');
     }
-    
+
     const startPage = Math.max(1, pagination.page - 2);
     const endPage = Math.min(pagination.total_pages, pagination.page + 2);
-    
+
     if (startPage > 1) {
         html += '<button disabled>...</button>';
     }
-    
+
     for (let i = startPage; i <= endPage; i++) {
         html += createPageButton(i, i.toString(), false, i === pagination.page);
     }
-    
+
     if (endPage < pagination.total_pages) {
         html += '<button disabled>...</button>';
     }
-    
+
     if (pagination.page < pagination.total_pages) {
         html += createPageButton(pagination.page + 1, '다음');
     }
-    
+
     html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
-    
+
     html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
-    
+
     paginationDiv.innerHTML = html;
 }
 
@@ -709,16 +718,16 @@ async function showBodyDetail(logId) {
         const response = await fetch(`/api/admin/body-logs/${logId}`, {
             headers: headers
         });
-        
+
         // 401 오류 처리
         if (response.status === 401) {
-            alert('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+            // 인증 오류 시 조용히 로그인 페이지로 이동
             window.location.href = '/';
             return;
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             renderBodyDetailModal(data.data);
             openModal();
@@ -734,13 +743,13 @@ async function showBodyDetail(logId) {
 // 체형 분석 상세 모달 렌더링
 function renderBodyDetailModal(log) {
     const modalBody = document.getElementById('modal-body');
-    
+
     if (!modalBody) return;
-    
+
     const height = log.height !== undefined && log.height !== null ? log.height + ' cm' : '-';
     const weight = log.weight !== undefined && log.weight !== null ? log.weight + ' kg' : '-';
     const bmi = log.bmi !== undefined && log.bmi !== null ? log.bmi.toFixed(1) : '-';
-    
+
     // characteristic은 쉼표로 구분된 문자열이거나 JSON 문자열일 수 있음
     let features = [];
     if (log.characteristic) {
@@ -757,7 +766,7 @@ function renderBodyDetailModal(log) {
             features = [log.characteristic];
         }
     }
-    
+
     // 체형 특징을 부드러운 표현으로 변환
     const softFeatureMap = {
         '키가 작은 체형': '키가 작으신 체형',
@@ -770,21 +779,21 @@ function renderBodyDetailModal(log) {
         '팔 라인이 신경 쓰이는 체형': '팔라인이 신경쓰이는 체형',
         '복부가 신경 쓰이는 체형': '' // 표시하지 않음
     };
-    
+
     // 부드러운 표현으로 변환
     features = features.map(feature => {
         return softFeatureMap[feature] !== undefined ? softFeatureMap[feature] : feature;
     }).filter(f => f !== ''); // 빈 문자열 제거
-    
+
     const detailedAnalysis = log.analysis_results || '-';
-    const runTime = log.run_time !== undefined && log.run_time !== null 
-        ? (typeof log.run_time === 'number' ? log.run_time.toFixed(2) + '초' : log.run_time) 
+    const runTime = log.run_time !== undefined && log.run_time !== null
+        ? (typeof log.run_time === 'number' ? log.run_time.toFixed(2) + '초' : log.run_time)
         : '-';
     const createdAt = log.created_at ? formatDateTime(log.created_at) : '-';
-    const processingTime = createdAt !== '-' && runTime !== '-' 
-        ? `${createdAt} (${runTime})` 
+    const processingTime = createdAt !== '-' && runTime !== '-'
+        ? `${createdAt} (${runTime})`
         : createdAt !== '-' ? createdAt : runTime;
-    
+
     const imageHtml = log.image_url ? `
         <div class="detail-item">
             <div class="detail-label">업로드 이미지</div>
@@ -803,7 +812,7 @@ function renderBodyDetailModal(log) {
             </div>
         </div>
     ` : '';
-    
+
     modalBody.innerHTML = `
         <div class="detail-grid">
             <div class="detail-item">
@@ -837,12 +846,12 @@ function renderBodyDetailModal(log) {
             ${imageHtml}
         </div>
     `;
-    
+
     if (log.image_url) {
         setTimeout(() => {
             const img = modalBody.querySelector('img');
             const loading = modalBody.querySelector('#image-loading');
-            
+
             if (img) {
                 if (img.complete && img.naturalHeight !== 0) {
                     if (loading) loading.style.display = 'none';
@@ -857,10 +866,10 @@ function renderBodyDetailModal(log) {
 async function loadReviews(page) {
     try {
         const url = `/api/reviews?limit=${itemsPerPage}&offset=${(page - 1) * itemsPerPage}`;
-        
+
         const response = await fetch(url);
         const data = await response.json();
-        
+
         if (data.success) {
             renderReviews(data.reviews);
             renderReviewsPagination(data.total, page);
@@ -889,28 +898,28 @@ function updateReviewsCount(count) {
 // 리뷰 로그 테이블 렌더링
 function renderReviews(reviews) {
     const tbody = document.getElementById('reviews-logs-tbody');
-    
+
     if (!tbody) return;
-    
+
     if (reviews.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="loading">리뷰가 없습니다.</td></tr>';
         return;
     }
-    
+
     // 카테고리 한글 변환
     const categoryMap = {
         'general': '일반피팅',
         'custom': '커스텀피팅',
         'analysis': '체형분석'
     };
-    
+
     tbody.innerHTML = reviews.map(review => {
         const id = review.idx !== undefined ? review.idx : '-';
         const category = categoryMap[review.category] || review.category || '-';
         const rating = review.rating !== undefined ? '⭐'.repeat(review.rating) + ` (${review.rating})` : '-';
         const content = review.content ? (review.content.length > 50 ? review.content.substring(0, 50) + '...' : review.content) : '-';
         const createdAt = review.created_at ? formatDateTime(review.created_at) : '-';
-        
+
         return `
         <tr>
             <td>${id}</td>
@@ -926,16 +935,16 @@ function renderReviews(reviews) {
 // 리뷰 로그 페이지네이션 렌더링
 function renderReviewsPagination(total, currentPage) {
     const paginationDiv = document.getElementById('reviews-pagination');
-    
+
     if (!paginationDiv) return;
-    
+
     const totalPages = Math.ceil(total / itemsPerPage);
-    
+
     if (totalPages === 0) {
         paginationDiv.innerHTML = '';
         return;
     }
-    
+
     const createPageButton = (pageNum, text, disabled = false, active = false) => {
         if (disabled) {
             return `<button disabled>${text}</button>`;
@@ -943,36 +952,36 @@ function renderReviewsPagination(total, currentPage) {
         const activeClass = active ? ' class="active"' : '';
         return `<button onclick="loadReviews(${pageNum})"${activeClass}>${text}</button>`;
     };
-    
+
     let html = createPageButton(1, '처음', currentPage === 1);
-    
+
     if (currentPage > 1) {
         html += createPageButton(currentPage - 1, '이전');
     }
-    
+
     const startPage = Math.max(1, currentPage - 2);
     const endPage = Math.min(totalPages, currentPage + 2);
-    
+
     if (startPage > 1) {
         html += '<button disabled>...</button>';
     }
-    
+
     for (let i = startPage; i <= endPage; i++) {
         html += createPageButton(i, i.toString(), false, i === currentPage);
     }
-    
+
     if (endPage < totalPages) {
         html += '<button disabled>...</button>';
     }
-    
+
     if (currentPage < totalPages) {
         html += createPageButton(currentPage + 1, '다음');
     }
-    
+
     html += createPageButton(totalPages, '마지막', currentPage === totalPages);
-    
+
     html += `<span class="pagination-info">총 ${total}개 항목 (${currentPage}/${totalPages} 페이지)</span>`;
-    
+
     paginationDiv.innerHTML = html;
 }
 
