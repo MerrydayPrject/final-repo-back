@@ -7,14 +7,14 @@ function cleanUrl() {
     const url = new URL(window.location.href);
     const sensitiveParams = ['email', 'password', 'token', 'access_token'];
     let hasChanges = false;
-    
+
     sensitiveParams.forEach(param => {
         if (url.searchParams.has(param)) {
             url.searchParams.delete(param);
             hasChanges = true;
         }
     });
-    
+
     if (hasChanges) {
         // URL에서 쿼리 파라미터 제거 (히스토리 변경 없이)
         window.history.replaceState({}, document.title, url.pathname);
@@ -26,10 +26,10 @@ async function checkServerRestart() {
     try {
         const response = await fetch('/health');
         const data = await response.json();
-        
+
         const currentSessionId = data.server_session_id;
         const savedSessionId = localStorage.getItem('server_session_id');
-        
+
         // 서버 세션 ID가 다르면 서버가 재시작된 것
         if (savedSessionId && savedSessionId !== currentSessionId) {
             // 서버가 재시작되었으므로 토큰 삭제
@@ -37,10 +37,10 @@ async function checkServerRestart() {
             accessToken = null;
             console.log('서버가 재시작되어 로그인 상태가 초기화되었습니다.');
         }
-        
+
         // 현재 서버 세션 ID 저장
         localStorage.setItem('server_session_id', currentSessionId);
-        
+
         return true;
     } catch (error) {
         console.error('서버 상태 확인 오류:', error);
@@ -49,39 +49,41 @@ async function checkServerRestart() {
 }
 
 // 페이지 로드 시 저장된 토큰 확인
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', async function () {
     // URL에서 민감한 정보 제거
     cleanUrl();
-    
+
     // 서버 재시작 확인 (비동기)
     await checkServerRestart();
-    
+
     // 서버에서 전달된 인증 상태 확인 (인라인 스크립트에서 설정됨)
     const isAuthenticated = window.isAuthenticated || false;
     const userEmail = window.userEmail || null;
-    
+
     // localStorage에서 토큰 확인
     const savedToken = localStorage.getItem('admin_access_token');
-    
+    const loginContainer = document.getElementById('login-container');
+    const adminContainer = document.getElementById('admin-container');
+
     if (savedToken) {
         accessToken = savedToken;
+        // 토큰이 있으면 초기에 로그인 폼을 숨기고 관리자 메뉴를 표시 (토큰 검증 중)
+        // 토큰 검증이 실패하면 verifyToken 내부에서 로그인 폼을 다시 표시함
+        if (loginContainer) loginContainer.style.display = 'none';
+        if (adminContainer) adminContainer.style.display = 'block';
         // 토큰 검증 (비동기로 처리되므로 UI 업데이트는 verifyToken 내부에서)
         verifyToken(savedToken);
     } else if (isAuthenticated) {
         // 서버에서 인증되었다고 했지만 토큰이 없는 경우 (이상한 상황)
         // 로그인 폼 표시
-        const loginContainer = document.getElementById('login-container');
-        const adminContainer = document.getElementById('admin-container');
         if (loginContainer) loginContainer.style.display = 'block';
         if (adminContainer) adminContainer.style.display = 'none';
     } else {
         // 인증되지 않음 - 로그인 폼 표시
-        const loginContainer = document.getElementById('login-container');
-        const adminContainer = document.getElementById('admin-container');
         if (loginContainer) loginContainer.style.display = 'block';
         if (adminContainer) adminContainer.style.display = 'none';
     }
-    
+
     // 로그인 폼 이벤트 리스너
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
@@ -90,7 +92,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         loginForm.setAttribute('method', 'post');
         loginForm.addEventListener('submit', handleLogin);
     }
-    
+
     // 로그아웃 버튼 이벤트 리스너
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) {
@@ -101,24 +103,24 @@ document.addEventListener('DOMContentLoaded', async function() {
 // 로그인 처리
 async function handleLogin(event) {
     event.preventDefault();
-    
+
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
     const errorDiv = document.getElementById('login-error');
-    
+
     // 에러 메시지 초기화
     errorDiv.style.display = 'none';
     errorDiv.textContent = '';
-    
+
     // 로그인 버튼 비활성화
     const loginForm = event.target;
-    const loginButton = loginForm.querySelector('button[type="submit"]') || 
-                       document.querySelector('#login-form button[type="submit"]');
+    const loginButton = loginForm.querySelector('button[type="submit"]') ||
+        document.querySelector('#login-form button[type="submit"]');
     if (loginButton) {
         loginButton.disabled = true;
         loginButton.textContent = '로그인 중...';
     }
-    
+
     try {
         const response = await fetch('/api/auth/login', {
             method: 'POST',
@@ -130,14 +132,14 @@ async function handleLogin(event) {
                 password: password
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok && data.success && data.data && data.data.access_token) {
             // 토큰 저장
             accessToken = data.data.access_token;
             localStorage.setItem('admin_access_token', accessToken);
-            
+
             // URL 정리 후 페이지 새로고침
             cleanUrl();
             window.location.href = '/';
@@ -146,7 +148,7 @@ async function handleLogin(event) {
             const errorMessage = data.message || data.error || '로그인에 실패했습니다.';
             errorDiv.textContent = errorMessage;
             errorDiv.style.display = 'block';
-            
+
             // 로그인 버튼 다시 활성화
             if (loginButton) {
                 loginButton.disabled = false;
@@ -157,7 +159,7 @@ async function handleLogin(event) {
         console.error('로그인 오류:', error);
         errorDiv.textContent = '로그인 중 오류가 발생했습니다. 네트워크 연결을 확인해주세요.';
         errorDiv.style.display = 'block';
-        
+
         // 로그인 버튼 다시 활성화
         if (loginButton) {
             loginButton.disabled = false;
@@ -188,7 +190,7 @@ async function handleLogout() {
         // 로컬 스토리지에서 토큰 제거
         localStorage.removeItem('admin_access_token');
         accessToken = null;
-        
+
         // 페이지 새로고침하여 로그인 폼 표시
         window.location.href = '/';
     }
@@ -204,15 +206,15 @@ async function verifyToken(token) {
                 'Content-Type': 'application/json',
             }
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok && data.success && data.data) {
             // 토큰이 유효함 - 관리자 메뉴 표시
             const loginContainer = document.getElementById('login-container');
             const adminContainer = document.getElementById('admin-container');
             const userEmailSpan = document.getElementById('user-email');
-            
+
             if (loginContainer) loginContainer.style.display = 'none';
             if (adminContainer) adminContainer.style.display = 'block';
             if (userEmailSpan && data.data.user && data.data.user.email) {

@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>문서용로그</title>
     <link rel="stylesheet" href="/static/document_logs.css">
 </head>
+
 <body>
     <div class="admin-container">
         <!-- 로그 목록 -->
@@ -23,23 +25,19 @@
                 </div>
                 <div class="search-container">
                     <div class="search-box">
-                        <input 
-                            type="text" 
-                            id="search-input" 
-                            class="search-input" 
-                            placeholder="모델명으로 검색..."
-                            autocomplete="off"
-                        >
+                        <input type="text" id="search-input" class="search-input" placeholder="모델명으로 검색..."
+                            autocomplete="off">
                         <button class="search-button" id="search-button" onclick="handleSearch()">
                             🔍 검색
                         </button>
-                        <button class="search-clear-button" id="search-clear-button" onclick="clearSearch()" style="display: none;">
+                        <button class="search-clear-button" id="search-clear-button" onclick="clearSearch()"
+                            style="display: none;">
                             ✕ 초기화
                         </button>
                     </div>
                 </div>
             </div>
-            
+
             <!-- 로그 목록 -->
             <div id="logs-section">
                 <div class="table-container">
@@ -81,8 +79,9 @@
         </div>
     </div>
 
+    <script src="/static/common.js"></script>
     <script src="/static/admin_login.js"></script>
     <script src="/static/document_logs.js"></script>
 </body>
-</html>
 
+</html>

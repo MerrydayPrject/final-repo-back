@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>드레스 관리자 페이지</title>
     <link rel="stylesheet" href="/static/dress_manage.css">
 </head>
+
 <body>
     <div class="manage-container">
         <header class="manage-header">
@@ -30,7 +32,7 @@
                     <button id="refresh-btn" class="btn-refresh">🔄 새로고침</button>
                 </div>
             </div>
-            
+
             <div class="table-container">
                 <table class="dresses-table">
                     <thead>
@@ -60,8 +62,9 @@
     <!-- 파일 입력 (숨김) -->
     <input type="file" id="import-file-input" accept=".json,.csv" hidden>
 
+    <script src="/static/common.js"></script>
     <script src="/static/admin_login.js"></script>
     <script src="/static/dress_manage.js"></script>
 </body>
-</html>
 
+</html>
