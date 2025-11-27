@@ -21,73 +21,19 @@ function cleanUrl() {
     }
 }
 
-// 서버 재시작 감지 및 토큰 무효화
+// 서버 재시작 감지 (배포 환경 호환성을 위해 비활성화)
+// 배포 환경에서는 서버 세션 ID가 불안정할 수 있으므로 토큰 검증만으로 판단
 async function checkServerRestart() {
-    try {
-        const response = await fetch('/health');
-        const data = await response.json();
-
-        const currentSessionId = data.server_session_id;
-        const savedSessionId = localStorage.getItem('server_session_id');
-
-        // 서버 세션 ID가 다르면 서버가 재시작된 것
-        // 하지만 토큰이 유효한지 먼저 확인한 후에만 삭제
-        if (savedSessionId && savedSessionId !== currentSessionId) {
-            const token = localStorage.getItem('admin_access_token');
-            if (token) {
-                // 토큰이 있으면 검증 시도
-                try {
-                    const verifyResponse = await fetch('/api/auth/verify', {
-                        method: 'GET',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json',
-                        }
-                    });
-                    const verifyData = await verifyResponse.json();
-
-                    // 토큰이 유효하지 않을 때만 삭제
-                    if (!verifyResponse.ok || !verifyData.success) {
-                        localStorage.removeItem('admin_access_token');
-                        accessToken = null;
-                        console.log('서버가 재시작되어 토큰이 무효화되었습니다.');
-                    } else {
-                        // 토큰이 여전히 유효하면 서버 재시작이 아니거나 토큰이 유효함
-                        console.log('서버 세션 ID가 변경되었지만 토큰은 여전히 유효합니다.');
-                    }
-                } catch (verifyError) {
-                    // 검증 실패 시에만 토큰 삭제
-                    console.error('토큰 검증 오류:', verifyError);
-                    localStorage.removeItem('admin_access_token');
-                    accessToken = null;
-                }
-            }
-        }
-
-        // 현재 서버 세션 ID 저장
-        if (currentSessionId) {
-            localStorage.setItem('server_session_id', currentSessionId);
-        }
-
-        return true;
-    } catch (error) {
-        console.error('서버 상태 확인 오류:', error);
-        // 네트워크 오류 시에는 토큰을 삭제하지 않음
-        return false;
-    }
+    // 서버 세션 ID 체크는 비활성화
+    // 토큰 검증만으로 인증 상태를 판단하도록 변경
+    // 배포 환경에서 로드밸런서나 여러 인스턴스로 인해 세션 ID가 불안정할 수 있음
+    return true;
 }
 
 // 페이지 로드 시 저장된 토큰 확인
 document.addEventListener('DOMContentLoaded', async function () {
     // URL에서 민감한 정보 제거
     cleanUrl();
-
-    // 서버 재시작 확인 (비동기)
-    await checkServerRestart();
-
-    // 서버에서 전달된 인증 상태 확인 (인라인 스크립트에서 설정됨)
-    const isAuthenticated = window.isAuthenticated || false;
-    const userEmail = window.userEmail || null;
 
     // localStorage에서 토큰 확인
     const savedToken = localStorage.getItem('admin_access_token');
@@ -102,13 +48,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (adminContainer) adminContainer.style.display = 'block';
         // 토큰 검증 (비동기로 처리되므로 UI 업데이트는 verifyToken 내부에서)
         verifyToken(savedToken);
-    } else if (isAuthenticated) {
-        // 서버에서 인증되었다고 했지만 토큰이 없는 경우 (이상한 상황)
-        // 로그인 폼 표시
-        if (loginContainer) loginContainer.style.display = 'block';
-        if (adminContainer) adminContainer.style.display = 'none';
     } else {
-        // 인증되지 않음 - 로그인 폼 표시
+        // 토큰이 없으면 로그인 폼 표시
         if (loginContainer) loginContainer.style.display = 'block';
         if (adminContainer) adminContainer.style.display = 'none';
     }

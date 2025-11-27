@@ -682,31 +682,36 @@ document.addEventListener('DOMContentLoaded', async () => {
                 'Content-Type': 'application/json',
             }
         });
-        
+
         // 응답이 JSON인지 확인
         let data;
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
             data = await response.json();
         } else {
-            // JSON이 아닌 경우 텍스트로 읽기
+            // JSON이 아닌 경우 - 서버 오류일 수 있으므로 토큰이 있으면 페이지 계속 로드
             const text = await response.text();
-            console.error('토큰 검증 응답이 JSON이 아닙니다:', text);
-            window.location.href = '/';
+            console.warn('토큰 검증 응답이 JSON이 아닙니다 (페이지 계속 로드):', text);
+            // 토큰이 있으므로 페이지는 계속 로드
+            loadCategoryRules();
             return;
         }
-        
+
         if (!response.ok || !data.success) {
-            // 토큰이 유효하지 않으면 조용히 로그인 페이지로 이동
-            console.log('토큰 검증 실패:', data.message || data.error);
-            window.location.href = '/';
-            return;
+            // 401, 403 오류일 때만 리다이렉트 (명확한 인증 오류)
+            if (response.status === 401 || response.status === 403) {
+                console.log('토큰 검증 실패:', data.message || data.error);
+                window.location.href = '/';
+                return;
+            } else {
+                // 다른 오류(500 등)는 일시적일 수 있으므로 페이지는 계속 로드
+                console.warn('토큰 검증 중 오류 발생 (페이지 계속 로드):', data.message || data.error);
+            }
         }
     } catch (error) {
         console.error('토큰 검증 오류:', error);
-        // 네트워크 오류 등으로 검증 실패 시 조용히 로그인 페이지로 이동
-        window.location.href = '/';
-        return;
+        // 네트워크 오류는 일시적일 수 있으므로 페이지는 계속 로드
+        // 토큰이 있으면 일단 페이지를 표시하고, API 호출 시 다시 검증
     }
 
     loadCategoryRules();
