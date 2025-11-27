@@ -33,9 +33,9 @@ async function checkServerRestart() {
 // 방문자 수 로드
 async function loadVisitorCount() {
     try {
-        // 방문자 수 증가 및 조회
-        const response = await fetch('/visitor/visit', {
-            method: 'POST',
+        // 방문자 수 조회만
+        const response = await fetch('/visitor/today', {
+            method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
             }
@@ -46,7 +46,7 @@ async function loadVisitorCount() {
             const data = await response.json();
             count = data.count || 0;
         } else {
-            // 증가 실패 시 조회만 시도
+            // 조회 실패 시 재시도
             const getResponse = await fetch('/visitor/today', {
                 method: 'GET',
                 headers: {
