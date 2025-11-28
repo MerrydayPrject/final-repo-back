@@ -148,39 +148,13 @@ function drawLandmarks() {
     const scaleX = canvas.width / imageWidth;
     const scaleY = canvas.height / imageHeight;
     
-    // 상체-하체 비율 검증에 사용되는 랜드마크 ID
-    const upper_body_ids = [11, 12]; // 어깨
-    // 하체 랜드마크: 엉덩이(23,24), 무릎(25,26), 발목(27,28), 발뒤꿈치(29,30), 발가락(31,32)
-    const lower_body_ids = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+    // 상체-하체 차이 계산에 사용되는 랜드마크: 왼쪽 어깨(12)와 왼쪽 발목(27)
+    const left_shoulder_landmark = currentLandmarks.find(l => l.id === 12); // 왼쪽 어깨 (파란색)
+    const left_ankle_landmark = currentLandmarks.find(l => l.id === 27); // 왼쪽 발목 (노란색)
     
-    // 실제 계산에 사용되는 좌표 찾기 (상체 중 가장 위쪽, 하체 중 가장 아래쪽)
-    let upper_body_y = null;
-    let lower_body_y = null;
-    let upper_body_landmark = null; // 실제 계산에 사용되는 상체 좌표 (하나)
-    let lower_body_landmark = null; // 실제 계산에 사용되는 하체 좌표 (하나)
-    
-    currentLandmarks.forEach(landmark => {
-        if (landmark.visibility >= 0.3) {
-            const landmark_id = landmark.id;
-            const y = landmark.y;
-            
-            // 상체 랜드마크 중 가장 위쪽(y가 작은 값) 찾기
-            if (upper_body_ids.includes(landmark_id)) {
-                if (upper_body_y === null || y < upper_body_y) {
-                    upper_body_y = y;
-                    upper_body_landmark = landmark;
-                }
-            }
-            
-            // 하체 랜드마크 중 가장 아래쪽(y가 큰 값) 찾기
-            if (lower_body_ids.includes(landmark_id)) {
-                if (lower_body_y === null || y > lower_body_y) {
-                    lower_body_y = y;
-                    lower_body_landmark = landmark;
-                }
-            }
-        }
-    });
+    // 시각화를 위한 변수 (기존 코드 호환성 유지)
+    const upper_body_landmark = left_shoulder_landmark;
+    const lower_body_landmark = left_ankle_landmark;
     
     // 연결선 그리기
     ctx.strokeStyle = '#00ff00';
@@ -244,30 +218,37 @@ function drawLandmarks() {
         }
     });
     
-    // 계산에 사용되는 두 좌표 사이에 수직선 그리기 (y 좌표 차이만 계산하므로)
-    if (upper_body_landmark && lower_body_landmark) {
-        const x1 = upper_body_landmark.x * canvas.width;
-        const y1 = upper_body_landmark.y * canvas.height;
-        const x2 = lower_body_landmark.x * canvas.width;
-        const y2 = lower_body_landmark.y * canvas.height;
+    // 계산에 사용되는 두 좌표 사이에 선 그리기 (거리 공식 사용)
+    if (left_shoulder_landmark && left_ankle_landmark &&
+        left_shoulder_landmark.visibility >= 0.3 && left_ankle_landmark.visibility >= 0.3) {
+        const x1 = left_shoulder_landmark.x * canvas.width;
+        const y1 = left_shoulder_landmark.y * canvas.height;
+        const x2 = left_ankle_landmark.x * canvas.width;
+        const y2 = left_ankle_landmark.y * canvas.height;
         
-        // y 좌표 차이만 계산하므로, 두 x 좌표의 중간값을 사용하여 수직선 그림
-        const midX = (x1 + x2) / 2;
+        // 거리 공식: sqrt((x1-x2)² + (y1-y2)²)
+        const dx = x1 - x2;
+        const dy = y1 - y2;
+        const distance = Math.sqrt(dx * dx + dy * dy);
         
+        // 두 좌표 사이에 선 그리기
         ctx.strokeStyle = '#ff00ff'; // 자홍색
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 5]); // 점선
         ctx.beginPath();
-        ctx.moveTo(midX, y1);
-        ctx.lineTo(midX, y2);
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
         ctx.stroke();
         ctx.setLineDash([]); // 점선 해제
         
-        // y 좌표 차이 표시
-        const ratio = lower_body_y - upper_body_y;
+        // 거리 값 표시 (정규화된 좌표 기준)
+        const normalizedDistance = Math.sqrt(
+            (left_shoulder_landmark.x - left_ankle_landmark.x) ** 2 +
+            (left_shoulder_landmark.y - left_ankle_landmark.y) ** 2
+        );
         ctx.fillStyle = '#ff00ff';
         ctx.font = 'bold 14px Arial';
-        ctx.fillText(`차이: ${ratio.toFixed(3)}`, midX + 10, (y1 + y2) / 2);
+        ctx.fillText(`차이: ${normalizedDistance.toFixed(3)}`, (x1 + x2) / 2 + 10, (y1 + y2) / 2);
     }
 }
 
@@ -309,31 +290,17 @@ async function analyzeLandmarks() {
             landmarkCount.textContent = data.landmarks_count;
             imageSize.textContent = `${imageWidth} × ${imageHeight}`;
             
-            // 상체-하체 차이 계산 (시각화와 동일한 로직 사용)
-            const upperBodyIds = [11, 12]; // 어깨
-            const lowerBodyIds = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32]; // 하체 (엉덩이, 무릎, 발목, 발뒤꿈치, 발가락)
+            // 상체-하체 차이 계산 (거리 공식 사용: 왼쪽 어깨(12)와 왼쪽 발목(27) 사이의 거리)
+            // sqrt((x1-x2)² + (y1-y2)²)
+            const leftShoulder = currentLandmarks.find(l => l.id === 12); // 왼쪽 어깨 (파란색)
+            const leftAnkle = currentLandmarks.find(l => l.id === 27); // 왼쪽 발목 (노란색)
             
-            let upperBodyY = null;
-            let lowerBodyY = null;
-            
-            currentLandmarks.forEach(landmark => {
-                if (landmark.visibility >= 0.3) {
-                    if (upperBodyIds.includes(landmark.id)) {
-                        if (upperBodyY === null || landmark.y < upperBodyY) {
-                            upperBodyY = landmark.y;
-                        }
-                    }
-                    if (lowerBodyIds.includes(landmark.id)) {
-                        if (lowerBodyY === null || landmark.y > lowerBodyY) {
-                            lowerBodyY = landmark.y;
-                        }
-                    }
-                }
-            });
-            
-            if (upperBodyY !== null && lowerBodyY !== null) {
-                const ratio = lowerBodyY - upperBodyY;
-                bodyRatio.textContent = ratio.toFixed(3);
+            if (leftShoulder && leftAnkle && 
+                leftShoulder.visibility >= 0.3 && leftAnkle.visibility >= 0.3) {
+                const dx = leftShoulder.x - leftAnkle.x;
+                const dy = leftShoulder.y - leftAnkle.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                bodyRatio.textContent = distance.toFixed(3);
             } else {
                 bodyRatio.textContent = 'N/A';
             }
