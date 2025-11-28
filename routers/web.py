@@ -150,6 +150,16 @@ async def dress_batch_test_page(request: Request):
     return templates.TemplateResponse("dress-batch-test.html", {"request": request})
 
 
+@router.get("/pose-landmark-visualizer", response_class=HTMLResponse, tags=["Web Interface"])
+async def pose_landmark_visualizer_page(request: Request):
+    """
+    포즈 랜드마크 시각화 페이지
+    
+    이미지를 업로드하면 MediaPipe Pose 랜드마크를 시각화하여 표시하는 페이지
+    """
+    return templates.TemplateResponse("pose_landmark_visualizer.html", {"request": request})
+
+
 @router.get("/favicon.ico")
 async def favicon():
     """파비콘 제공"""

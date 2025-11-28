@@ -97,8 +97,13 @@ async def validate_person(
             # 랜드마크 ID: 23(왼쪽 엉덩이), 24(오른쪽 엉덩이), 25(왼쪽 무릎), 26(오른쪽 무릎), 27(왼쪽 발목), 28(오른쪽 발목)
             # 또는 어깨와 발목의 y 좌표 차이로 전신 여부 판단
             
-            # 하체 랜드마크 ID (엉덩이, 무릎, 발목)
-            lower_body_ids = [23, 24, 25, 26, 27, 28]
+            # 하체 랜드마크 ID (엉덩이, 무릎, 발목, 발뒤꿈치, 발가락)
+            # 23: 왼쪽 엉덩이, 24: 오른쪽 엉덩이
+            # 25: 왼쪽 무릎, 26: 오른쪽 무릎
+            # 27: 왼쪽 발목, 28: 오른쪽 발목
+            # 29: 왼쪽 발뒤꿈치, 30: 오른쪽 발뒤꿈치
+            # 31: 왼쪽 발가락, 32: 오른쪽 발가락
+            lower_body_ids = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
             upper_body_ids = [11, 12]  # 어깨
             
             # 하체 랜드마크가 감지되었는지 확인
@@ -475,5 +480,52 @@ async def get_body_analysis_log_detail(log_id: int):
             "success": False,
             "error": str(e),
             "message": f"로그 상세 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.post("/api/pose-landmarks", tags=["포즈 랜드마크"])
+async def get_pose_landmarks(
+    file: UploadFile = File(..., description="이미지 파일")
+):
+    """
+    이미지에서 포즈 랜드마크 추출 (시각화용)
+    
+    이미지를 업로드하면 포즈 랜드마크 좌표를 반환합니다.
+    기존 랜드마크 추출 방식과 동일하게 body_analysis_service.extract_landmarks()를 사용합니다.
+    """
+    try:
+        # 이미지 읽기
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        # 포즈 랜드마크 추출 (기존과 동일한 방식)
+        body_analysis_service = get_body_analysis_service()
+        if not body_analysis_service or not body_analysis_service.is_initialized:
+            return JSONResponse({
+                "success": False,
+                "error": "Body analysis service not initialized",
+                "message": "체형 분석 서비스가 초기화되지 않았습니다."
+            }, status_code=500)
+        
+        landmarks = body_analysis_service.extract_landmarks(image)
+        
+        # 이미지 크기 정보도 함께 반환
+        return JSONResponse({
+            "success": True,
+            "landmarks": landmarks,
+            "image_width": image.width,
+            "image_height": image.height,
+            "landmarks_count": len(landmarks) if landmarks else 0,
+            "message": "포즈 랜드마크 추출 완료"
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"포즈 랜드마크 추출 오류: {e}")
+        print(traceback.format_exc())
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"포즈 랜드마크 추출 중 오류 발생: {str(e)}"
         }, status_code=500)
 

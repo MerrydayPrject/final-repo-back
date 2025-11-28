@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>포즈 랜드마크 시각화 - Marryday</title>
+    <link rel="stylesheet" href="/static/pose_landmark_visualizer.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="test-header">
+            <div class="header-content">
+                <h1 class="logo-text">Marryday</h1>
+                <div class="header-badge">포즈 랜드마크 시각화</div>
+                <a href="/" class="btn-home">홈으로</a>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="test-container">
+                <div class="title-section">
+                    <h2 class="page-title">포즈 랜드마크 시각화</h2>
+                    <p class="page-description">이미지를 업로드하면 MediaPipe Pose 랜드마크를 시각화하여 표시합니다</p>
+                </div>
+
+                <div class="content-wrapper">
+                    <div class="left-section">
+                        <div class="upload-container">
+                            <div class="upload-header">
+                                <h3>이미지 업로드</h3>
+                                <p>JPG, PNG, JPEG 형식 지원</p>
+                            </div>
+
+                            <div class="upload-area" id="uploadArea">
+                                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                                <div class="upload-content" id="uploadContent">
+                                    <div class="upload-icon">
+                                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="17 8 12 3 7 8"></polyline>
+                                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                                        </svg>
+                                    </div>
+                                    <p class="upload-text">이미지를 드래그하거나 클릭하여 업로드</p>
+                                    <p class="upload-hint">또는 파일 선택</p>
+                                </div>
+                            </div>
+
+                            <div class="upload-actions" id="uploadActions" style="display: none;">
+                                <button id="analyzeButton" class="btn-primary">랜드마크 분석</button>
+                                <button id="clearButton" class="btn-secondary">초기화</button>
+                            </div>
+
+                            <div id="errorMessage" class="error-message" style="display: none;"></div>
+                            <div id="loadingMessage" class="loading-message" style="display: none;">
+                                <div class="spinner"></div>
+                                <span>랜드마크 분석 중...</span>
+                            </div>
+                        </div>
+
+                        <div class="info-panel" id="infoPanel" style="display: none;">
+                            <h3>랜드마크 정보</h3>
+                            <div class="info-item">
+                                <span class="info-label">랜드마크 개수:</span>
+                                <span class="info-value" id="landmarkCount">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">이미지 크기:</span>
+                                <span class="info-value" id="imageSize">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">상체-하체 차이:</span>
+                                <span class="info-value" id="bodyRatio">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="right-section">
+                        <div class="canvas-container">
+                            <canvas id="landmarkCanvas"></canvas>
+                            <div id="noImageMessage" class="no-image-message">
+                                <p>이미지를 업로드해주세요</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/pose_landmark_visualizer.js"></script>
+</body>
+
+</html>
+
