@@ -140,6 +140,16 @@ async def document_logs_page(request: Request):
     return templates.TemplateResponse("document_logs.html", {"request": request})
 
 
+@router.get("/dress-batch-test", response_class=HTMLResponse, tags=["관리자"])
+async def dress_batch_test_page(request: Request):
+    """
+    드레스 판별 테스트 페이지
+    
+    여러 이미지를 배치로 업로드하여 드레스 여부를 판별하는 페이지
+    """
+    return templates.TemplateResponse("dress-batch-test.html", {"request": request})
+
+
 @router.get("/favicon.ico")
 async def favicon():
     """파비콘 제공"""

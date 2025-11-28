@@ -8,9 +8,11 @@ from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, File, UploadFile, Form, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse, Response
+from PIL import Image
 
 from services.database import get_db_connection
 from services.category_service import detect_style_from_filename
+from services.dress_check_service import get_dress_check_service
 from core.s3_client import upload_to_s3, delete_from_s3
 from config.settings import AWS_S3_BUCKET_NAME, AWS_REGION
 
@@ -634,5 +636,145 @@ async def import_dresses(file: UploadFile = File(...)):
             "success": False,
             "error": str(e),
             "message": f"데이터 가져오기 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.post("/api/dress/batch-check", tags=["드레스 관리"])
+async def batch_check_dresses(
+    files: List[UploadFile] = File(...),
+    model: str = Form(...),
+    mode: str = Form(...)
+):
+    """
+    여러 이미지를 배치로 업로드하여 드레스 여부를 판별
+    
+    Args:
+        files: 업로드할 이미지 파일 리스트 (최대 100장)
+        model: 사용할 모델 (gpt-4o-mini 또는 gpt-4o)
+        mode: 모드 (fast 또는 accurate)
+    
+    Returns:
+        {
+            "success": bool,
+            "results": [
+                {
+                    "index": int,
+                    "filename": str,
+                    "dress": bool,
+                    "confidence": float,
+                    "category": str
+                }
+            ]
+        }
+    """
+    try:
+        # 파일 수 제한
+        if len(files) > 100:
+            return JSONResponse({
+                "success": False,
+                "error": "Too many files",
+                "message": "최대 100장까지만 업로드할 수 있습니다."
+            }, status_code=400)
+        
+        # 모델 검증
+        if model not in ["gpt-4o-mini", "gpt-4o"]:
+            return JSONResponse({
+                "success": False,
+                "error": "Invalid model",
+                "message": "모델은 gpt-4o-mini 또는 gpt-4o만 선택할 수 있습니다."
+            }, status_code=400)
+        
+        # 모드 검증
+        if mode not in ["fast", "accurate"]:
+            return JSONResponse({
+                "success": False,
+                "error": "Invalid mode",
+                "message": "모드는 fast 또는 accurate만 선택할 수 있습니다."
+            }, status_code=400)
+        
+        # 드레스 판별 서비스 가져오기
+        try:
+            dress_check_service = get_dress_check_service()
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": "Service initialization failed",
+                "message": f"서비스 초기화 실패: {str(e)}"
+            }, status_code=500)
+        
+        results = []
+        
+        # 각 파일 처리
+        for index, file in enumerate(files):
+            try:
+                # 파일 읽기
+                file_content = await file.read()
+                
+                # 이미지로 변환
+                try:
+                    image = Image.open(io.BytesIO(file_content)).convert("RGB")
+                except Exception as e:
+                    results.append({
+                        "index": index,
+                        "filename": file.filename or f"file_{index}",
+                        "dress": False,
+                        "confidence": 0.0,
+                        "category": f"이미지 로드 실패: {str(e)}"
+                    })
+                    continue
+                
+                # 드레스 판별
+                check_result = dress_check_service.check_dress(
+                    image=image,
+                    model=model,
+                    mode=mode
+                )
+                
+                # 썸네일 생성 (base64)
+                thumbnail = None
+                try:
+                    # 썸네일 크기로 리사이즈
+                    image.thumbnail((200, 200))
+                    import base64
+                    buffered = io.BytesIO()
+                    image.save(buffered, format="PNG")
+                    thumbnail = base64.b64encode(buffered.getvalue()).decode()
+                    thumbnail = f"data:image/png;base64,{thumbnail}"
+                except Exception:
+                    pass  # 썸네일 생성 실패해도 계속 진행
+                
+                results.append({
+                    "index": index,
+                    "filename": file.filename or f"file_{index}",
+                    "dress": check_result["dress"],
+                    "confidence": check_result["confidence"],
+                    "category": check_result["category"],
+                    "thumbnail": thumbnail
+                })
+                
+            except Exception as e:
+                # 개별 파일 처리 실패 시에도 계속 진행
+                results.append({
+                    "index": index,
+                    "filename": file.filename or f"file_{index}",
+                    "dress": False,
+                    "confidence": 0.0,
+                    "category": f"처리 오류: {str(e)}"
+                })
+                continue
+        
+        return JSONResponse({
+            "success": True,
+            "results": results,
+            "message": f"{len(results)}개 이미지 처리 완료"
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"배치 처리 중 오류 발생: {str(e)}"
         }, status_code=500)
 

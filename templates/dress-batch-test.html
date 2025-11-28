@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>드레스 판별 테스트</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            color: #f6f6f6;
+            margin-bottom: 10px;
+        }
+
+        .btn-home {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            display: inline-block;
+        }
+
+        .upload-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .upload-area {
+            border: 2px dashed #666;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .upload-area:hover {
+            border-color: #007bff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .upload-area.dragover {
+            border-color: #007bff;
+            background: rgba(0, 123, 255, 0.1);
+        }
+
+        .thumbnail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+            min-height: 100px;
+            padding: 10px;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .thumbnail-grid.dragover {
+            background: rgba(0, 123, 255, 0.1);
+            border: 2px dashed #007bff;
+        }
+
+        .thumbnail-item {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.05);
+            aspect-ratio: 1;
+        }
+
+        .thumbnail-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .thumbnail-item .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .options-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .option-group label {
+            display: block;
+            color: #f6f6f6;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .option-group select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #666;
+            background: rgba(30, 30, 30, 0.95);
+            color: #f6f6f6;
+            font-size: 14px;
+        }
+
+        .option-group select option {
+            background: rgba(30, 30, 30, 0.95);
+            color: #f6f6f6;
+            padding: 10px;
+        }
+
+        .action-section {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-process {
+            background: #28a745;
+            color: white;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-process:hover:not(:disabled) {
+            background: #218838;
+        }
+
+        .btn-process:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .progress-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .progress-bar-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            height: 30px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            background: #007bff;
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+
+        .results-section {
+            display: none;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .result-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            border: 2px solid transparent;
+        }
+
+        .result-card.dress {
+            border-color: #28a745;
+        }
+
+        .result-card.not-dress {
+            border-color: #dc3545;
+        }
+
+        .result-card img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .result-info {
+            font-size: 14px;
+            color: #f6f6f6;
+        }
+
+        .result-info .status {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .result-info .confidence {
+            color: #ffc107;
+        }
+
+        .filter-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .filter-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            border: 1px solid #666;
+            background: rgba(255, 255, 255, 0.1);
+            color: #f6f6f6;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .filter-btn.active {
+            background: #007bff;
+            border-color: #007bff;
+        }
+
+        .stats-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-item .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .stat-item .label {
+            font-size: 14px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .btn-reset {
+            background: #dc3545;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        .btn-rerun {
+            background: #ffc107;
+            color: #000;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>👗 드레스 판별 테스트</h1>
+                    <p style="color: #999;">여러 이미지를 배치로 업로드하여 드레스 여부를 판별합니다</p>
+                </div>
+                <a href="/" class="btn-home">홈으로</a>
+            </div>
+        </header>
+
+        <main>
+            <!-- 이미지 업로드 섹션 -->
+            <section class="upload-section">
+                <h2>이미지 업로드 (최대 100장, 각 5MB 이하)</h2>
+                <div class="upload-area" id="upload-area">
+                    <p>이미지를 드래그하거나 클릭하여 업로드</p>
+                    <input type="file" id="file-input" multiple accept="image/*" style="display: none;">
+                </div>
+                <div class="thumbnail-grid" id="thumbnail-grid"></div>
+            </section>
+
+            <!-- 옵션 선택 섹션 -->
+            <section class="options-section">
+                <h2>옵션 선택</h2>
+                <div class="options-grid">
+                    <div class="option-group">
+                        <label>모델 선택</label>
+                        <select id="model-select">
+                            <option value="gpt-4o-mini">GPT-4o-mini</option>
+                            <option value="gpt-4o">GPT-4o</option>
+                        </select>
+                    </div>
+                    <div class="option-group">
+                        <label>모드 선택</label>
+                        <select id="mode-select">
+                            <option value="fast">Fast</option>
+                            <option value="accurate">Accurate</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 배치 처리 버튼 -->
+            <section class="action-section">
+                <button class="btn-process" id="process-btn" onclick="processBatch()">배치 처리 시작</button>
+            </section>
+
+            <!-- 진행률 섹션 -->
+            <section class="progress-section" id="progress-section">
+                <h3>처리 진행 중...</h3>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar">0%</div>
+                </div>
+                <p id="progress-text">대기 중...</p>
+            </section>
+
+            <!-- 필터 섹션 -->
+            <section class="filter-section" id="filter-section" style="display: none;">
+                <h2>필터</h2>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterResults('all')">전체</button>
+                    <button class="filter-btn" onclick="filterResults('dress')">드레스만</button>
+                    <button class="filter-btn" onclick="filterResults('not-dress')">일반 옷만</button>
+                    <button class="filter-btn" onclick="filterResults('low-confidence')">낮은 신뢰도</button>
+                </div>
+            </section>
+
+            <!-- 통계 섹션 -->
+            <section class="stats-section" id="stats-section" style="display: none;">
+                <h2>요약 통계</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="value" id="stat-total">0</div>
+                        <div class="label">총 이미지 수</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-dress">0</div>
+                        <div class="label">드레스 판정</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-not-dress">0</div>
+                        <div class="label">일반 옷</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-avg-confidence">0%</div>
+                        <div class="label">평균 신뢰도</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 결과 섹션 -->
+            <section class="results-section" id="results-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>결과</h2>
+                    <div>
+                        <button class="btn-reset" onclick="resetAll()">초기화</button>
+                        <button class="btn-rerun" onclick="rerunProcess()">재실행</button>
+                    </div>
+                </div>
+                <div class="results-grid" id="results-grid"></div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/dress_batch_test.js"></script>
+</body>
+
+</html>
+
