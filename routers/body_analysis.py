@@ -52,13 +52,23 @@ async def pose_landmark_visualizer(
         # 이미지 크기
         image_width, image_height = image.size
         
-        # 상체-하체 차이 계산 (전신 검증용)
+        # 상체-하체 차이 계산 (거리 공식 사용: 왼쪽 어깨(12)와 왼쪽 발목(27) 사이의 거리)
         if len(landmarks) >= 33:
-            # 어깨 y 좌표 (상체)
-            shoulder_y = min(landmarks[11].get("y", 0), landmarks[12].get("y", 0))
-            # 발목 y 좌표 (하체)
-            ankle_y = max(landmarks[27].get("y", 0), landmarks[28].get("y", 0))
-            body_height_diff = abs(ankle_y - shoulder_y)
+            import math
+            # 왼쪽 어깨 (landmark 12) - 파란색
+            left_shoulder = landmarks[12]
+            shoulder_x = left_shoulder.get("x", 0)
+            shoulder_y = left_shoulder.get("y", 0)
+            
+            # 왼쪽 발목 (landmark 27) - 노란색
+            left_ankle = landmarks[27]
+            ankle_x = left_ankle.get("x", 0)
+            ankle_y = left_ankle.get("y", 0)
+            
+            # 거리 공식: sqrt((x1-x2)² + (y1-y2)²)
+            body_height_diff = math.sqrt(
+                (shoulder_x - ankle_x) ** 2 + (shoulder_y - ankle_y) ** 2
+            )
         else:
             body_height_diff = 0
         
