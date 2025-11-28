@@ -46,6 +46,23 @@ async def body_analysis_page(request: Request):
     return templates.TemplateResponse("body_analysis.html", {"request": request})
 
 
+@router.get("/pose-landmark-visualizer", response_class=HTMLResponse, tags=["Web Interface"])
+async def pose_landmark_visualizer_page(request: Request):
+    """
+    포즈 랜드마크 시각화 테스트 페이지
+    
+    이미지를 업로드하면 MediaPipe Pose 랜드마크를 시각화하여 표시합니다.
+    방향 자동 보정 기능이 포함되어 있습니다.
+    """
+    # 템플릿 파일이 없으면 body_analysis.html을 사용하거나 새로 만들어야 함
+    # 일단 body_analysis.html을 사용 (나중에 별도 템플릿 만들 수 있음)
+    try:
+        return templates.TemplateResponse("pose_landmark_visualizer.html", {"request": request})
+    except:
+        # 템플릿이 없으면 body_analysis.html 사용
+        return templates.TemplateResponse("body_analysis.html", {"request": request})
+
+
 @router.get("/body-generation", response_class=HTMLResponse, tags=["Web Interface"])
 async def body_generation_page(request: Request):
     """

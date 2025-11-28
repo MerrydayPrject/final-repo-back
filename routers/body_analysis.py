@@ -16,6 +16,73 @@ from typing import Optional
 router = APIRouter()
 
 
+@router.post("/api/pose-landmark-visualizer", tags=["랜드마크 시각화"])
+async def pose_landmark_visualizer(
+    file: UploadFile = File(..., description="이미지 파일")
+):
+    """
+    포즈 랜드마크 시각화용 API (테스트 페이지용)
+    
+    이미지를 업로드하면 MediaPipe Pose 랜드마크를 추출하고 방향 자동 보정을 적용합니다.
+    """
+    try:
+        # 체형 분석 서비스 확인
+        body_analysis_service = get_body_analysis_service()
+        if not body_analysis_service or not body_analysis_service.is_initialized:
+            return JSONResponse({
+                "success": False,
+                "error": "Body analysis service not initialized",
+                "message": "체형 분석 서비스가 초기화되지 않았습니다."
+            }, status_code=500)
+        
+        # 이미지 읽기
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        # 랜드마크 추출 (시각화용이므로 원본 이미지 방향 그대로 표시)
+        landmarks = body_analysis_service.extract_landmarks(image, auto_correct_orientation=False)
+        
+        if landmarks is None or len(landmarks) == 0:
+            return JSONResponse({
+                "success": False,
+                "error": "No pose detected",
+                "message": "포즈를 감지할 수 없습니다. 전신 사진을 업로드해주세요."
+            }, status_code=400)
+        
+        # 이미지 크기
+        image_width, image_height = image.size
+        
+        # 상체-하체 차이 계산 (전신 검증용)
+        if len(landmarks) >= 33:
+            # 어깨 y 좌표 (상체)
+            shoulder_y = min(landmarks[11].get("y", 0), landmarks[12].get("y", 0))
+            # 발목 y 좌표 (하체)
+            ankle_y = max(landmarks[27].get("y", 0), landmarks[28].get("y", 0))
+            body_height_diff = abs(ankle_y - shoulder_y)
+        else:
+            body_height_diff = 0
+        
+        return JSONResponse({
+            "success": True,
+            "landmarks": landmarks,
+            "landmarks_count": len(landmarks),
+            "image_size": {
+                "width": image_width,
+                "height": image_height
+            },
+            "body_height_diff": float(body_height_diff),
+            "message": "랜드마크 추출 완료"
+        })
+        
+    except Exception as e:
+        print(f"랜드마크 시각화 오류: {traceback.format_exc()}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"랜드마크 추출 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
 @router.post("/api/validate-person", tags=["사람 감지"])
 async def validate_person(
     file: UploadFile = File(..., description="이미지 파일")

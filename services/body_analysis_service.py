@@ -26,12 +26,109 @@ class BodyAnalysisService:
         else:
             print("⚠️  체형 분석 서비스 초기화 실패")
     
-    def extract_landmarks(self, image: Image.Image) -> Optional[List[Dict]]:
+    def _detect_orientation(self, landmarks: List[Dict]) -> Dict[str, float]:
         """
-        이미지에서 포즈 랜드마크 추출
+        랜드마크로부터 이미지 방향 감지
+        
+        Args:
+            landmarks: 랜드마크 좌표 리스트
+            
+        Returns:
+            방향 정보 딕셔너리
+        """
+        if not landmarks or len(landmarks) < 33:
+            return {"is_vertical": True, "rotation_angle": 0.0, "needs_rotation": False}
+        
+        def get_landmark(idx: int) -> Tuple[float, float, float]:
+            landmark = landmarks[idx]
+            return landmark["x"], landmark["y"], landmark["z"]
+        
+        # 어깨 중심
+        left_shoulder = get_landmark(11)
+        right_shoulder = get_landmark(12)
+        shoulder_center_x = (left_shoulder[0] + right_shoulder[0]) / 2
+        shoulder_center_y = (left_shoulder[1] + right_shoulder[1]) / 2
+        
+        # 엉덩이 중심
+        left_hip = get_landmark(23)
+        right_hip = get_landmark(24)
+        hip_center_x = (left_hip[0] + right_hip[0]) / 2
+        hip_center_y = (left_hip[1] + right_hip[1]) / 2
+        
+        # 어깨와 엉덩이 사이의 x, y 차이
+        dx = abs(hip_center_x - shoulder_center_x)
+        dy = abs(hip_center_y - shoulder_center_y)
+        
+        # 정면 사진: 세로 방향 (y 차이가 x 차이보다 훨씬 큼)
+        # 가로로 누운 사진: 가로 방향 (x 차이가 y 차이보다 큼)
+        is_vertical = dy > dx
+        
+        # 회전 각도 계산 (어깨 중심에서 엉덩이 중심으로의 벡터)
+        angle_rad = np.arctan2(hip_center_y - shoulder_center_y, hip_center_x - shoulder_center_x)
+        angle_deg = np.degrees(angle_rad)
+        
+        # 정면 사진이어야 하는데 가로로 누워있는 경우 감지
+        # 정면: 어깨가 위, 엉덩이가 아래 (y 차이가 크고, 어깨 y < 엉덩이 y)
+        # 가로: 어깨와 엉덩이가 좌우로 (x 차이가 크거나, y 차이가 작음)
+        
+        # 정면 사진 기준: 어깨 y < 엉덩이 y (어깨가 위에 있음)
+        shoulder_above_hip = shoulder_center_y < hip_center_y
+        
+        # 가로로 누운지 판단: x 차이가 y 차이보다 크거나, 어깨가 엉덩이보다 아래에 있으면
+        is_horizontal = dx > dy or not shoulder_above_hip
+        
+        # 회전이 필요한지 판단
+        needs_rotation = is_horizontal
+        
+        # 회전 각도 결정 (90도 또는 -90도)
+        rotation_angle = 0.0
+        if needs_rotation:
+            # 어깨가 엉덩이보다 오른쪽에 있으면 -90도, 왼쪽에 있으면 90도
+            if shoulder_center_x > hip_center_x:
+                rotation_angle = -90.0
+            else:
+                rotation_angle = 90.0
+        
+        print(f"[방향 감지] 세로: {is_vertical}, 가로: {is_horizontal}, 회전 필요: {needs_rotation}, 각도: {rotation_angle:.1f}도")
+        print(f"  어깨 중심: ({shoulder_center_x:.3f}, {shoulder_center_y:.3f})")
+        print(f"  엉덩이 중심: ({hip_center_x:.3f}, {hip_center_y:.3f})")
+        print(f"  x 차이: {dx:.3f}, y 차이: {dy:.3f}")
+        
+        return {
+            "is_vertical": is_vertical,
+            "is_horizontal": is_horizontal,
+            "rotation_angle": rotation_angle,
+            "needs_rotation": needs_rotation,
+            "dx": dx,
+            "dy": dy
+        }
+    
+    def _correct_image_orientation(self, image: Image.Image, rotation_angle: float) -> Image.Image:
+        """
+        이미지 회전 보정
         
         Args:
             image: PIL Image 객체
+            rotation_angle: 회전 각도 (도)
+            
+        Returns:
+            보정된 이미지
+        """
+        if abs(rotation_angle) < 0.1:
+            return image
+        
+        print(f"[이미지 보정] {rotation_angle:.1f}도 회전 적용")
+        # PIL Image.rotate는 반시계 방향이 양수
+        corrected_image = image.rotate(-rotation_angle, expand=True, fillcolor='white')
+        return corrected_image
+    
+    def extract_landmarks(self, image: Image.Image, auto_correct_orientation: bool = False) -> Optional[List[Dict]]:
+        """
+        이미지에서 포즈 랜드마크 추출 (방향 자동 보정 포함)
+        
+        Args:
+            image: PIL Image 객체
+            auto_correct_orientation: 자동 방향 보정 여부 (기본값: True)
             
         Returns:
             랜드마크 좌표 리스트 (33개 포인트) 또는 None
@@ -40,8 +137,25 @@ class BodyAnalysisService:
             print("서비스가 초기화되지 않았습니다.")
             return None
         
-        # PoseLandmarkService를 통해 랜드마크 추출
-        return self.pose_landmark_service.extract_landmarks(image)
+        # 1차 랜드마크 추출 (방향 확인용)
+        landmarks = self.pose_landmark_service.extract_landmarks(image)
+        
+        if landmarks is None or len(landmarks) < 33:
+            return landmarks
+        
+        # 방향 감지 및 자동 보정
+        if auto_correct_orientation:
+            orientation = self._detect_orientation(landmarks)
+            
+            if orientation["needs_rotation"]:
+                print(f"[방향 보정] 가로로 누운 이미지 감지, {orientation['rotation_angle']:.1f}도 회전 적용")
+                # 이미지 회전
+                corrected_image = self._correct_image_orientation(image, orientation["rotation_angle"])
+                # 회전된 이미지로 다시 랜드마크 추출
+                landmarks = self.pose_landmark_service.extract_landmarks(corrected_image)
+                print(f"[방향 보정] 회전 후 랜드마크 재추출 완료")
+        
+        return landmarks
     
     def calculate_measurements(self, landmarks: List[Dict]) -> Dict:
         """
