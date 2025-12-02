@@ -97,7 +97,7 @@ function addThumbnail(file) {
 
         // 파일명을 안전하게 처리 (특수문자 이스케이프)
         const safeFilename = file.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        
+
         item.innerHTML = `
             <img src="${e.target.result}" alt="${file.name}">
             <button class="remove-btn" onclick="removeFile('${safeFilename}')" data-filename="${safeFilename}">&times;</button>
@@ -113,7 +113,7 @@ function addThumbnail(file) {
 function removeFile(filename) {
     // 특수문자 처리
     const decodedFilename = filename.replace(/\\'/g, "'").replace(/&quot;/g, '"');
-    
+
     uploadedFiles = uploadedFiles.filter(f => f.name !== decodedFilename);
     const item = document.querySelector(`.thumbnail-item[data-filename="${filename}"]`);
     if (item) {
@@ -132,7 +132,7 @@ function removeFile(filename) {
 // 썸네일 그리드에 드래그 앤 드롭 설정
 function setupThumbnailGridDragDrop() {
     const thumbnailGrid = document.getElementById('thumbnail-grid');
-    
+
     if (!thumbnailGrid) return;
 
     // 드래그 오버 이벤트
@@ -154,7 +154,7 @@ function setupThumbnailGridDragDrop() {
         e.preventDefault();
         e.stopPropagation();
         thumbnailGrid.classList.remove('dragover');
-        
+
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             handleFiles(e.dataTransfer.files);
         }
@@ -224,13 +224,13 @@ async function processBatch() {
 function updateProgress(percent, text) {
     const progressBar = document.getElementById('progress-bar');
     const progressText = document.getElementById('progress-text');
-    
+
     progressBar.style.width = `${percent}%`;
     progressBar.textContent = `${percent}%`;
     progressText.textContent = text;
 }
 
-// 결과 표시
+// 결과 표시 (체크박스 이벤트 포함)
 function displayResults(resultsToShow) {
     const grid = document.getElementById('results-grid');
     grid.innerHTML = '';
@@ -251,10 +251,43 @@ function displayResults(resultsToShow) {
                 <div class="confidence">신뢰도: ${confidencePercent}%</div>
                 <div>카테고리: ${result.category || 'N/A'}</div>
                 <div style="font-size: 12px; color: #999; margin-top: 5px;">${result.filename}</div>
+                <div style="margin-top: 8px;">
+                    <label>
+                        <input type="checkbox" class="manual-toggle" ${result.dress ? 'checked' : ''}>
+                        AI 판별 결과 수동 수정
+                    </label>
+                </div>
             </div>
         `;
 
         grid.appendChild(card);
+
+        // ✅ 체크박스 이벤트 연결
+        const checkbox = card.querySelector('.manual-toggle');
+        checkbox.addEventListener('change', async (e) => {
+            const isDress = e.target.checked;
+            result.dress = isDress;
+
+            // UI 갱신
+            card.className = `result-card ${isDress ? 'dress' : 'not-dress'}`;
+            card.querySelector('.status').textContent = `${isDress ? '🟢 드레스' : '🔴 일반 옷'}`;
+
+            updateStats(results);
+
+            // 서버 저장
+            try {
+                await fetch('/api/dress/manual-label', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: result.filename,
+                        dress: isDress
+                    })
+                });
+            } catch (err) {
+                console.error('수동 라벨 저장 실패:', err);
+            }
+        });
     });
 
     document.getElementById('results-section').style.display = 'block';
@@ -265,15 +298,10 @@ function displayResults(resultsToShow) {
 // 필터 적용
 function filterResults(filter) {
     currentFilter = filter;
-
-    // 필터 버튼 활성화 상태 업데이트
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
+    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
     event.target.classList.add('active');
 
     let filtered = results;
-
     switch (filter) {
         case 'dress':
             filtered = results.filter(r => r.dress === true);
@@ -284,8 +312,6 @@ function filterResults(filter) {
         case 'low-confidence':
             filtered = results.filter(r => r.confidence < 0.7);
             break;
-        default:
-            filtered = results;
     }
 
     displayResults(filtered);
@@ -294,16 +320,58 @@ function filterResults(filter) {
 // 통계 업데이트
 function updateStats(resultsData) {
     const total = resultsData.length;
-    const dressCount = resultsData.filter(r => r.dress === true).length;
-    const notDressCount = resultsData.filter(r => r.dress === false).length;
+    const dressCount = resultsData.filter(r => r.dress).length;
+    const notDressCount = resultsData.filter(r => !r.dress).length;
     const avgConfidence = resultsData.length > 0
         ? resultsData.reduce((sum, r) => sum + r.confidence, 0) / resultsData.length
         : 0;
+
+    const confusion = resultsData.reduce((acc, result) => {
+        const actual = getGroundTruth(result);
+        if (typeof actual !== 'boolean') return acc;
+
+        const predicted = Boolean(result.dress);
+        acc.evaluated += 1;
+
+        if (predicted && actual) acc.tp += 1;
+        else if (predicted && !actual) acc.fp += 1;
+        else if (!predicted && actual) acc.fn += 1;
+        else acc.tn += 1;
+
+        return acc;
+    }, { tp: 0, fp: 0, fn: 0, tn: 0, evaluated: 0 });
+
+    const precision = (confusion.tp + confusion.fp) ? confusion.tp / (confusion.tp + confusion.fp) : null;
+    const recall = (confusion.tp + confusion.fn) ? confusion.tp / (confusion.tp + confusion.fn) : null;
+    const f1 = (precision !== null && recall !== null && (precision + recall) > 0)
+        ? (2 * precision * recall) / (precision + recall)
+        : null;
 
     document.getElementById('stat-total').textContent = total;
     document.getElementById('stat-dress').textContent = dressCount;
     document.getElementById('stat-not-dress').textContent = notDressCount;
     document.getElementById('stat-avg-confidence').textContent = (avgConfidence * 100).toFixed(1) + '%';
+    document.getElementById('stat-tp').textContent = confusion.tp;
+    document.getElementById('stat-fp').textContent = confusion.fp;
+    document.getElementById('stat-fn').textContent = confusion.fn;
+    document.getElementById('stat-tn').textContent = confusion.tn;
+    document.getElementById('stat-precision').textContent = formatMetric(precision);
+    document.getElementById('stat-recall').textContent = formatMetric(recall);
+    document.getElementById('stat-f1').textContent = formatMetric(f1);
+    document.getElementById('matrix-tp').textContent = confusion.tp;
+    document.getElementById('matrix-fp').textContent = confusion.fp;
+    document.getElementById('matrix-fn').textContent = confusion.fn;
+    document.getElementById('matrix-tn').textContent = confusion.tn;
+}
+
+function getGroundTruth(result) {
+    return ['groundTruth','actualDress','actual','isDress','label']
+        .map(k => result[k])
+        .find(v => typeof v === 'boolean') || null;
+}
+
+function formatMetric(value) {
+    return Number.isFinite(value) ? value.toFixed(2) : 'N/A';
 }
 
 // 초기화
@@ -318,12 +386,9 @@ function resetAll() {
     document.getElementById('stats-section').style.display = 'none';
     document.getElementById('progress-section').style.display = 'none';
     document.getElementById('file-input').value = '';
-    
-    // 업로드 영역 다시 보이기
+
     const uploadArea = document.getElementById('upload-area');
-    if (uploadArea) {
-        uploadArea.style.display = 'block';
-    }
+    if (uploadArea) uploadArea.style.display = 'block';
 }
 
 // 재실행
@@ -337,7 +402,6 @@ function rerunProcess() {
     document.getElementById('results-section').style.display = 'none';
     document.getElementById('filter-section').style.display = 'none';
     document.getElementById('stats-section').style.display = 'none';
-    
+
     processBatch();
 }
-

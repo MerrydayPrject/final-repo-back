@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>드레스 단일 판별</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body {
+            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 40%),
+                radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.05), transparent 45%),
+                #0d0f1a;
+        }
+
+        .page-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 32px 20px 64px;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        header h1 {
+            color: #f6f6f6;
+            margin: 0;
+            font-size: 28px;
+        }
+
+        .btn-home {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 10px 25px rgba(79, 70, 229, 0.35);
+        }
+
+        .btn-home:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 30px rgba(79, 70, 229, 0.5);
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+        }
+
+        .upload-area {
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .upload-area:hover,
+        .upload-area.dragover {
+            border-color: #7c3aed;
+            background: rgba(124, 58, 237, 0.08);
+        }
+
+        .upload-area input {
+            display: none;
+        }
+
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 14px;
+            opacity: 0.85;
+        }
+
+        .preview {
+            margin-top: 16px;
+            display: none;
+        }
+
+        .preview img {
+            max-width: 280px;
+            border-radius: 12px;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .status-panel {
+            margin-top: 20px;
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .status-label {
+            font-size: 14px;
+            color: #9ca3af;
+            margin-bottom: 6px;
+        }
+
+        .status-value {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .status-value.approved {
+            color: #10b981;
+        }
+
+        .status-value.rejected {
+            color: #ef4444;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            margin-top: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #e5e7eb;
+        }
+
+        .error-message {
+            margin-top: 12px;
+            color: #f87171;
+            font-weight: 600;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 12px;
+            color: #e5e7eb;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="page-container">
+        <header>
+            <div>
+                <h1>드레스 단일 판별</h1>
+                <p style="color: #d1d5db; margin: 6px 0 0;">이미지를 업로드하면 즉시 드레스 여부를 확인하고 승인 결과를 보여줍니다.</p>
+            </div>
+            <a href="/" class="btn-home">홈으로 돌아가기</a>
+        </header>
+
+        <div class="card">
+            <label class="upload-area" id="upload-area">
+                <input type="file" id="image-input" accept="image/*">
+                <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                    stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3 15.75a4.5 4.5 0 0 1 4.5-4.5h1.372m0 0L9.75 9m-.878 2.25L7.5 12m5.25-2.25H15a4.5 4.5 0 0 1 4.5 4.5M12 12v8.25m0-8.25-3 3m3-3 3 3" />
+                </svg>
+                <p style="color:#e5e7eb; margin: 0 0 4px; font-weight: 600;">클릭하거나 이미지를 끌어다 놓으세요</p>
+                <small style="color:#9ca3af;">단일 이미지만 업로드할 수 있습니다.</small>
+            </label>
+
+            <div class="preview" id="preview">
+                <p style="color:#9ca3af; margin-bottom: 8px;">업로드한 이미지 미리보기</p>
+                <img id="preview-img" alt="Uploaded preview">
+            </div>
+
+            <div class="loading" id="loading">드레스 판별 중...</div>
+            <div class="error-message" id="error-message" style="display:none;"></div>
+
+            <div class="status-panel" id="status-panel" style="display:none;">
+                <div class="status-label">승인 상태</div>
+                <div class="status-value" id="status-value"></div>
+                <div class="pill" id="confidence-pill" style="display:none;"></div>
+                <div class="pill" id="category-pill" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('upload-area');
+        const imageInput = document.getElementById('image-input');
+        const preview = document.getElementById('preview');
+        const previewImg = document.getElementById('preview-img');
+        const loading = document.getElementById('loading');
+        const errorMessage = document.getElementById('error-message');
+        const statusPanel = document.getElementById('status-panel');
+        const statusValue = document.getElementById('status-value');
+        const confidencePill = document.getElementById('confidence-pill');
+        const categoryPill = document.getElementById('category-pill');
+
+        function resetState() {
+            errorMessage.style.display = 'none';
+            statusPanel.style.display = 'none';
+            loading.style.display = 'none';
+            confidencePill.style.display = 'none';
+            categoryPill.style.display = 'none';
+        }
+
+        function setPreview(file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                previewImg.src = reader.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function checkDress(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('model', 'gpt-4o-mini');
+            formData.append('mode', 'fast');
+
+            loading.style.display = 'block';
+            errorMessage.style.display = 'none';
+            statusPanel.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/dress/check', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                loading.style.display = 'none';
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || '드레스 판별에 실패했습니다.');
+                }
+
+                const result = data.data;
+                const isDress = Boolean(result?.dress);
+                statusValue.textContent = isDress ? '승인됨 (드레스)' : '거절됨 (드레스 아님)';
+                statusValue.className = `status-value ${isDress ? 'approved' : 'rejected'}`;
+
+                confidencePill.textContent = `신뢰도: ${((result?.confidence ?? 0) * 100).toFixed(1)}%`;
+                confidencePill.style.display = 'inline-flex';
+
+                if (result?.category) {
+                    categoryPill.textContent = `분류: ${result.category}`;
+                    categoryPill.style.display = 'inline-flex';
+                }
+
+                statusPanel.style.display = 'block';
+            } catch (err) {
+                loading.style.display = 'none';
+                errorMessage.textContent = err.message;
+                errorMessage.style.display = 'block';
+            }
+        }
+
+        uploadArea.addEventListener('click', () => imageInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                resetState();
+                setPreview(file);
+                checkDress(file);
+            }
+        });
+
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                resetState();
+                setPreview(file);
+                checkDress(file);
+            }
+        });
+    </script>
+</body>
+
+</html>

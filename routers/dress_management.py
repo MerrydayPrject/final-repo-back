@@ -3,6 +3,7 @@ import os
 import json
 import csv
 import io
+import base64
 import pymysql
 from pathlib import Path
 from typing import List, Optional
@@ -15,15 +16,29 @@ from services.category_service import detect_style_from_filename
 from services.dress_check_service import get_dress_check_service
 from core.s3_client import upload_to_s3, delete_from_s3
 from config.settings import AWS_S3_BUCKET_NAME, AWS_REGION
+from fastapi import APIRouter
+from pydantic import BaseModel
 
-router = APIRouter()
+# schema 정의
+class ManualLabelRequest(BaseModel):
+    filename: str
+    dress: bool
 
+router = APIRouter(prefix="/api/dress", tags=["dress"])
 
-@router.get("/api/admin/dresses", tags=["드레스 관리"])
-async def get_dresses(
-    page: int = Query(1, ge=1, description="페이지 번호"),
-    limit: int = Query(20, ge=1, le=10000, description="페이지당 항목 수")
-):
+class ManualLabelRequest(BaseModel):
+    filename: str
+    dress: bool
+
+@router.post("/manual-label")
+async def manual_label(request: ManualLabelRequest):
+    from services.dress_check_service import save_manual_label
+    save_manual_label(request.filename, request.dress)
+    return {"success": True, "filename": request.filename, "dress": request.dress}
+
+@router.get("/admin/dresses", tags=["드레스 관리"])
+async def get_dresses(page: int = 1, limit: int = 20):
+    
     """
     드레스 목록 조회 (페이징 지원)
     
@@ -639,6 +654,86 @@ async def import_dresses(file: UploadFile = File(...)):
         }, status_code=500)
 
 
+@router.post("/api/dress/check", tags=["드레스 관리"])
+async def check_single_dress(
+    file: UploadFile = File(...),
+    model: str = Form("gpt-4o-mini"),
+    mode: str = Form("fast")
+):
+    """단일 이미지 드레스 판별"""
+    try:
+        if model not in ["gpt-4o-mini", "gpt-4o"]:
+            return JSONResponse({
+                "success": False,
+                "error": "Invalid model",
+                "message": "모델은 gpt-4o-mini 또는 gpt-4o만 선택할 수 있습니다."
+            }, status_code=400)
+
+        if mode not in ["fast", "accurate"]:
+            return JSONResponse({
+                "success": False,
+                "error": "Invalid mode",
+                "message": "모드는 fast 또는 accurate만 선택할 수 있습니다."
+            }, status_code=400)
+
+        try:
+            dress_check_service = get_dress_check_service()
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": "Service initialization failed",
+                "message": f"서비스 초기화 실패: {str(e)}"
+            }, status_code=500)
+
+        file_content = await file.read()
+        try:
+            image = Image.open(io.BytesIO(file_content)).convert("RGB")
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": "Invalid image",
+                "message": f"이미지 로드 실패: {str(e)}"
+            }, status_code=400)
+
+        check_result = dress_check_service.check_dress(
+            image=image,
+            model=model,
+            mode=mode
+        )
+
+        thumbnail = None
+        try:
+            image.thumbnail((240, 240))
+            buffered = io.BytesIO()
+            image.save(buffered, format="PNG")
+            thumbnail = base64.b64encode(buffered.getvalue()).decode()
+            thumbnail = f"data:image/png;base64,{thumbnail}"
+        except Exception:
+            thumbnail = None
+
+        return JSONResponse({
+            "success": True,
+            "data": {
+                "filename": file.filename,
+                "dress": check_result["dress"],
+                "confidence": check_result["confidence"],
+                "category": check_result["category"],
+                "thumbnail": thumbnail
+            },
+            "message": "드레스 판별이 완료되었습니다."
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"드레스 판별 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+
 @router.post("/api/dress/batch-check", tags=["드레스 관리"])
 async def batch_check_dresses(
     files: List[UploadFile] = File(...),
@@ -662,7 +757,9 @@ async def batch_check_dresses(
                     "filename": str,
                     "dress": bool,
                     "confidence": float,
-                    "category": str
+                    "category": str,
+                    "rejected": bool,
+                    "rejection_reason": str
                 }
             ]
         }
@@ -749,6 +846,8 @@ async def batch_check_dresses(
                     "dress": check_result["dress"],
                     "confidence": check_result["confidence"],
                     "category": check_result["category"],
+                    "rejected": check_result.get("rejected", False),
+                    "rejection_reason": check_result.get("rejection_reason", ""),
                     "thumbnail": thumbnail
                 })
                 

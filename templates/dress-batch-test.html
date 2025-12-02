@@ -297,6 +297,51 @@
             margin-top: 5px;
         }
 
+        .confusion-matrix {
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            align-items: stretch;
+        }
+
+        .matrix-cell {
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.04);
+            text-align: center;
+            color: #f6f6f6;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .matrix-label {
+            font-weight: bold;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .matrix-cell.tp {
+            background: rgba(40, 167, 69, 0.15);
+        }
+
+        .matrix-cell.fp {
+            background: rgba(220, 53, 69, 0.15);
+        }
+
+        .matrix-cell.fn {
+            background: rgba(255, 193, 7, 0.15);
+        }
+
+        .matrix-cell.tn {
+            background: rgba(108, 117, 125, 0.15);
+        }
+
         .btn-reset {
             background: #dc3545;
             color: white;
@@ -407,6 +452,48 @@
                         <div class="value" id="stat-avg-confidence">0%</div>
                         <div class="label">평균 신뢰도</div>
                     </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-precision">N/A</div>
+                        <div class="label">정밀도 (Precision)</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-recall">N/A</div>
+                        <div class="label">재현율 (Recall)</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-f1">N/A</div>
+                        <div class="label">F1 점수</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-tp">0</div>
+                        <div class="label">TP (드레스 정답)</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-fp">0</div>
+                        <div class="label">FP (드레스 과검출)</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-fn">0</div>
+                        <div class="label">FN (드레스 미검출)</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-tn">0</div>
+                        <div class="label">TN (일반 옷 정답)</div>
+                    </div>
+                </div>
+                <div class="confusion-matrix">
+                    <div style="margin-bottom: 8px; color: #f6f6f6; font-weight: 600;">혼동 행렬</div>
+                    <div class="matrix-grid">
+                        <div class="matrix-cell matrix-label"></div>
+                        <div class="matrix-cell matrix-label">예측: 드레스</div>
+                        <div class="matrix-cell matrix-label">예측: 일반 옷</div>
+                        <div class="matrix-cell matrix-label">실제: 드레스</div>
+                        <div class="matrix-cell tp" id="matrix-tp">0</div>
+                        <div class="matrix-cell fn" id="matrix-fn">0</div>
+                        <div class="matrix-cell matrix-label">실제: 일반 옷</div>
+                        <div class="matrix-cell fp" id="matrix-fp">0</div>
+                        <div class="matrix-cell tn" id="matrix-tn">0</div>
+                    </div>
                 </div>
             </section>
 
@@ -428,4 +515,3 @@
 </body>
 
 </html>
-
