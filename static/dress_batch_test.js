@@ -230,6 +230,62 @@ function updateProgress(percent, text) {
     progressText.textContent = text;
 }
 
+// 통계 + 혼동행렬 업데이트
+function updateStats(results) {
+    let total = results.length;
+    let dressCount = 0, notDressCount = 0, confidenceSum = 0;
+
+    // 혼동행렬 변수
+    let TP = 0, FP = 0, FN = 0, TN = 0;
+
+    results.forEach(r => {
+        confidenceSum += r.confidence || 0;
+
+        // 현재 예측값
+        const predicted = r.dress; // 체크박스 눌러서 바뀐 값도 포함됨
+
+        // 실제값(수동 수정된 값이 있으면 manual 우선)
+        const actual = (r.manual !== undefined) ? r.manual : r.true_label;
+
+        // 통계용
+        if (predicted) dressCount++;
+        else notDressCount++;
+
+        // ✔ 혼동행렬 계산 (핵심 부분)
+        if (actual !== undefined) {
+            if (actual === true && predicted === true) TP++;
+            else if (actual === false && predicted === true) FP++;
+            else if (actual === true && predicted === false) FN++;
+            else if (actual === false && predicted === false) TN++;
+        }
+    });
+
+    // -------------------------
+    // 요약 통계 UI 업데이트
+    // -------------------------
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-dress').textContent = dressCount;
+    document.getElementById('stat-not-dress').textContent = notDressCount;
+    document.getElementById('stat-avg-confidence').textContent = ((confidenceSum/total)*100).toFixed(1) + '%';
+
+    // -------------------------
+    // 혼동행렬 UI 반영 (핵심)
+    // -------------------------
+    document.getElementById('matrix-tp').textContent = TP;
+    document.getElementById('matrix-fp').textContent = FP;
+    document.getElementById('matrix-fn').textContent = FN;
+    document.getElementById('matrix-tn').textContent = TN;
+
+    // Precision / Recall / F1 업데이트
+    const precision = TP + FP > 0 ? (TP / (TP + FP)) : null;
+    const recall = TP + FN > 0 ? (TP / (TP + FN)) : null;
+    const f1 = (precision && recall) ? (2 * precision * recall) / (precision + recall) : null;
+
+    document.getElementById('stat-precision').textContent = precision ? (precision * 100).toFixed(1) + "%" : "N/A";
+    document.getElementById('stat-recall').textContent = recall ? (recall * 100).toFixed(1) + "%" : "N/A";
+    document.getElementById('stat-f1').textContent = f1 ? (f1 * 100).toFixed(1) + "%" : "N/A";
+}
+
 // 결과 표시 (체크박스 이벤트 포함)
 function displayResults(resultsToShow) {
     const grid = document.getElementById('results-grid');
@@ -262,16 +318,17 @@ function displayResults(resultsToShow) {
 
         grid.appendChild(card);
 
-        // ✅ 체크박스 이벤트 연결
+        // 체크박스 이벤트 연결
         const checkbox = card.querySelector('.manual-toggle');
         checkbox.addEventListener('change', async (e) => {
             const isDress = e.target.checked;
             result.dress = isDress;
+            result.manual = isDress;
 
-            // UI 갱신
             card.className = `result-card ${isDress ? 'dress' : 'not-dress'}`;
             card.querySelector('.status').textContent = `${isDress ? '🟢 드레스' : '🔴 일반 옷'}`;
 
+            // 전체 results 기준으로 통계/혼동행렬 업데이트
             updateStats(results);
 
             // 서버 저장
@@ -279,10 +336,7 @@ function displayResults(resultsToShow) {
                 await fetch('/api/dress/manual-label', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        filename: result.filename,
-                        dress: isDress
-                    })
+                    body: JSON.stringify({ filename: result.filename, dress: isDress })
                 });
             } catch (err) {
                 console.error('수동 라벨 저장 실패:', err);
@@ -293,13 +347,18 @@ function displayResults(resultsToShow) {
     document.getElementById('results-section').style.display = 'block';
     document.getElementById('filter-section').style.display = 'block';
     document.getElementById('stats-section').style.display = 'block';
+
+    // 초기 통계/혼동행렬 계산
+    updateStats(results);
 }
 
+
+
 // 필터 적용
-function filterResults(filter) {
+function filterResults(filter, event) {
     currentFilter = filter;
     document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    if (event) event.target.classList.add('active');
 
     let filtered = results;
     switch (filter) {
@@ -404,4 +463,5 @@ function rerunProcess() {
     document.getElementById('stats-section').style.display = 'none';
 
     processBatch();
-}
+ }
+

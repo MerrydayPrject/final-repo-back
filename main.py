@@ -8,6 +8,9 @@ from pathlib import Path
 from config.cors import CORS_ORIGINS, CORS_CREDENTIALS, CORS_METHODS, CORS_HEADERS
 from core.model_loader import load_models
 
+from routers import manual_label_router
+
+
 # 디렉토리 생성
 Path("static").mkdir(exist_ok=True)
 Path("templates").mkdir(exist_ok=True)
@@ -72,6 +75,7 @@ app.include_router(custom_v3_router.router)
 app.include_router(custom_v4_router.router)
 app.include_router(review.router)
 app.include_router(visitor_router.router)
+app.include_router(manual_label_router.router)
 
 # Startup 이벤트
 @app.on_event("startup")
