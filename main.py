@@ -50,8 +50,8 @@ from routers import (
     info, web, segmentation, composition, prompt, 
     body_analysis, admin, dress_management, image_processing,
     proxy, models, tryon_router, body_generation, fitting_router,
-    custom_v3_router, custom_v4_router, review, auth, visitor_router,
-    nukki_v2_router, prompt_test_router
+    custom_v3_router, custom_v4_router, custom_v5_router, custom_v4v5_router,
+    review, auth, visitor_router, nukki_v2_router, prompt_test_router
 )
 
 app.include_router(info.router)
@@ -71,6 +71,8 @@ app.include_router(body_generation.router)
 app.include_router(fitting_router.router)
 app.include_router(custom_v3_router.router)
 app.include_router(custom_v4_router.router)
+app.include_router(custom_v5_router.router)
+app.include_router(custom_v4v5_router.router)
 app.include_router(review.router)
 app.include_router(visitor_router.router)
 app.include_router(nukki_v2_router.router)

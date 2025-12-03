@@ -11,3 +11,20 @@ class UnifiedTryonResponse(BaseModel):
     message: Optional[str] = None
     llm: Optional[str] = None  # 사용된 LLM 정보 (예: "xai-gemini-unified")
 
+
+class V4V5CompareResponse(BaseModel):
+    """V4V5일반 비교 응답 스키마"""
+    success: bool
+    v4_result: UnifiedTryonResponse
+    v5_result: UnifiedTryonResponse
+    total_time: float
+    message: Optional[str] = None
+
+
+class V4V5CustomCompareResponse(BaseModel):
+    """V4V5커스텀 비교 응답 스키마"""
+    success: bool
+    v4_result: UnifiedTryonResponse
+    v5_result: UnifiedTryonResponse
+    total_time: float
+    message: Optional[str] = None

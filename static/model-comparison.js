@@ -82,6 +82,28 @@ function renderModelButtons() {
         </div>
     `;
     
+    // V4V5 비교 버튼 추가
+    const v4v5CompareCardHtml = `
+        <div class="model-button-card" style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
+            <div class="model-button-icon">⚖️</div>
+            <div class="model-button-content">
+                <h3>V4V5 비교</h3>
+                <p>V4와 V5 파이프라인을 병렬 실행하여 결과를 비교합니다</p>
+                <span class="model-category">합성</span>
+            </div>
+            <div style="width: 100%; padding: 0 10px;">
+                <select id="v4v5-pipeline-select-button" style="width: 100%; padding: 8px; border: 2px solid #e5e7eb; border-radius: 6px; font-size: 0.9em; cursor: pointer;">
+                    <option value="normal">V4V5일반 (누끼 처리 없음)</option>
+                    <option value="custom">V4V5커스텀 (누끼 처리 포함)</option>
+                </select>
+            </div>
+            <button class="model-run-btn" onclick="openV4V5CompareModal()" style="width: calc(100% - 20px); padding: 12px; font-size: 1em; margin: 0 10px;">
+                <span class="btn-icon">🚀</span>
+                비교 실행
+            </button>
+        </div>
+    `;
+    
     // 모델 추가 버튼 추가
     const addButtonHtml = `
         <button class="add-model-button" onclick="openAddModelModal()">
@@ -90,7 +112,7 @@ function renderModelButtons() {
         </button>
     `;
     
-    grid.innerHTML = buttonsHtml + versionSelectCardHtml + addButtonHtml;
+    grid.innerHTML = buttonsHtml + versionSelectCardHtml + v4v5CompareCardHtml + addButtonHtml;
 }
 
 // 모델별 모달 생성
@@ -156,6 +178,115 @@ function createModelModals() {
     models.forEach(model => {
         setupModalDragAndDrop(model);
     });
+    
+    // V4V5 비교 모달 추가
+    const v4v5ModalHtml = `
+        <div class="model-modal" id="modal-v4v5-compare">
+            <div class="model-modal-content">
+                <div class="model-modal-header">
+                    <div class="model-modal-title">
+                        <div class="model-modal-icon">⚖️</div>
+                        <div>
+                            <h2>V4V5 비교</h2>
+                            <p>V4와 V5 파이프라인을 병렬 실행하여 결과를 비교합니다</p>
+                        </div>
+                    </div>
+                    <button class="model-modal-close" onclick="closeV4V5CompareModal()">&times;</button>
+                </div>
+                <div class="model-modal-body">
+                    <div class="model-upload-section">
+                        <div class="model-upload-row">
+                            <div class="model-upload-item">
+                                <label class="model-upload-label">
+                                    <span class="upload-icon">👤</span>
+                                    인물 이미지
+                                </label>
+                                <div class="model-upload-area" id="upload-v4v5-person">
+                                    <input type="file" id="input-v4v5-person" accept="image/*" style="display: none;" onchange="handleV4V5ImageUpload(event, 'person')">
+                                    <div class="model-upload-content">
+                                        <div class="model-upload-icon">📁</div>
+                                        <p>이미지를 드래그하거나 클릭</p>
+                                        <button class="model-upload-btn" onclick="event.stopPropagation(); document.getElementById('input-v4v5-person').click();">파일 선택</button>
+                                    </div>
+                                    <div class="model-preview-container" id="preview-v4v5-person" style="display: none;">
+                                        <img id="img-v4v5-person" alt="Person Preview">
+                                        <button class="model-remove-btn" onclick="removeV4V5Image('person')">&times;</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="model-upload-item">
+                                <label class="model-upload-label">
+                                    <span class="upload-icon">👗</span>
+                                    의상 이미지
+                                </label>
+                                <div class="model-upload-area" id="upload-v4v5-garment">
+                                    <input type="file" id="input-v4v5-garment" accept="image/*" style="display: none;" onchange="handleV4V5ImageUpload(event, 'garment')">
+                                    <div class="model-upload-content">
+                                        <div class="model-upload-icon">📁</div>
+                                        <p>이미지를 드래그하거나 클릭</p>
+                                        <button class="model-upload-btn" onclick="event.stopPropagation(); document.getElementById('input-v4v5-garment').click();">파일 선택</button>
+                                    </div>
+                                    <div class="model-preview-container" id="preview-v4v5-garment" style="display: none;">
+                                        <img id="img-v4v5-garment" alt="Garment Preview">
+                                        <button class="model-remove-btn" onclick="removeV4V5Image('garment')">&times;</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="model-upload-item">
+                                <label class="model-upload-label">
+                                    <span class="upload-icon">🖼️</span>
+                                    배경 이미지
+                                </label>
+                                <div class="model-upload-area" id="upload-v4v5-background">
+                                    <input type="file" id="input-v4v5-background" accept="image/*" style="display: none;" onchange="handleV4V5ImageUpload(event, 'background')">
+                                    <div class="model-upload-content">
+                                        <div class="model-upload-icon">📁</div>
+                                        <p>이미지를 드래그하거나 클릭</p>
+                                        <button class="model-upload-btn" onclick="event.stopPropagation(); document.getElementById('input-v4v5-background').click();">파일 선택</button>
+                                    </div>
+                                    <div class="model-preview-container" id="preview-v4v5-background" style="display: none;">
+                                        <img id="img-v4v5-background" alt="Background Preview">
+                                        <button class="model-remove-btn" onclick="removeV4V5Image('background')">&times;</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="model-action-section">
+                        <button class="model-run-btn" id="run-btn-v4v5" onclick="runV4V5Compare()">
+                            <span class="btn-icon">🚀</span>
+                            비교 실행
+                        </button>
+                    </div>
+                    <div class="model-loading" id="loading-v4v5" style="display: none;">
+                        <div class="model-spinner"></div>
+                        <p id="loading-v4v5-text">V4와 V5 파이프라인을 병렬 실행 중...</p>
+                    </div>
+                    <div class="model-result-section" id="result-v4v5" style="display: none;">
+                        <div class="model-result-header">
+                            <div class="model-processing-time">
+                                <span>전체 처리 시간: </span>
+                                <span id="time-v4v5">-</span>
+                            </div>
+                        </div>
+                        <div class="model-result-images" id="result-images-v4v5">
+                            <!-- 결과 이미지가 여기에 표시됨 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 기존 V4V5 비교 모달이 있으면 제거 후 추가 (중복 방지)
+    const existingV4V5Modal = document.getElementById('modal-v4v5-compare');
+    if (existingV4V5Modal) {
+        existingV4V5Modal.remove();
+    }
+    container.insertAdjacentHTML('beforeend', v4v5ModalHtml);
+    
+    // V4V5 모달 드래그 앤 드롭 설정
+    setupV4V5DragAndDrop();
 }
 
 // 입력 필드 생성
@@ -722,8 +853,15 @@ function showError(message) {
 // 모달 외부 클릭 시 닫기
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('model-modal')) {
-        const modelId = e.target.id.replace('modal-', '');
-        closeModelModal(modelId);
+        const modalId = e.target.id;
+        if (modalId === 'modal-v4v5-compare') {
+            closeV4V5CompareModal();
+        } else if (modalId === 'modal-add-model') {
+            closeAddModelModal();
+        } else {
+            const modelId = modalId.replace('modal-', '');
+            closeModelModal(modelId);
+        }
     }
 });
 
@@ -771,6 +909,11 @@ document.addEventListener('keydown', (e) => {
         const addModal = document.getElementById('modal-add-model');
         if (addModal && addModal.classList.contains('show')) {
             closeAddModelModal();
+        }
+        // V4V5 비교 모달 닫기
+        const v4v5Modal = document.getElementById('modal-v4v5-compare');
+        if (v4v5Modal && v4v5Modal.classList.contains('show')) {
+            closeV4V5CompareModal();
         }
     }
 });
@@ -3137,5 +3280,235 @@ async function runV4CustomCompose() {
         loadingDiv.style.display = 'none';
         runBtn.disabled = false;
         alert(`V4 커스텀 합성 실행 중 오류 발생: ${error.message}`);
+    }
+}
+
+// ==================== V4V5 비교 기능 ====================
+
+// V4V5 비교 이미지 저장
+let v4v5Images = {
+    person: null,
+    garment: null,
+    background: null
+};
+
+// V4V5 비교 모달 열기
+function openV4V5CompareModal() {
+    const modal = document.getElementById('modal-v4v5-compare');
+    if (modal) {
+        // 버튼 카드의 드롭다운 선택값에 따라 모달 제목 업데이트
+        const pipelineSelect = document.getElementById('v4v5-pipeline-select-button');
+        const selectedPipeline = pipelineSelect ? pipelineSelect.value : 'normal';
+        const isCustom = selectedPipeline === 'custom';
+        
+        const modalTitle = modal.querySelector('.model-modal-title h2');
+        const modalDescription = modal.querySelector('.model-modal-title p');
+        
+        if (modalTitle) {
+            modalTitle.textContent = isCustom ? 'V4V5커스텀 비교' : 'V4V5일반 비교';
+        }
+        if (modalDescription) {
+            modalDescription.textContent = isCustom 
+                ? 'CustomV4와 CustomV5 파이프라인을 병렬 실행하여 결과를 비교합니다 (누끼 처리 포함)'
+                : 'V4와 V5 파이프라인을 병렬 실행하여 결과를 비교합니다 (누끼 처리 없음)';
+        }
+        
+        modal.classList.add('show');
+    }
+}
+
+// V4V5 비교 모달 닫기
+function closeV4V5CompareModal() {
+    const modal = document.getElementById('modal-v4v5-compare');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+// V4V5 이미지 업로드 처리
+function handleV4V5ImageUpload(event, type) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        alert('이미지 파일만 업로드 가능합니다.');
+        return;
+    }
+    
+    v4v5Images[type] = file;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const previewContainer = document.getElementById(`preview-v4v5-${type}`);
+        const uploadContent = previewContainer.previousElementSibling;
+        const img = document.getElementById(`img-v4v5-${type}`);
+        
+        img.src = e.target.result;
+        uploadContent.style.display = 'none';
+        previewContainer.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+// V4V5 이미지 제거
+function removeV4V5Image(type) {
+    v4v5Images[type] = null;
+    
+    const previewContainer = document.getElementById(`preview-v4v5-${type}`);
+    const uploadContent = previewContainer.previousElementSibling;
+    const input = document.getElementById(`input-v4v5-${type}`);
+    
+    previewContainer.style.display = 'none';
+    uploadContent.style.display = 'flex';
+    input.value = '';
+}
+
+// V4V5 드래그 앤 드롭 설정
+function setupV4V5DragAndDrop() {
+    const types = ['person', 'garment', 'background'];
+    
+    types.forEach(type => {
+        const uploadArea = document.getElementById(`upload-v4v5-${type}`);
+        const input = document.getElementById(`input-v4v5-${type}`);
+        
+        if (!uploadArea || !input) return;
+        
+        // 기존 이벤트 리스너 제거를 위한 클론 (중복 방지)
+        const newUploadArea = uploadArea.cloneNode(true);
+        uploadArea.parentNode.replaceChild(newUploadArea, uploadArea);
+        const newInput = document.getElementById(`input-v4v5-${type}`);
+        
+        // 드래그 앤 드롭 이벤트
+        newUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            newUploadArea.classList.add('drag-over');
+        });
+        
+        newUploadArea.addEventListener('dragleave', () => {
+            newUploadArea.classList.remove('drag-over');
+        });
+        
+        newUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            newUploadArea.classList.remove('drag-over');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type.startsWith('image/')) {
+                    newInput.files = files;
+                    handleV4V5ImageUpload({ target: { files: [file] } }, type);
+                } else {
+                    alert('이미지 파일만 업로드 가능합니다.');
+                }
+            }
+        });
+        
+        // uploadArea 클릭 시 파일 선택 (단, 버튼 클릭은 제외)
+        newUploadArea.addEventListener('click', (e) => {
+            // 버튼이나 input 클릭이 아닌 경우에만 파일 선택 창 열기
+            if (!e.target.closest('button') && e.target !== newInput && !e.target.closest('.model-upload-btn')) {
+                newInput.click();
+            }
+        });
+    });
+}
+
+// V4V5 비교 실행
+async function runV4V5Compare() {
+    const personFile = v4v5Images.person;
+    const garmentFile = v4v5Images.garment;
+    const backgroundFile = v4v5Images.background;
+    
+    if (!personFile || !garmentFile || !backgroundFile) {
+        alert('인물 이미지, 의상 이미지, 배경 이미지를 모두 업로드해주세요.');
+        return;
+    }
+    
+    const loadingDiv = document.getElementById('loading-v4v5');
+    const loadingText = document.getElementById('loading-v4v5-text');
+    const resultDiv = document.getElementById('result-v4v5');
+    const runBtn = document.getElementById('run-btn-v4v5');
+    const resultImagesDiv = document.getElementById('result-images-v4v5');
+    const timeSpan = document.getElementById('time-v4v5');
+    
+    // 선택된 파이프라인 확인 (버튼 카드의 드롭다운에서 가져옴)
+    const pipelineSelect = document.getElementById('v4v5-pipeline-select-button');
+    const selectedPipeline = pipelineSelect ? pipelineSelect.value : 'normal';
+    const isCustom = selectedPipeline === 'custom';
+    
+    // 로딩 텍스트 업데이트
+    const pipelineName = isCustom ? 'V4V5커스텀' : 'V4V5일반';
+    loadingText.textContent = `${pipelineName} 파이프라인을 병렬 실행 중...`;
+    
+    loadingDiv.style.display = 'flex';
+    resultDiv.style.display = 'none';
+    runBtn.disabled = true;
+    
+    const startTime = performance.now();
+    
+    try {
+        const formData = new FormData();
+        formData.append('person_image', personFile);
+        formData.append('garment_image', garmentFile);
+        formData.append('background_image', backgroundFile);
+        
+        // 선택된 파이프라인에 따라 다른 API 호출
+        const endpoint = isCustom ? '/tryon/compare/custom' : '/tryon/compare';
+        
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        const endTime = performance.now();
+        const processingTime = ((endTime - startTime) / 1000).toFixed(2);
+        
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+        
+        if (data.success) {
+            timeSpan.textContent = `${data.total_time || processingTime}초`;
+            
+            // V4와 V5 결과 표시 (커스텀인 경우 라벨 변경)
+            const v4Label = isCustom ? 'CustomV4 결과' : 'V4 결과';
+            const v5Label = isCustom ? 'CustomV5 결과' : 'V5 결과';
+            
+            resultImagesDiv.innerHTML = `
+                <div class="model-result-image-item">
+                    <div class="model-result-image-label">${v4Label}</div>
+                    <img src="${data.v4_result.result_image || ''}" alt="V4 Result" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'400\\' height=\\'300\\'%3E%3Ctext x=\\'50%25\\' y=\\'50%25\\' text-anchor=\\'middle\\'%3E이미지 로드 실패%3C/text%3E%3C/svg%3E'">
+                    <div style="margin-top: 10px; padding: 10px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                            <strong>상태:</strong> ${data.v4_result.success ? '✅ 성공' : '❌ 실패'}
+                        </div>
+                        ${data.v4_result.llm ? `<div style="font-size: 0.85em; color: #666; margin-top: 5px;"><strong>LLM:</strong> ${data.v4_result.llm}</div>` : ''}
+                        ${data.v4_result.prompt ? `<div style="font-size: 0.85em; color: #666; margin-top: 5px;"><strong>프롬프트:</strong> ${data.v4_result.prompt.substring(0, 100)}...</div>` : ''}
+                        ${data.v4_result.message ? `<div style="font-size: 0.85em; color: #666; margin-top: 5px;">${data.v4_result.message}</div>` : ''}
+                    </div>
+                </div>
+                <div class="model-result-image-item">
+                    <div class="model-result-image-label">${v5Label}</div>
+                    <img src="${data.v5_result.result_image || ''}" alt="V5 Result" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'400\\' height=\\'300\\'%3E%3Ctext x=\\'50%25\\' y=\\'50%25\\' text-anchor=\\'middle\\'%3E이미지 로드 실패%3C/text%3E%3C/svg%3E'">
+                    <div style="margin-top: 10px; padding: 10px; background: #f9fafb; border-radius: 8px;">
+                        <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                            <strong>상태:</strong> ${data.v5_result.success ? '✅ 성공' : '❌ 실패'}
+                        </div>
+                        ${data.v5_result.llm ? `<div style="font-size: 0.85em; color: #666; margin-top: 5px;"><strong>LLM:</strong> ${data.v5_result.llm}</div>` : ''}
+                        ${data.v5_result.prompt ? `<div style="font-size: 0.85em; color: #666; margin-top: 5px;"><strong>프롬프트:</strong> ${data.v5_result.prompt.substring(0, 100)}...</div>` : ''}
+                        ${data.v5_result.message ? `<div style="font-size: 0.85em; color: #666; margin-top: 5px;">${data.v5_result.message}</div>` : ''}
+                    </div>
+                </div>
+            `;
+            
+            resultDiv.style.display = 'block';
+        } else {
+            alert(`오류 발생: ${data.message || '알 수 없는 오류'}`);
+        }
+    } catch (error) {
+        loadingDiv.style.display = 'none';
+        runBtn.disabled = false;
+        alert(`${pipelineName} 비교 실행 중 오류 발생: ${error.message}`);
     }
 }
