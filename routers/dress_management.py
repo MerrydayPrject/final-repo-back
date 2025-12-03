@@ -32,13 +32,13 @@ class ManualLabelRequest(BaseModel):
 
 @router.post("/manual-label")
 async def manual_label(request: ManualLabelRequest):
-    from services.dress_check_service import save_manual_label
-    save_manual_label(request.filename, request.dress)
+    service = get_dress_check_service()
+    service.save_manual_label(request.filename, request.dress)
     return {"success": True, "filename": request.filename, "dress": request.dress}
 
 @router.get("/admin/dresses", tags=["드레스 관리"])
 async def get_dresses(page: int = 1, limit: int = 20):
-    
+
     """
     드레스 목록 조회 (페이징 지원)
     
@@ -96,7 +96,7 @@ async def get_dresses(page: int = 1, limit: int = 20):
         }, status_code=500)
 
 
-@router.post("/api/admin/dresses", tags=["드레스 관리"])
+@router.post("/admin/dresses", tags=["드레스 관리"])
 async def add_dress(request: Request):
     """
     드레스 추가 (S3 URL 또는 이미지명 입력)
@@ -202,7 +202,7 @@ async def add_dress(request: Request):
         }, status_code=500)
 
 
-@router.post("/api/admin/dresses/upload", tags=["드레스 관리"])
+@router.post("/admin/dresses/upload", tags=["드레스 관리"])
 async def upload_dresses(
     files: List[UploadFile] = File(...),
     styles: str = Form(...)
@@ -340,7 +340,7 @@ async def upload_dresses(
         }, status_code=500)
 
 
-@router.delete("/api/admin/dresses/{dress_id}", tags=["드레스 관리"])
+@router.delete("/admin/dresses/{dress_id}", tags=["드레스 관리"])
 async def delete_dress(dress_id: int):
     """
     드레스 삭제
@@ -402,7 +402,7 @@ async def delete_dress(dress_id: int):
         }, status_code=500)
 
 
-@router.get("/api/admin/dresses/export", tags=["드레스 관리"])
+@router.get("/admin/dresses/export", tags=["드레스 관리"])
 async def export_dresses(format: str = Query("json", description="내보내기 형식 (json, csv)")):
     """
     드레스 테이블 정보 내보내기
@@ -463,7 +463,7 @@ async def export_dresses(format: str = Query("json", description="내보내기 �
         }, status_code=500)
 
 
-@router.post("/api/admin/dresses/import", tags=["드레스 관리"])
+@router.post("/admin/dresses/import", tags=["드레스 관리"])
 async def import_dresses(file: UploadFile = File(...)):
     """
     드레스 목록 가져오기
@@ -654,7 +654,7 @@ async def import_dresses(file: UploadFile = File(...)):
         }, status_code=500)
 
 
-@router.post("/api/dress/check", tags=["드레스 관리"])
+@router.post("/check", tags=["드레스 관리"])
 async def check_single_dress(
     file: UploadFile = File(...),
     model: str = Form("gpt-4o-mini"),
@@ -734,7 +734,7 @@ async def check_single_dress(
 
 
 
-@router.post("/api/dress/batch-check", tags=["드레스 관리"])
+@router.post("/batch-check", tags=["드레스 관리"])
 async def batch_check_dresses(
     files: List[UploadFile] = File(...),
     model: str = Form(...),
@@ -876,4 +876,3 @@ async def batch_check_dresses(
             "error": str(e),
             "message": f"배치 처리 중 오류 발생: {str(e)}"
         }, status_code=500)
-

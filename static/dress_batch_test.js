@@ -191,7 +191,7 @@ async function processBatch() {
     formData.append('mode', mode);
 
     try {
-        const response = await fetch('/api/dress/batch-check', {
+        const response = await fetch('/api/dress/batch-check', {  
             method: 'POST',
             body: formData
         });

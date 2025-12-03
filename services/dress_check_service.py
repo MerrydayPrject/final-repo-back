@@ -13,6 +13,10 @@ from config.settings import GPT4O_MODEL_NAME
 class DressCheckService:
     """드레스 판별 서비스"""
 
+    def save_manual_label(self, filename: str, dress: bool):
+        print(f"Saving manual label: {filename} -> {dress}")
+        # DB 저장 로직 등
+        
     def __init__(self):
         """서비스 초기화"""
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
