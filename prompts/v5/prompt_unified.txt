@@ -1,0 +1,96 @@
+UNIFIED VIRTUAL TRY-ON PIPELINE — V5
+================================================================================
+
+INPUT IMAGES:
+- Image 1: Person (the subject to dress)
+- Image 2: Garment/Outfit (the clothing to apply)
+- Image 3: Background (the final scene)
+
+================================================================================
+PHASE 1: OUTFIT REPLACEMENT (STRICT)
+================================================================================
+
+TASK: APPLY THE OUTFIT FROM IMAGE 2 ONTO THE PERSON IN IMAGE 1.
+
+MANDATORY "OVERWRITE" INSTRUCTIONS:
+1. IGNORE THE ORIGINAL CLOTHING VOLUME. If the original person is wearing a thick sweater, ignore its puffiness. Estimate the slimmer body underneath to fit the new outfit.
+2. ERASE ORIGINAL COLORS. If the original pants are black, DO NOT allow black pixels to bleed into the new legs or dress.
+3. ERASE ORIGINAL TEXTURES. If the original top is knitted, the new outfit MUST NOT look knitted unless Image 2 is knitted.
+
+CONTEXT:
+- Target: Complete replacement of attire.
+- Constraint: Face must remain identical.
+
+INSTRUCTIONS:
+- Analyze Image 2 carefully to understand the outfit's exact style, color, material, length, and design details.
+- Apply the outfit from Image 2 (Length, Color, Material) exactly onto the person in Image 1.
+- If the new outfit is sleeveless, generate realistic skin texture for the arms.
+- If the new outfit is a short dress or skirt, generate realistic skin texture for the legs.
+- Completely replace the footwear with shoes matching the new style (Heels/Dress shoes).
+
+WHAT TO AVOID (STRICT):
+- NO traces of the original clothing (top, bottom, or any layer).
+- NO hybrid textures (e.g., a dress with sweater wrinkles from the original).
+- NO original footwear visible.
+
+================================================================================
+PHASE 2: BACKGROUND COMPOSITION & LIGHTING MATCH
+================================================================================
+
+PURPOSE:
+Place the dressed person into Background Image 3 so that they look like they were
+photographed naturally in that scene.
+
+IDENTITY RULES (NEVER BREAK):
+- Do NOT change the structural facial features or identity (eyes, nose, mouth, face shape).
+- Do NOT change the facial expression.
+- It IS allowed to change the apparent skin tone and local color of the face and skin through lighting, shadow, and color grading adjustments, as long as the subject is still clearly recognizable.
+
+OUTFIT RULES:
+- Do NOT change the dress design, silhouette, or length from what was applied in Phase 1.
+- Preserve the overall color family and style of the outfit.
+- You MAY adjust brightness, contrast, highlights, and shadows on the dress so that it matches the lighting and color of the background scene.
+
+BACKGROUND COMPOSITION:
+- Remove the original background behind the subject entirely.
+- Use ONLY Background Image 3 as the final background.
+- The final image must NOT show any pixels from the original subject background.
+- Place the person at a natural scale and perspective inside the scene.
+- Prefer to position the person near the horizontal center of the frame, slightly below the vertical center so the head is not cropped.
+- Ensure the feet are correctly placed on the ground or floor.
+
+LIGHTING AND COLOR MATCHING RULES:
+- Use the background image as the primary reference for overall lighting, mood, and color palette.
+- Match the global light direction, intensity, and softness to the background scene.
+- Adjust the brightness and exposure of all composited foreground areas so they do not look pasted on top of the background.
+- Match the color temperature (warm or cool) of the foreground (subject and dress) to the background.
+- Strongly adapt the skin tone and local color of the subject and DRESS so that it clearly reflects the ambient light and colors of the background scene.
+- Ensure the highlights, shadows, and subtle ambient reflections on the dress's fabric are consistent with the background's light source.
+- Ensure cast shadows and shading are consistent with the background light direction.
+- Add realistic contact shadows where the foreground meets the ground or surfaces.
+- Apply the same level of sharpness or blur (depth of field) to the subject as in the background.
+- Blend the overall color grading of foreground and background so they share the same photographic style.
+
+NATURAL BLENDING:
+- Ensure there are no visible cutout edges or halos around the subject.
+- Avoid double backgrounds, ghosting, or mismatched lighting.
+- Do NOT distort the pose or body proportions.
+
+================================================================================
+WHAT NOT TO DO (FINAL CHECK):
+================================================================================
+- Don't replace the person with a different individual.
+- Don't change clothing or shoes into a different style than Image 2.
+- Don't smooth the face excessively or add heavy makeup.
+- Don't change the facial expression.
+- Don't leave any traces of the original clothing or background.
+
+================================================================================
+OUTPUT:
+================================================================================
+Return a single photorealistic image where:
+1. The person from Image 1 is wearing ONLY the outfit from Image 2.
+2. The person is seamlessly integrated into Background Image 3.
+3. Lighting, color, focus, and composition are harmonized.
+4. No traces of original clothing or background remain.
+

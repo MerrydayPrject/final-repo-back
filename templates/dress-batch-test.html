@@ -229,6 +229,8 @@
         .result-info {
             font-size: 14px;
             color: #f6f6f6;
+            min-height: auto;
+            overflow: visible;
         }
 
         .result-info .status {
@@ -238,6 +240,52 @@
 
         .result-info .confidence {
             color: #ffc107;
+        }
+
+        .result-info .checkbox-container {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: block !important;
+            visibility: visible !important;
+        }
+
+        .result-info .checkbox-container label {
+            display: flex !important;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #f6f6f6;
+            user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .result-info .checkbox-container input[type="checkbox"] {
+            width: 18px !important;
+            height: 18px !important;
+            min-width: 18px !important;
+            min-height: 18px !important;
+            cursor: pointer;
+            margin: 0 !important;
+            flex-shrink: 0;
+            appearance: checkbox;
+            -webkit-appearance: checkbox;
+            -moz-appearance: checkbox;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid #666;
+            border-radius: 3px;
+        }
+
+        .result-info .checkbox-container input[type="checkbox"]:checked {
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+
+        .result-info .checkbox-container span {
+            display: inline-block;
+            color: #f6f6f6;
         }
 
         .filter-section {
@@ -383,7 +431,6 @@
                     <button class="filter-btn active" onclick="filterResults('all')">전체</button>
                     <button class="filter-btn" onclick="filterResults('dress')">드레스만</button>
                     <button class="filter-btn" onclick="filterResults('not-dress')">일반 옷만</button>
-                    <button class="filter-btn" onclick="filterResults('low-confidence')">낮은 신뢰도</button>
                 </div>
             </section>
 
@@ -396,16 +443,20 @@
                         <div class="label">총 이미지 수</div>
                     </div>
                     <div class="stat-item">
-                        <div class="value" id="stat-dress">0</div>
-                        <div class="label">드레스 판정</div>
+                        <div class="value" id="stat-correct">0</div>
+                        <div class="label">정답</div>
                     </div>
                     <div class="stat-item">
-                        <div class="value" id="stat-not-dress">0</div>
-                        <div class="label">일반 옷</div>
+                        <div class="value" id="stat-incorrect">0</div>
+                        <div class="label">오답</div>
                     </div>
                     <div class="stat-item">
-                        <div class="value" id="stat-avg-confidence">0%</div>
-                        <div class="label">평균 신뢰도</div>
+                        <div class="value" id="stat-accuracy">0.0%</div>
+                        <div class="label">정확도(%)</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="value" id="stat-error-rate">0.0%</div>
+                        <div class="label">오답률(%)</div>
                     </div>
                 </div>
             </section>
@@ -415,7 +466,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2>결과</h2>
                     <div>
-                        <button class="btn-reset" onclick="resetAll()">초기화</button>
+                        <button class="btn-reset" onclick="resetAll()">전체 초기화</button>
                         <button class="btn-rerun" onclick="rerunProcess()">재실행</button>
                     </div>
                 </div>

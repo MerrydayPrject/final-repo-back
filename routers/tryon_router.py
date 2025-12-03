@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
 
-from services.tryon_service import generate_unified_tryon, generate_unified_tryon_v2
+from services.tryon_service import generate_unified_tryon, generate_unified_tryon_v2, generate_unified_tryon_v5
 from services.face_swap_service import FaceSwapService
 from schemas.tryon_schema import UnifiedTryonResponse
 
@@ -167,6 +167,76 @@ async def compose_xai_gemini_v2(
                 "prompt": "",
                 "result_image": "",
                 "message": f"통합 트라이온 V2 처리 중 오류가 발생했습니다: {str(e)}",
+                "llm": None
+            },
+            status_code=500,
+        )
+
+
+@router.post("/fit/v5/compose", tags=["통합 트라이온 V5"], response_model=UnifiedTryonResponse)
+async def compose_v5(
+    person_image: UploadFile = File(..., description="인물 이미지 파일"),
+    garment_image: UploadFile = File(..., description="의상 이미지 파일"),
+    background_image: UploadFile = File(..., description="배경 이미지 파일"),
+):
+    """
+    통합 트라이온 파이프라인 V5: Gemini 3 Flash 직접 처리 (X.AI 제거)
+    
+    V5는 X.AI 이미지 분석 단계를 제거하고 Gemini 3 Flash가 직접 처리합니다:
+    1. Gemini 3 Flash가 인물/의상/배경 이미지를 직접 분석
+    2. 의상 교체 + 배경 합성을 한 번에 수행
+    
+    V4와의 차이점:
+    - X.AI 이미지 분석 및 프롬프트 생성 단계 제거
+    - 정적 통합 프롬프트 사용으로 응답 속도 향상
+    
+    Returns:
+        UnifiedTryonResponse: 생성된 프롬프트와 합성 이미지 (base64)
+    """
+    try:
+        # 이미지 읽기
+        person_bytes = await person_image.read()
+        garment_bytes = await garment_image.read()
+        background_bytes = await background_image.read()
+        
+        if not person_bytes or not garment_bytes or not background_bytes:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "prompt": "",
+                    "result_image": "",
+                    "message": "인물 이미지, 의상 이미지, 배경 이미지를 모두 업로드해주세요.",
+                    "llm": None
+                },
+                status_code=400,
+            )
+        
+        # PIL Image로 변환
+        person_img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
+        garment_img = Image.open(io.BytesIO(garment_bytes)).convert("RGB")
+        background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
+        
+        # V5 통합 트라이온 서비스 호출
+        result = await generate_unified_tryon_v5(person_img, garment_img, background_img)
+        
+        if result["success"]:
+            return JSONResponse(result)
+        else:
+            status_code = 500 if "error" in result else 400
+            return JSONResponse(result, status_code=status_code)
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"통합 트라이온 V5 엔드포인트 오류: {e}")
+        print(error_detail)
+        
+        return JSONResponse(
+            {
+                "success": False,
+                "prompt": "",
+                "result_image": "",
+                "message": f"통합 트라이온 V5 처리 중 오류가 발생했습니다: {str(e)}",
                 "llm": None
             },
             status_code=500,

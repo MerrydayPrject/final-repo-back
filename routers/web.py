@@ -177,6 +177,16 @@ async def pose_landmark_visualizer_page(request: Request):
     return templates.TemplateResponse("pose_landmark_visualizer.html", {"request": request})
 
 
+@router.get("/prompt-test", response_class=HTMLResponse, tags=["Web Interface"])
+async def prompt_test_page(request: Request):
+    """
+    V4 프롬프트 테스트 페이지
+    
+    V4 파이프라인의 프롬프트를 변경하면서 기본 vs 커스텀 결과를 비교하는 페이지
+    """
+    return templates.TemplateResponse("prompt_test.html", {"request": request})
+
+
 @router.get("/favicon.ico")
 async def favicon():
     """파비콘 제공"""

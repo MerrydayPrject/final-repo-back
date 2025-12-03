@@ -29,9 +29,23 @@ class DressCheckService:
         return img_str
     
     def _build_prompt(self, mode: str) -> str:
-        """프롬프트 생성"""
+        """프롬프트 생성 (파일에서 로드)"""
+        # 프롬프트 파일 경로 설정
         if mode == "fast":
-            return """이 이미지를 분석하여 다음 정보를 JSON 형식으로 반환해주세요:
+            prompt_filename = "dress_check_fast.txt"
+        else:  # accurate
+            prompt_filename = "dress_check_accurate.txt"
+        
+        prompt_path = os.path.join(os.getcwd(), "prompts", "dress_check", prompt_filename)
+        
+        try:
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            print(f"WARNING: 드레스 체크 프롬프트 파일을 찾을 수 없습니다: {prompt_path}")
+            # Fallback: 기본 프롬프트 반환
+            if mode == "fast":
+                return """이미지를 분석하여 다음 정보를 JSON 형식으로 반환해주세요:
 {
     "dress": true 또는 false,
     "confidence": 0.0부터 1.0 사이의 숫자,
@@ -44,8 +58,8 @@ confidence는 판별의 확신도를 0.0~1.0 사이의 숫자로 표현하세요
 category는 드레스인 경우 스타일(예: "벨라인", "A라인", "머메이드" 등), 일반 옷인 경우 종류(예: "상의", "하의", "아우터" 등)를 한글로 작성하세요.
 
 반드시 JSON 형식만 반환하고, 다른 설명은 포함하지 마세요."""
-        else:  # accurate
-            return """이미지를 자세히 분석하여 다음 정보를 정확하게 JSON 형식으로 반환해주세요:
+            else:  # accurate
+                return """이미지를 자세히 분석하여 다음 정보를 정확하게 JSON 형식으로 반환해주세요:
 
 {
     "dress": true 또는 false,
@@ -71,6 +85,17 @@ category는 드레스인 경우 스타일(예: "벨라인", "A라인", "머메�
   * 일반 옷인 경우: "상의", "하의", "아우터", "세트" 등
 
 반드시 JSON 형식만 반환하고, 다른 설명이나 주석은 포함하지 마세요."""
+        except Exception as e:
+            print(f"ERROR: 드레스 체크 프롬프트 로드 실패: {e}")
+            # Fallback: 기본 프롬프트 반환
+            return """이미지를 분석하여 다음 정보를 JSON 형식으로 반환해주세요:
+{
+    "dress": true 또는 false,
+    "confidence": 0.0부터 1.0 사이의 숫자,
+    "category": "드레스 스타일 또는 일반 옷 종류"
+}
+
+반드시 JSON 형식만 반환하고, 다른 설명은 포함하지 마세요."""
     
     def check_dress(
         self, 

@@ -2334,3 +2334,239 @@ async def generate_unified_tryon_v4(
             "llm": f"{XAI_PROMPT_MODEL}+{GEMINI_3_FLASH_MODEL}+{GEMINI_3_FLASH_MODEL}",
             "error": str(e)
         }
+
+
+# ============================================================
+# V5 파이프라인 프롬프트 로드 함수
+# ============================================================
+
+def load_v5_unified_prompt() -> str:
+    """
+    V5 통합 프롬프트를 로드합니다.
+    X.AI 분석 없이 Gemini가 직접 이미지를 분석하도록 설계된 정적 프롬프트입니다.
+    
+    Returns:
+        str: V5 통합 프롬프트
+    """
+    prompt_path = os.path.join(os.getcwd(), "prompts", "v5", "prompt_unified.txt")
+    abs_prompt_path = os.path.abspath(prompt_path)
+    
+    print(f"[V5] 통합 프롬프트 경로: {abs_prompt_path}")
+    print(f"[V5] 파일 존재 여부: {os.path.exists(abs_prompt_path)}")
+    
+    try:
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        template_status = "O" if len(content) > 0 else "X"
+        print(f"[V5] 통합 프롬프트 로드: {template_status} (길이: {len(content)} 문자)")
+        
+        return content
+    except FileNotFoundError:
+        print(f"[V5] WARNING: 통합 프롬프트 템플릿을 찾을 수 없습니다: {abs_prompt_path}")
+        # 기본 프롬프트 반환
+        return """Apply the outfit from Image 2 onto the person in Image 1, 
+then place them into Background Image 3 with natural lighting and seamless composition.
+Maintain the person's identity and face. Output a single photorealistic image."""
+
+
+# ============================================================
+# V5 파이프라인 메인 함수
+# ============================================================
+
+async def generate_unified_tryon_v5(
+    person_img: Image.Image,
+    garment_img: Image.Image,
+    background_img: Image.Image,
+    model_id: str = "gemini-unified-v5"
+) -> Dict:
+    """
+    통합 트라이온 파이프라인 V5: Gemini 3 Flash 직접 처리 (X.AI 제거)
+    - X.AI 이미지 분석 단계 제거
+    - Gemini 3 Flash가 직접 이미지를 분석하고 의상 교체 + 배경 합성 수행
+    
+    Args:
+        person_img: 사람 이미지 (PIL Image)
+        garment_img: 의상 이미지 (PIL Image)
+        background_img: 배경 이미지 (PIL Image)
+        model_id: 모델 ID (기본값: "gemini-unified-v5")
+    
+    Returns:
+        dict: {
+            "success": bool,
+            "prompt": str,
+            "result_image": str (base64),
+            "message": str,
+            "llm": str,
+            "error": Optional[str]
+        }
+    """
+    start_time = time.time()
+    used_prompt = ""
+    
+    try:
+        # ============================================================
+        # V5 파이프라인 시작
+        # ============================================================
+        print("\n" + "="*80)
+        print("V5 파이프라인 시작 (X.AI 제거, Gemini 직접 처리)")
+        print("="*80)
+        
+        # 배경 이미지는 원본 그대로 유지
+        background_img_processed = background_img
+        
+        # ============================================================
+        # Gemini 3 Flash로 의상 교체 + 배경 합성 통합 처리
+        # ============================================================
+        try:
+            client_pool = get_gemini_client_pool()
+        except ValueError as e:
+            error_msg = f".env 파일에 GEMINI_3_API_KEY가 설정되지 않았습니다: {str(e)}"
+            run_time = time.time() - start_time
+            
+            return {
+                "success": False,
+                "prompt": "",
+                "result_image": "",
+                "message": error_msg,
+                "llm": GEMINI_3_FLASH_MODEL,
+                "error": "gemini_api_key_not_found"
+            }
+        
+        print("\n" + "="*80)
+        print("[V5] Gemini 3 Flash - 의상 교체 + 배경 합성 통합 처리")
+        print("="*80)
+        
+        # V5 통합 프롬프트 로드 (X.AI 분석 없이 정적 프롬프트만 사용)
+        unified_prompt = load_v5_unified_prompt()
+        used_prompt = unified_prompt
+        
+        print("[V5] Gemini API 호출 시작...")
+        print(f"[V5] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_img ({garment_img.size[0]}x{garment_img.size[1]}), background_img ({background_img_processed.size[0]}x{background_img_processed.size[1]})")
+        gemini_start_time = time.time()
+        
+        try:
+            response = await client_pool.generate_content_with_retry_async(
+                model=GEMINI_3_FLASH_MODEL,
+                contents=[person_img, garment_img, background_img_processed, unified_prompt]
+            )
+        except Exception as exc:
+            run_time = time.time() - start_time
+            
+            print(f"[V5] Gemini API 호출 실패: {exc}")
+            traceback.print_exc()
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": f"V5 Gemini 호출에 실패했습니다: {str(exc)}",
+                "llm": GEMINI_3_FLASH_MODEL,
+                "error": "gemini_call_failed"
+            }
+        
+        gemini_latency = time.time() - gemini_start_time
+        print(f"[V5] Gemini API 응답 수신 완료 (지연 시간: {gemini_latency:.2f}초)")
+        
+        # 응답 확인 및 이미지 추출
+        if not response.candidates or len(response.candidates) == 0:
+            error_msg = "V5: Gemini API가 응답을 생성하지 못했습니다."
+            run_time = time.time() - start_time
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": GEMINI_3_FLASH_MODEL,
+                "error": "no_response"
+            }
+        
+        candidate = response.candidates[0]
+        if not hasattr(candidate, 'content') or candidate.content is None:
+            error_msg = "V5: Gemini API 응답에 content가 없습니다."
+            run_time = time.time() - start_time
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": GEMINI_3_FLASH_MODEL,
+                "error": "no_content"
+            }
+        
+        if not hasattr(candidate.content, 'parts') or candidate.content.parts is None:
+            error_msg = "V5: Gemini API 응답에 parts가 없습니다."
+            run_time = time.time() - start_time
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": GEMINI_3_FLASH_MODEL,
+                "error": "no_parts"
+            }
+        
+        # 이미지 추출
+        image_parts = [
+            part.inline_data.data
+            for part in candidate.content.parts
+            if hasattr(part, 'inline_data') and part.inline_data
+        ]
+        
+        if not image_parts:
+            error_msg = "V5: Gemini API가 이미지를 생성하지 못했습니다."
+            run_time = time.time() - start_time
+            
+            return {
+                "success": False,
+                "prompt": used_prompt,
+                "result_image": "",
+                "message": error_msg,
+                "llm": GEMINI_3_FLASH_MODEL,
+                "error": "no_image_generated"
+            }
+        
+        # 최종 결과 이미지 변환
+        final_img = decode_base64_to_image(image_parts[0])
+        print(f"[V5] 의상 교체 + 배경 합성 완료 - 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
+        
+        # ============================================================
+        # 최종 결과 처리
+        # ============================================================
+        result_image_base64 = base64.b64encode(image_parts[0]).decode()
+        
+        run_time = time.time() - start_time
+        
+        print("\n" + "="*80)
+        print("[V5] 파이프라인 완료")
+        print("="*80)
+        print(f"전체 실행 시간: {run_time:.2f}초")
+        print(f"Gemini 지연 시간: {gemini_latency:.2f}초")
+        print(f"최종 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
+        print("="*80 + "\n")
+        
+        return {
+            "success": True,
+            "prompt": used_prompt,
+            "result_image": f"data:image/png;base64,{result_image_base64}",
+            "message": "통합 트라이온 파이프라인 V5가 성공적으로 완료되었습니다.",
+            "llm": GEMINI_3_FLASH_MODEL
+        }
+        
+    except Exception as e:
+        error_detail = traceback.format_exc()
+        run_time = time.time() - start_time
+        
+        print(f"통합 트라이온 파이프라인 V5 오류: {e}")
+        traceback.print_exc()
+        
+        return {
+            "success": False,
+            "prompt": used_prompt,
+            "result_image": "",
+            "message": f"통합 트라이온 파이프라인 V5 중 오류 발생: {str(e)}",
+            "llm": GEMINI_3_FLASH_MODEL,
+            "error": str(e)
+        }

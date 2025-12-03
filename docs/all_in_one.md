@@ -405,6 +405,14 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 | GET | `/admin/dress-manage` | 드레스 관리자 페이지 |
 | GET | `/favicon.ico` | 파비콘 제공 |
 
+### 6.2.1 누끼V2 (nukki_v2_router.py)
+
+| 메서드 | 엔드포인트 | 설명 |
+|--------|-----------|------|
+| GET | `/nukki-v2` | 누끼V2 테스트 페이지 |
+| POST | `/api/nukki-v2/process` | Gemini3 + GPT-image-1 동시 실행으로 Ghost Mannequin 생성 |
+| POST | `/api/nukki-v2/process-single/{model}` | 단일 모델 재시도 (gemini3 또는 openai) |
+
 ### 6.3 세그멘테이션 (segmentation.py)
 
 | 메서드 | 엔드포인트 | 설명 |
@@ -801,6 +809,54 @@ curl -X POST "http://localhost:8000/api/compose_xai_gemini_v2" \
 - URL 기반 이미지 프록시
 - S3 이미지 프록시
 - CORS 문제 해결
+
+### 7.14 nukki_v2_router.py - 누끼V2 (Ghost Mannequin)
+
+**역할**: Gemini3 + OpenAI gpt-image-1 두 모델을 동시 실행하여 Ghost Mannequin 이미지 생성
+
+**주요 기능**:
+- 두 모델 동시 실행 (asyncio.gather)
+- 부분 성공 처리 (한 모델 실패해도 다른 모델 결과 반환)
+- S3 자동 저장 (입력 이미지 + 결과 이미지)
+- MySQL 자동 로깅 (result_logs 테이블)
+- 단일 모델 재시도 지원
+
+**사용 모델**:
+- `gemini-3-pro-image-preview`: Google Gemini 3 이미지 생성
+- `gpt-image-1`: OpenAI DALL-E 기반 이미지 생성
+
+**주요 파일**:
+- `routers/nukki_v2_router.py`: API 엔드포인트
+- `services/nukki_v2_service.py`: 두 모델 동시 호출 로직
+- `core/openai_image_client.py`: OpenAI 이미지 생성 클라이언트
+- `prompts/nukki/ghost_mannequin.txt`: Ghost Mannequin 프롬프트
+
+**API 사용 예시**:
+```bash
+curl -X POST "http://localhost:8000/api/nukki-v2/process" \
+  -F "file=@dress.jpg"
+
+# 응답:
+# {
+#   "success": true,
+#   "gemini3": {
+#     "success": true,
+#     "result_image": "data:image/png;base64,...",
+#     "run_time": 5.23
+#   },
+#   "openai": {
+#     "success": true,
+#     "result_image": "data:image/png;base64,...",
+#     "run_time": 8.45
+#   },
+#   "input_url": "https://s3.../logs/..._input.png",
+#   "message": "2/2 모델 성공"
+# }
+```
+
+**환경변수 설정**:
+- `GEMINI_3_API_KEY`: Gemini 3 API 키 (쉼표로 구분하여 여러 키 지원)
+- `OPENAI_API_KEY`: OpenAI API 키
 
 ---
 
