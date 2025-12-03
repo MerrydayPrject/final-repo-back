@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>누끼V2 - Ghost Mannequin</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/nukki_v2.css">
+</head>
+
+<body>
+    <div class="container">
+        <header class="admin-header">
+            <div class="admin-header-content">
+                <div>
+                    <h1>누끼V2 - Ghost Mannequin</h1>
+                    <p class="admin-subtitle">Gemini3 + DALL-E-3 두 모델로 동시 처리</p>
+                </div>
+                <a href="/" class="btn-home">홈으로</a>
+            </div>
+        </header>
+
+        <main>
+            <!-- 이미지 업로드 섹션 -->
+            <section class="upload-section">
+                <label for="fileInput" class="custum-file-upload" id="uploadArea">
+                    <div class="icon">
+                        <svg viewBox="0 0 24 24" fill="" xmlns="http://www.w3.org/2000/svg">
+                            <g id="SVGRepo_iconCarrier">
+                                <path fill-rule="evenodd" clip-rule="evenodd"
+                                    d="M10 1C9.73478 1 9.48043 1.10536 9.29289 1.29289L3.29289 7.29289C3.10536 7.48043 3 7.73478 3 8V20C3 21.6569 4.34315 23 6 23H7C7.55228 23 8 22.5523 8 22C8 21.4477 7.55228 21 7 21H6C5.44772 21 5 20.5523 5 20V9H10C10.5523 9 11 8.55228 11 8V3H18C18.5523 3 19 3.44772 19 4V9C19 9.55228 19.4477 10 20 10C20.5523 10 21 9.55228 21 9V4C21 2.34315 19.6569 1 18 1H10ZM9 7H6.41421L9 4.41421V7ZM14 15.5C14 14.1193 15.1193 13 16.5 13C17.8807 13 19 14.1193 19 15.5V16V17H20C21.1046 17 22 17.8954 22 19C22 20.1046 21.1046 21 20 21H13C11.8954 21 11 20.1046 11 19C11 17.8954 11.8954 17 13 17H14V16V15.5ZM16.5 11C14.142 11 12.2076 12.8136 12.0156 15.122C10.2825 15.5606 9 17.1305 9 19C9 21.2091 10.7909 23 13 23H20C22.2091 23 24 21.2091 24 19C24 17.1305 22.7175 15.5606 20.9844 15.122C20.7924 12.8136 18.858 11 16.5 11Z"
+                                    fill=""></path>
+                            </g>
+                        </svg>
+                    </div>
+                    <div class="text">
+                        <span>드레스 이미지를 업로드하세요</span>
+                        <p class="upload-hint">클릭 또는 드래그 앤 드랍</p>
+                    </div>
+                    <input id="fileInput" type="file" accept="image/*">
+                </label>
+
+                <!-- 미리보기 영역 -->
+                <div id="previewSection" class="preview-section" style="display: none;">
+                    <div class="preview-header">
+                        <h3>원본 이미지</h3>
+                        <button class="remove-btn" onclick="removeImage()">✕ 제거</button>
+                    </div>
+                    <img id="previewImage" class="preview-image" alt="미리보기">
+                </div>
+
+                <!-- 실행 버튼 -->
+                <button id="processButton" class="process-button" style="display: none;" onclick="processImage()">
+                    <span class="button-icon">🚀</span>
+                    <span class="button-text">Ghost Mannequin 생성</span>
+                </button>
+            </section>
+
+            <!-- 로딩 섹션 -->
+            <section class="loading-section" id="loadingSection" style="display: none;">
+                <div class="loading-container">
+                    <div class="loading-models">
+                        <div class="model-loading" id="geminiLoading">
+                            <div class="spinner"></div>
+                            <span>Gemini3 처리 중...</span>
+                        </div>
+                        <div class="model-loading" id="openaiLoading">
+                            <div class="spinner"></div>
+                            <span>DALL-E-3 처리 중...</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 결과 섹션 -->
+            <section class="result-section" id="resultSection" style="display: none;">
+                <div class="result-header">
+                    <h2>결과</h2>
+                    <div class="result-info" id="resultInfo"></div>
+                </div>
+
+                <div class="result-grid">
+                    <!-- Gemini3 결과 -->
+                    <div class="result-card" id="geminiResult">
+                        <div class="result-card-header">
+                            <h3>Gemini3</h3>
+                            <span class="status-badge" id="geminiStatus">대기</span>
+                        </div>
+                        <div class="result-image-wrapper" id="geminiImageWrapper">
+                            <div class="placeholder">
+                                <span>결과 대기 중</span>
+                            </div>
+                        </div>
+                        <div class="result-card-footer" id="geminiFooter" style="display: none;">
+                            <span class="run-time" id="geminiTime"></span>
+                            <button class="download-btn" id="geminiDownload" onclick="downloadImage('gemini')">
+                                💾 다운로드
+                            </button>
+                        </div>
+                        <div class="error-section" id="geminiError" style="display: none;">
+                            <p class="error-message" id="geminiErrorMsg"></p>
+                            <button class="retry-btn" onclick="retryModel('gemini3')">🔄 재시도</button>
+                        </div>
+                    </div>
+
+                    <!-- OpenAI 결과 -->
+                    <div class="result-card" id="openaiResult">
+                        <div class="result-card-header">
+                            <h3>DALL-E-3</h3>
+                            <span class="status-badge" id="openaiStatus">대기</span>
+                        </div>
+                        <div class="result-image-wrapper" id="openaiImageWrapper">
+                            <div class="placeholder">
+                                <span>결과 대기 중</span>
+                            </div>
+                        </div>
+                        <div class="result-card-footer" id="openaiFooter" style="display: none;">
+                            <span class="run-time" id="openaiTime"></span>
+                            <button class="download-btn" id="openaiDownload" onclick="downloadImage('openai')">
+                                💾 다운로드
+                            </button>
+                        </div>
+                        <div class="error-section" id="openaiError" style="display: none;">
+                            <p class="error-message" id="openaiErrorMsg"></p>
+                            <button class="retry-btn" onclick="retryModel('openai')">🔄 재시도</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="reset-button" id="resetButton" onclick="resetAll()">
+                        <span>🔄</span> 새로운 이미지로 시작
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/common.js"></script>
+    <script src="/static/nukki_v2.js"></script>
+</body>
+
+</html>
+

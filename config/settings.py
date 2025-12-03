@@ -31,6 +31,10 @@ def get_gemini_3_api_keys() -> list[str]:
     keys = [key.strip() for key in api_key_str.split(",") if key.strip()]
     return keys
 
+# OpenAI API 설정
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "dall-e-3")
+
 # x.ai API 설정
 XAI_API_KEY = os.getenv("XAI_API_KEY", "")
 XAI_API_BASE_URL = os.getenv("XAI_API_BASE_URL", "https://api.x.ai/v1")

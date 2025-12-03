@@ -1,0 +1,24 @@
+Analyze the image and output JSON ONLY (no extra text, no markdown, no code fences).
+
+Schema:
+{
+  "dress": boolean,
+  "confidence": number,  // 0.0 to 1.0
+  "category": string     // MUST be written in Korean (do not output English words)
+}
+
+Rules:
+- Primary goal: **Reject non-dress and revealing clothing.** Only accept clear one-piece dresses with a skirt silhouette.
+- If the image shows underwear/lingerie/bikini/swimwear or other clearly revealing clothing, set:
+  - "dress": false
+  - "category": one of "속옷", "란제리", "비키니", "수영복"
+  - confidence high if clear.
+- **Dress Definition (CRITICAL):** one-piece garment where top and bottom are connected, **AND the lower part is a skirt silhouette.** (includes wedding dress, party dress, one-piece/원피스).
+- **Non-dress (Rejection):** tops, bottoms, outerwear, sets, **or any garment where the lower part is pants, shorts, or trousers (e.g., jumpsuits).**
+- category:
+  - If dress: "웨딩드레스" or "파티드레스" or dress silhouette label commonly written in Korean (e.g., "A라인", "머메이드", "원피스", "롱드레스").
+  - If non-dress: "상의" or "하의" or "아우터" or "세트" or "점프수트", or the revealing labels above.
+- **Ambiguity Handling:** If not clearly a one-piece dress with a skirt, set **"dress": false**.
+- confidence must be between 0.0 and 1.0.
+
+Output only a single valid JSON object.

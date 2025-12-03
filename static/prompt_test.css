@@ -1,0 +1,609 @@
+/* 파이프라인 테스트 페이지 스타일 (V4/V5) */
+
+/* 파이프라인 선택 섹션 */
+.pipeline-section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.pipeline-section h2 {
+    margin: 0 0 20px 0;
+    font-size: 1.2rem;
+    color: #333;
+}
+
+.pipeline-selector {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+
+.pipeline-option {
+    cursor: pointer;
+}
+
+.pipeline-option input[type="radio"] {
+    display: none;
+}
+
+.pipeline-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    transition: all 0.3s;
+    background: #fafafa;
+}
+
+.pipeline-option input[type="radio"]:checked + .pipeline-card {
+    border-color: #8B5CF6;
+    background: linear-gradient(135deg, #f8f5ff 0%, #fff 100%);
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15);
+}
+
+.pipeline-card:hover {
+    border-color: #8B5CF6;
+    transform: translateY(-2px);
+}
+
+.pipeline-icon {
+    font-size: 2.5rem;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f0f0f0;
+    border-radius: 12px;
+}
+
+.pipeline-option input[type="radio"]:checked + .pipeline-card .pipeline-icon {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.pipeline-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pipeline-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #333;
+}
+
+.pipeline-desc {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+/* 업로드 섹션 */
+.upload-section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.upload-section h2 {
+    margin: 0 0 20px 0;
+    font-size: 1.2rem;
+    color: #333;
+}
+
+.upload-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.upload-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.upload-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-weight: 600;
+    color: #444;
+}
+
+.upload-icon {
+    font-size: 1.2rem;
+}
+
+.upload-area {
+    position: relative;
+    border: 2px dashed #ddd;
+    border-radius: 12px;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    cursor: pointer;
+    background: #fafafa;
+}
+
+.upload-area:hover {
+    border-color: #8B5CF6;
+    background: #f8f5ff;
+}
+
+.upload-area.drag-over {
+    border-color: #8B5CF6;
+    background: #f0e8ff;
+}
+
+.upload-content {
+    text-align: center;
+    color: #888;
+}
+
+.upload-placeholder {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}
+
+.upload-btn {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: transform 0.2s;
+}
+
+.upload-btn:hover {
+    transform: translateY(-2px);
+}
+
+.preview-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+}
+
+.preview-container img {
+    width: 100%;
+    height: 200px;
+    object-fit: contain;
+    border-radius: 10px;
+}
+
+.remove-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(255, 0, 0, 0.8);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: background 0.2s;
+}
+
+.remove-btn:hover {
+    background: rgba(255, 0, 0, 1);
+}
+
+/* 프롬프트 섹션 */
+.prompt-section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.prompt-section h2 {
+    margin: 0 0 10px 0;
+    font-size: 1.2rem;
+    color: #333;
+}
+
+.section-hint {
+    margin: 0 0 20px 0;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+    border-left: 4px solid #4CAF50;
+    border-radius: 0 8px 8px 0;
+    color: #2e7d32;
+    font-size: 0.9rem;
+}
+
+.section-desc {
+    margin: 0 0 20px 0;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.section-desc strong {
+    color: #4CAF50;
+}
+
+.prompt-selectors {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.prompt-selectors-3col {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.prompt-selector label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #444;
+}
+
+.prompt-selector select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.prompt-selector select:hover,
+.prompt-selector select:focus {
+    border-color: #8B5CF6;
+    outline: none;
+}
+
+.prompt-editors {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+
+.prompt-editors-3col {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.prompt-editors-3col .prompt-editor textarea {
+    min-height: 200px;
+}
+
+.prompt-editor {
+    display: flex;
+    flex-direction: column;
+}
+
+.editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #444;
+}
+
+.char-count {
+    font-size: 0.85rem;
+    color: #888;
+    font-weight: normal;
+}
+
+.prompt-editor textarea {
+    width: 100%;
+    min-height: 300px;
+    padding: 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    resize: vertical;
+    transition: border-color 0.2s;
+}
+
+.prompt-editor textarea:focus {
+    border-color: #8B5CF6;
+    outline: none;
+}
+
+/* 액션 섹션 */
+.action-section {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.run-btn {
+    padding: 16px 48px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.run-btn:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+.run-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.action-hint {
+    margin-top: 12px;
+    color: #888;
+    font-size: 0.9rem;
+}
+
+/* 로딩 */
+.loading {
+    text-align: center;
+    padding: 40px;
+    background: #fff;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #8B5CF6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading p {
+    margin: 0;
+    color: #666;
+}
+
+.loading-hint {
+    margin-top: 10px !important;
+    font-size: 0.85rem;
+    color: #999 !important;
+}
+
+/* X.AI 프롬프트 섹션 */
+.xai-section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.xai-section h2 {
+    margin: 0 0 16px 0;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.xai-prompt {
+    background: #f8f5ff;
+    border-left: 4px solid #8B5CF6;
+    padding: 16px;
+    border-radius: 0 8px 8px 0;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* 결과 섹션 */
+.result-section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.result-section h2 {
+    margin: 0 0 16px 0;
+    font-size: 1.2rem;
+    color: #333;
+}
+
+.result-info {
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: #f0f9ff;
+    border-radius: 8px;
+    color: #0277bd;
+}
+
+.result-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+}
+
+.result-single {
+    display: flex;
+    justify-content: center;
+}
+
+.result-item-full {
+    border: 2px solid #4CAF50;
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 600px;
+    width: 100%;
+}
+
+.result-image-container-large {
+    background: #f5f5f5;
+    border-radius: 8px;
+    min-height: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+
+.result-image-container-large img {
+    max-width: 100%;
+    max-height: 600px;
+    object-fit: contain;
+}
+
+.result-prompts {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.result-item {
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 16px;
+    transition: border-color 0.2s;
+}
+
+.result-item:first-child {
+    border-color: #4CAF50;
+}
+
+.result-item:last-child {
+    border-color: #2196F3;
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.result-label {
+    font-weight: 600;
+    color: #333;
+}
+
+.result-desc {
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 12px;
+    padding: 6px 10px;
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
+.result-status {
+    font-size: 0.85rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+
+.result-status.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.result-status.error {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.result-image-container {
+    background: #f5f5f5;
+    border-radius: 8px;
+    min-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+
+.result-image-container img {
+    max-width: 100%;
+    max-height: 500px;
+    object-fit: contain;
+}
+
+.download-btn {
+    width: 100%;
+    padding: 12px;
+    background: #f5f5f5;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.download-btn:hover {
+    background: #e8e8e8;
+    border-color: #ccc;
+}
+
+/* 반응형 */
+@media (max-width: 1024px) {
+    .upload-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .pipeline-selector {
+        grid-template-columns: 1fr;
+    }
+    
+    .prompt-selectors,
+    .prompt-selectors-3col,
+    .prompt-editors,
+    .prompt-editors-3col,
+    .result-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .prompt-selectors .prompt-selector[style*="grid-column"],
+    .prompt-editors .prompt-editor[style*="grid-column"] {
+        grid-column: span 1 !important;
+    }
+}
+
