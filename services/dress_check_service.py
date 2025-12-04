@@ -3,9 +3,16 @@ import os
 import json
 import base64
 import io
+import time
+import re
 from typing import Dict, Optional
 from PIL import Image
 from openai import OpenAI
+try:
+    from openai import RateLimitError
+except ImportError:
+    # 구버전 호환성
+    RateLimitError = Exception
 
 from config.settings import GPT4O_MODEL_NAME
 
@@ -131,29 +138,65 @@ category는 드레스인 경우 스타일(예: "벨라인", "A라인", "머메�
             else:
                 model_name = "gpt-4o-mini"
             
-            # OpenAI API 호출
-            response = self.client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
+            # OpenAI API 호출 (재시도 로직 포함)
+            max_retries = 5
+            retry_delay = 0.5  # 초기 지연 시간 (초)
+            
+            for attempt in range(max_retries):
+                try:
+                    response = self.client.chat.completions.create(
+                        model=model_name,
+                        messages=[
                             {
-                                "type": "text",
-                                "text": prompt
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{img_base64}"
-                                }
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": prompt
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{img_base64}"
+                                        }
+                                    }
+                                ]
                             }
-                        ]
-                    }
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=200
-            )
+                        ],
+                        response_format={"type": "json_object"},
+                        max_tokens=200
+                    )
+                    break  # 성공 시 루프 종료
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    # Rate limit 오류 확인 (에러 코드 429 또는 메시지에 "rate limit" 포함)
+                    is_rate_limit = (
+                        "429" in error_msg or 
+                        "rate limit" in error_msg.lower() or 
+                        "rate_limit" in error_msg.lower() or
+                        isinstance(e, RateLimitError) if RateLimitError != Exception else False
+                    )
+                    
+                    if is_rate_limit and attempt < max_retries - 1:
+                        # 에러 메시지에서 재시도 시간 추출 시도
+                        wait_time = retry_delay * (2 ** attempt)  # exponential backoff
+                        
+                        # "Please try again in Xms" 패턴에서 시간 추출
+                        match = re.search(r'Please try again in (\d+)ms', error_msg)
+                        if match:
+                            wait_time = int(match.group(1)) / 1000.0  # ms를 초로 변환
+                            wait_time = min(wait_time, 10.0)  # 최대 10초로 제한
+                        else:
+                            # 기본 지연 시간 사용 (최대 5초)
+                            wait_time = min(wait_time, 5.0)
+                        
+                        print(f"Rate limit 오류 발생. {wait_time:.2f}초 후 재시도... (시도 {attempt + 1}/{max_retries})")
+                        time.sleep(wait_time)
+                        retry_delay = wait_time * 2  # 다음 재시도를 위한 지연 시간 증가
+                    else:
+                        # Rate limit이 아니거나 최대 재시도 횟수 초과
+                        raise
             
             # 응답 파싱
             response_text = response.choices[0].message.content.strip()
