@@ -263,11 +263,8 @@ function updateStats(resultsData) {
     document.getElementById('matrix-tn').textContent = conf.tn;
 }
 
-
-/****************************************************
- * 결과 표시
- ****************************************************/
-function displayResults(data) {
+// 결과 표시 (체크박스 이벤트 포함)
+function displayResults(resultsToShow) {
     const grid = document.getElementById('results-grid');
     grid.innerHTML = '';
 
@@ -294,12 +291,16 @@ function displayResults(data) {
         // 체크박스 이벤트
         card.querySelector('.manual-toggle').addEventListener('change', async e => {
             const isDress = e.target.checked;
-            result.dress = isDress;
-            result.manual = isDress;
 
+            // 개발자/사용자가 바꾼 판별값 적용
+            result.dress = isDress;
+            result.manual = isDress; // 서버용 수동 라벨
+
+            // UI 업데이트
             card.className = `result-card ${isDress ? 'dress' : 'not-dress'}`;
             card.querySelector('.status').textContent = isDress ? '🟢 드레스' : '🔴 일반 옷';
 
+            // 전체 results 기준으로 통계/혼동행렬 업데이트
             updateStats(results);
 
             try {
@@ -317,6 +318,17 @@ function displayResults(data) {
     document.getElementById('results-section').style.display = 'block';
     document.getElementById('filter-section').style.display = 'block';
     document.getElementById('stats-section').style.display = 'block';
+}
+
+// 수동 라벨 우선 getGroundTruth
+function getGroundTruth(result) {
+    // 수동 라벨이 있으면 그것이 실제값
+    if (typeof result.manual === 'boolean') return result.manual;
+
+    // 기존 필드 탐색
+    return ['groundTruth','actualDress','actual','isDress','label']
+        .map(k => result[k])
+        .find(v => typeof v === 'boolean') || null;
 }
 
 
