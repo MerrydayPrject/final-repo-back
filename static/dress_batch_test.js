@@ -1,31 +1,31 @@
-// 전역 변수
+/****************************************************
+ * 전역 상태
+ ****************************************************/
 let uploadedFiles = [];
 let results = [];
 let currentFilter = 'all';
 
-// 페이지 로드 시 초기화
+
+/****************************************************
+ * 초기화
+ ****************************************************/
 document.addEventListener('DOMContentLoaded', () => {
     setupUploadArea();
     setupThumbnailGridDragDrop();
 });
 
-// 업로드 영역 설정
+
+/****************************************************
+ * 업로드 영역 설정
+ ****************************************************/
 function setupUploadArea() {
     const uploadArea = document.getElementById('upload-area');
     const fileInput = document.getElementById('file-input');
 
-    // 클릭 이벤트
-    uploadArea.addEventListener('click', () => {
-        fileInput.click();
-    });
+    uploadArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
-    // 파일 선택 이벤트
-    fileInput.addEventListener('change', (e) => {
-        handleFiles(e.target.files);
-    });
-
-    // 드래그 앤 드롭 이벤트
-    uploadArea.addEventListener('dragover', (e) => {
+    uploadArea.addEventListener('dragover', e => {
         e.preventDefault();
         uploadArea.classList.add('dragover');
     });
@@ -34,73 +34,68 @@ function setupUploadArea() {
         uploadArea.classList.remove('dragover');
     });
 
-    uploadArea.addEventListener('drop', (e) => {
+    uploadArea.addEventListener('drop', e => {
         e.preventDefault();
         uploadArea.classList.remove('dragover');
         handleFiles(e.dataTransfer.files);
     });
 }
 
-// 파일 처리
+
+/****************************************************
+ * 파일 처리
+ ****************************************************/
 function handleFiles(files) {
     const maxFiles = 100;
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    let hasNewFiles = false;
+    const maxSize = 5 * 1024 * 1024;
+
+    let added = false;
 
     Array.from(files).forEach(file => {
-        // 파일 수 제한
         if (uploadedFiles.length >= maxFiles) {
             alert(`최대 ${maxFiles}장까지만 업로드할 수 있습니다.`);
             return;
         }
-
-        // 파일 크기 체크
         if (file.size > maxSize) {
             alert(`${file.name} 파일이 5MB를 초과합니다.`);
             return;
         }
-
-        // 이미지 파일 체크
         if (!file.type.startsWith('image/')) {
             alert(`${file.name}은(는) 이미지 파일이 아닙니다.`);
             return;
         }
-
-        // 중복 체크
         if (uploadedFiles.some(f => f.name === file.name && f.size === file.size)) {
             return;
         }
 
         uploadedFiles.push(file);
         addThumbnail(file);
-        hasNewFiles = true;
+        added = true;
     });
 
-    // 파일이 추가되면 업로드 영역 숨기기
-    if (hasNewFiles && uploadedFiles.length > 0) {
-        const uploadArea = document.getElementById('upload-area');
-        if (uploadArea) {
-            uploadArea.style.display = 'none';
-        }
+    if (added && uploadedFiles.length > 0) {
+        document.getElementById('upload-area').style.display = 'none';
     }
 }
 
-// 썸네일 추가
+
+/****************************************************
+ * 썸네일 추가
+ ****************************************************/
 function addThumbnail(file) {
     const grid = document.getElementById('thumbnail-grid');
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = e => {
+        const safeName = file.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
         const item = document.createElement('div');
         item.className = 'thumbnail-item';
         item.dataset.filename = file.name;
 
-        // 파일명을 안전하게 처리 (특수문자 이스케이프)
-        const safeFilename = file.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-
         item.innerHTML = `
             <img src="${e.target.result}" alt="${file.name}">
-            <button class="remove-btn" onclick="removeFile('${safeFilename}')" data-filename="${safeFilename}">&times;</button>
+            <button class="remove-btn" onclick="removeFile('${safeName}')">&times;</button>
         `;
 
         grid.appendChild(item);
@@ -109,59 +104,54 @@ function addThumbnail(file) {
     reader.readAsDataURL(file);
 }
 
-// 파일 제거
+
+/****************************************************
+ * 파일 제거
+ ****************************************************/
 function removeFile(filename) {
-    // 특수문자 처리
-    const decodedFilename = filename.replace(/\\'/g, "'").replace(/&quot;/g, '"');
+    const decoded = filename.replace(/\\'/g, "'").replace(/&quot;/g, '"');
 
-    uploadedFiles = uploadedFiles.filter(f => f.name !== decodedFilename);
-    const item = document.querySelector(`.thumbnail-item[data-filename="${filename}"]`);
-    if (item) {
-        item.remove();
-    }
+    uploadedFiles = uploadedFiles.filter(f => f.name !== decoded);
 
-    // 모든 파일이 제거되면 업로드 영역 다시 보이기
+    const item = document.querySelector(`.thumbnail-item[data-filename="${decoded}"]`);
+    if (item) item.remove();
+
     if (uploadedFiles.length === 0) {
-        const uploadArea = document.getElementById('upload-area');
-        if (uploadArea) {
-            uploadArea.style.display = 'block';
-        }
+        document.getElementById('upload-area').style.display = 'block';
     }
 }
 
-// 썸네일 그리드에 드래그 앤 드롭 설정
+
+/****************************************************
+ * 썸네일 그리드 Drag & Drop
+ ****************************************************/
 function setupThumbnailGridDragDrop() {
-    const thumbnailGrid = document.getElementById('thumbnail-grid');
+    const grid = document.getElementById('thumbnail-grid');
+    if (!grid) return;
 
-    if (!thumbnailGrid) return;
-
-    // 드래그 오버 이벤트
-    thumbnailGrid.addEventListener('dragover', (e) => {
+    grid.addEventListener('dragover', e => {
         e.preventDefault();
-        e.stopPropagation();
-        thumbnailGrid.classList.add('dragover');
+        grid.classList.add('dragover');
     });
 
-    // 드래그 리브 이벤트
-    thumbnailGrid.addEventListener('dragleave', (e) => {
+    grid.addEventListener('dragleave', e => {
         e.preventDefault();
-        e.stopPropagation();
-        thumbnailGrid.classList.remove('dragover');
+        grid.classList.remove('dragover');
     });
 
-    // 드롭 이벤트
-    thumbnailGrid.addEventListener('drop', (e) => {
+    grid.addEventListener('drop', e => {
         e.preventDefault();
-        e.stopPropagation();
-        thumbnailGrid.classList.remove('dragover');
-
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        grid.classList.remove('dragover');
+        if (e.dataTransfer.files?.length) {
             handleFiles(e.dataTransfer.files);
         }
     });
 }
 
-// 배치 처리
+
+/****************************************************
+ * 서버로 이미지 배치 처리
+ ****************************************************/
 async function processBatch() {
     if (uploadedFiles.length === 0) {
         alert('업로드할 이미지가 없습니다.');
@@ -170,168 +160,148 @@ async function processBatch() {
 
     const model = document.getElementById('model-select').value;
     const mode = document.getElementById('mode-select').value;
-    const processBtn = document.getElementById('process-btn');
     const progressSection = document.getElementById('progress-section');
-    const progressBar = document.getElementById('progress-bar');
-    const progressText = document.getElementById('progress-text');
 
-    // UI 업데이트
-    processBtn.disabled = true;
+    document.getElementById('process-btn').disabled = true;
     progressSection.style.display = 'block';
-    document.getElementById('results-section').style.display = 'none';
-    document.getElementById('filter-section').style.display = 'none';
-    document.getElementById('stats-section').style.display = 'none';
 
-    // FormData 생성
     const formData = new FormData();
-    uploadedFiles.forEach(file => {
-        formData.append('files', file);
-    });
+    uploadedFiles.forEach(f => formData.append('files', f));
     formData.append('model', model);
     formData.append('mode', mode);
 
     try {
-        const response = await fetch('/api/dress/batch-check', {  
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            throw new Error(`서버 오류: ${response.status}`);
-        }
+        const response = await fetch('/api/dress/batch-check', { method: 'POST', body: formData });
+        if (!response.ok) throw new Error(`서버 오류: ${response.status}`);
 
         const data = await response.json();
-
-        if (!data.success) {
-            throw new Error(data.message || '처리 실패');
-        }
+        if (!data.success) throw new Error(data.message || '처리 실패');
 
         results = data.results || [];
         displayResults(results);
         updateStats(results);
         updateProgress(100, '완료');
-
-    } catch (error) {
-        console.error('처리 오류:', error);
-        alert(`처리 중 오류가 발생했습니다: ${error.message}`);
-        updateProgress(0, '오류 발생');
+    } catch (err) {
+        alert(`처리 중 오류 발생: ${err.message}`);
+        updateProgress(0, '오류');
     } finally {
-        processBtn.disabled = false;
+        document.getElementById('process-btn').disabled = false;
     }
 }
 
-// 진행률 업데이트
-function updateProgress(percent, text) {
-    const progressBar = document.getElementById('progress-bar');
-    const progressText = document.getElementById('progress-text');
 
-    progressBar.style.width = `${percent}%`;
-    progressBar.textContent = `${percent}%`;
-    progressText.textContent = text;
+/****************************************************
+ * 진행률 업데이트
+ ****************************************************/
+function updateProgress(percent, text) {
+    const bar = document.getElementById('progress-bar');
+    document.getElementById('progress-text').textContent = text;
+
+    bar.style.width = `${percent}%`;
+    bar.textContent = `${percent}%`;
 }
 
-// 통계 + 혼동행렬 업데이트
-function updateStats(results) {
-    let total = results.length;
-    let dressCount = 0, notDressCount = 0, confidenceSum = 0;
 
-    // 혼동행렬 변수
-    let TP = 0, FP = 0, FN = 0, TN = 0;
+/****************************************************
+ * 실제 GroundTruth 얻기
+ ****************************************************/
+function getGroundTruth(result) {
+    if (typeof result.manual === 'boolean') return result.manual;
 
-    results.forEach(r => {
-        confidenceSum += r.confidence || 0;
+    const keys = ['groundTruth', 'actualDress', 'actual', 'isDress', 'label'];
 
-        // 현재 예측값
-        const predicted = r.dress; // 체크박스 눌러서 바뀐 값도 포함됨
+    for (const k of keys) {
+        if (typeof result[k] === 'boolean') return result[k];
+    }
+    return null;
+}
 
-        // 실제값(수동 수정된 값이 있으면 manual 우선)
-        const actual = (r.manual !== undefined) ? r.manual : r.true_label;
 
-        // 통계용
-        if (predicted) dressCount++;
-        else notDressCount++;
+/****************************************************
+ * 통계 + 혼동행렬 계산
+ ****************************************************/
+function updateStats(resultsData) {
+    const total = resultsData.length;
+    const dressCount = resultsData.filter(r => r.dress).length;
+    const avgConf = total ? resultsData.reduce((a, r) => a + r.confidence, 0) / total : 0;
 
-        // ✔ 혼동행렬 계산 (핵심 부분)
-        if (actual !== undefined) {
-            if (actual === true && predicted === true) TP++;
-            else if (actual === false && predicted === true) FP++;
-            else if (actual === true && predicted === false) FN++;
-            else if (actual === false && predicted === false) TN++;
-        }
-    });
+    const conf = resultsData.reduce(
+        (acc, r) => {
+            const actual = getGroundTruth(r);
+            if (typeof actual !== 'boolean') return acc;
 
-    // -------------------------
-    // 요약 통계 UI 업데이트
-    // -------------------------
+            const pred = Boolean(r.dress);
+            if (pred && actual) acc.tp++;
+            else if (pred && !actual) acc.fp++;
+            else if (!pred && actual) acc.fn++;
+            else acc.tn++;
+
+            return acc;
+        },
+        { tp: 0, fp: 0, fn: 0, tn: 0 }
+    );
+
+    const precision = conf.tp + conf.fp ? conf.tp / (conf.tp + conf.fp) : null;
+    const recall = conf.tp + conf.fn ? conf.tp / (conf.tp + conf.fn) : null;
+    const f1 = precision && recall ? (2 * precision * recall) / (precision + recall) : null;
+
+    const pct = v => (typeof v === 'number' ? (v * 100).toFixed(1) + '%' : 'N/A');
+
+    // UI 업데이트
     document.getElementById('stat-total').textContent = total;
     document.getElementById('stat-dress').textContent = dressCount;
-    document.getElementById('stat-not-dress').textContent = notDressCount;
-    document.getElementById('stat-avg-confidence').textContent = ((confidenceSum/total)*100).toFixed(1) + '%';
+    document.getElementById('stat-not-dress').textContent = total - dressCount;
+    document.getElementById('stat-avg-confidence').textContent = pct(avgConf);
+    document.getElementById('stat-precision').textContent = pct(precision);
+    document.getElementById('stat-recall').textContent = pct(recall);
+    document.getElementById('stat-f1').textContent = pct(f1);
 
-    // -------------------------
-    // 혼동행렬 UI 반영 (핵심)
-    // -------------------------
-    document.getElementById('matrix-tp').textContent = TP;
-    document.getElementById('matrix-fp').textContent = FP;
-    document.getElementById('matrix-fn').textContent = FN;
-    document.getElementById('matrix-tn').textContent = TN;
-
-    // Precision / Recall / F1 업데이트
-    const precision = TP + FP > 0 ? (TP / (TP + FP)) : null;
-    const recall = TP + FN > 0 ? (TP / (TP + FN)) : null;
-    const f1 = (precision && recall) ? (2 * precision * recall) / (precision + recall) : null;
-
-    document.getElementById('stat-precision').textContent = precision ? (precision * 100).toFixed(1) + "%" : "N/A";
-    document.getElementById('stat-recall').textContent = recall ? (recall * 100).toFixed(1) + "%" : "N/A";
-    document.getElementById('stat-f1').textContent = f1 ? (f1 * 100).toFixed(1) + "%" : "N/A";
+    // 혼동행렬
+    document.getElementById('matrix-tp').textContent = conf.tp;
+    document.getElementById('matrix-fp').textContent = conf.fp;
+    document.getElementById('matrix-fn').textContent = conf.fn;
+    document.getElementById('matrix-tn').textContent = conf.tn;
 }
 
-// 결과 표시 (체크박스 이벤트 포함)
-function displayResults(resultsToShow) {
+
+/****************************************************
+ * 결과 표시
+ ****************************************************/
+function displayResults(data) {
     const grid = document.getElementById('results-grid');
     grid.innerHTML = '';
 
-    resultsToShow.forEach((result, index) => {
+    data.forEach(result => {
         const card = document.createElement('div');
         card.className = `result-card ${result.dress ? 'dress' : 'not-dress'}`;
-        card.dataset.index = index;
-
-        const statusEmoji = result.dress ? '🟢' : '🔴';
-        const statusText = result.dress ? '드레스' : '일반 옷';
-        const confidencePercent = (result.confidence * 100).toFixed(1);
 
         card.innerHTML = `
             <img src="${result.thumbnail || ''}" alt="${result.filename}">
             <div class="result-info">
-                <div class="status">${statusEmoji} ${statusText}</div>
-                <div class="confidence">신뢰도: ${confidencePercent}%</div>
+                <div class="status">${result.dress ? '🟢 드레스' : '🔴 일반 옷'}</div>
+                <div class="confidence">신뢰도: ${(result.confidence * 100).toFixed(1)}%</div>
                 <div>카테고리: ${result.category || 'N/A'}</div>
-                <div style="font-size: 12px; color: #999; margin-top: 5px;">${result.filename}</div>
-                <div style="margin-top: 8px;">
-                    <label>
-                        <input type="checkbox" class="manual-toggle" ${result.dress ? 'checked' : ''}>
-                        AI 판별 결과 수동 수정
-                    </label>
-                </div>
+                <div style="font-size:12px;color:#999">${result.filename}</div>
+                <label style="margin-top:6px;">
+                    <input type="checkbox" class="manual-toggle" ${result.dress ? 'checked' : ''}>
+                    수동 라벨 적용
+                </label>
             </div>
         `;
 
         grid.appendChild(card);
 
-        // 체크박스 이벤트 연결
-        const checkbox = card.querySelector('.manual-toggle');
-        checkbox.addEventListener('change', async (e) => {
+        // 체크박스 이벤트
+        card.querySelector('.manual-toggle').addEventListener('change', async e => {
             const isDress = e.target.checked;
             result.dress = isDress;
             result.manual = isDress;
 
             card.className = `result-card ${isDress ? 'dress' : 'not-dress'}`;
-            card.querySelector('.status').textContent = `${isDress ? '🟢 드레스' : '🔴 일반 옷'}`;
+            card.querySelector('.status').textContent = isDress ? '🟢 드레스' : '🔴 일반 옷';
 
-            // 전체 results 기준으로 통계/혼동행렬 업데이트
             updateStats(results);
 
-            // 서버 저장
             try {
                 await fetch('/api/dress/manual-label', {
                     method: 'POST',
@@ -347,100 +317,31 @@ function displayResults(resultsToShow) {
     document.getElementById('results-section').style.display = 'block';
     document.getElementById('filter-section').style.display = 'block';
     document.getElementById('stats-section').style.display = 'block';
-
-    // 초기 통계/혼동행렬 계산
-    updateStats(results);
 }
 
 
-
-// 필터 적용
+/****************************************************
+ * 필터 기능
+ ****************************************************/
 function filterResults(filter, event) {
     currentFilter = filter;
+
     document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
     if (event) event.target.classList.add('active');
 
     let filtered = results;
-    switch (filter) {
-        case 'dress':
-            filtered = results.filter(r => r.dress === true);
-            break;
-        case 'not-dress':
-            filtered = results.filter(r => r.dress === false);
-            break;
-        case 'low-confidence':
-            filtered = results.filter(r => r.confidence < 0.7);
-            break;
-    }
+
+    if (filter === 'dress') filtered = results.filter(r => r.dress);
+    else if (filter === 'not-dress') filtered = results.filter(r => !r.dress);
+    else if (filter === 'low-confidence') filtered = results.filter(r => r.confidence < 0.7);
 
     displayResults(filtered);
 }
 
-// Safely format percentage metrics; returns "N/A" when missing
-function formatMetric(value) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
-    return (value * 100).toFixed(1) + '%';
-}
 
-// 통계 업데이트
-function updateStats(resultsData) {
-    const total = resultsData.length;
-    const dressCount = resultsData.filter(r => r.dress).length;
-    const notDressCount = resultsData.filter(r => !r.dress).length;
-    const avgConfidence = resultsData.length > 0
-        ? resultsData.reduce((sum, r) => sum + r.confidence, 0) / resultsData.length
-        : 0;
-
-    const confusion = resultsData.reduce((acc, result) => {
-        const actual = getGroundTruth(result);
-        if (typeof actual !== 'boolean') return acc;
-
-        const predicted = Boolean(result.dress);
-        acc.evaluated += 1;
-
-        if (predicted && actual) acc.tp += 1;
-        else if (predicted && !actual) acc.fp += 1;
-        else if (!predicted && actual) acc.fn += 1;
-        else acc.tn += 1;
-
-        return acc;
-    }, { tp: 0, fp: 0, fn: 0, tn: 0, evaluated: 0 });
-
-    const precision = (confusion.tp + confusion.fp) ? confusion.tp / (confusion.tp + confusion.fp) : null;
-    const recall = (confusion.tp + confusion.fn) ? confusion.tp / (confusion.tp + confusion.fn) : null;
-    const f1 = (precision !== null && recall !== null && (precision + recall) > 0)
-        ? (2 * precision * recall) / (precision + recall)
-        : null;
-
-    document.getElementById('stat-total').textContent = total;
-    document.getElementById('stat-dress').textContent = dressCount;
-    document.getElementById('stat-not-dress').textContent = notDressCount;
-    document.getElementById('stat-avg-confidence').textContent = (avgConfidence * 100).toFixed(1) + '%';
-    document.getElementById('stat-tp').textContent = confusion.tp;
-    document.getElementById('stat-fp').textContent = confusion.fp;
-    document.getElementById('stat-fn').textContent = confusion.fn;
-    document.getElementById('stat-tn').textContent = confusion.tn;
-    document.getElementById('stat-precision').textContent = formatMetric(precision);
-    document.getElementById('stat-recall').textContent = formatMetric(recall);
-    document.getElementById('stat-f1').textContent = formatMetric(f1);
-    document.getElementById('matrix-tp').textContent = confusion.tp;
-    document.getElementById('matrix-fp').textContent = confusion.fp;
-    document.getElementById('matrix-fn').textContent = confusion.fn;
-    document.getElementById('matrix-tn').textContent = confusion.tn;
-}
-
-function getGroundTruth(result) {
-    // 1) 수동 라벨이 있으면 그걸 실제값으로 사용
-    if (typeof result.manual === 'boolean') return result.manual;
-
-    // 2) 그 외 기존 필드 탐색
-    return ['groundTruth','actualDress','actual','isDress','label']
-        .map(k => result[k])
-        .find(v => typeof v === 'boolean') || null;
-}
-
-
-// 초기화
+/****************************************************
+ * 초기화 / 재실행
+ ****************************************************/
 function resetAll() {
     uploadedFiles = [];
     results = [];
@@ -451,23 +352,20 @@ function resetAll() {
     document.getElementById('filter-section').style.display = 'none';
     document.getElementById('stats-section').style.display = 'none';
     document.getElementById('progress-section').style.display = 'none';
-    document.getElementById('file-input').value = '';
 
-    const uploadArea = document.getElementById('upload-area');
-    if (uploadArea) uploadArea.style.display = 'block';
+    document.getElementById('file-input').value = '';
+    document.getElementById('upload-area').style.display = 'block';
 }
 
-// 재실행
 function rerunProcess() {
-    if (uploadedFiles.length === 0) {
+    if (!uploadedFiles.length) {
         alert('업로드된 이미지가 없습니다.');
         return;
     }
-
     results = [];
     document.getElementById('results-section').style.display = 'none';
     document.getElementById('filter-section').style.display = 'none';
     document.getElementById('stats-section').style.display = 'none';
 
     processBatch();
- }
+}
