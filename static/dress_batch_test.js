@@ -376,6 +376,12 @@ function filterResults(filter, event) {
     displayResults(filtered);
 }
 
+// Safely format percentage metrics; returns "N/A" when missing
+function formatMetric(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
+    return (value * 100).toFixed(1) + '%';
+}
+
 // 통계 업데이트
 function updateStats(resultsData) {
     const total = resultsData.length;
@@ -424,14 +430,15 @@ function updateStats(resultsData) {
 }
 
 function getGroundTruth(result) {
+    // 1) 수동 라벨이 있으면 그걸 실제값으로 사용
+    if (typeof result.manual === 'boolean') return result.manual;
+
+    // 2) 그 외 기존 필드 탐색
     return ['groundTruth','actualDress','actual','isDress','label']
         .map(k => result[k])
         .find(v => typeof v === 'boolean') || null;
 }
 
-function formatMetric(value) {
-    return Number.isFinite(value) ? value.toFixed(2) : 'N/A';
-}
 
 // 초기화
 function resetAll() {
@@ -464,4 +471,3 @@ function rerunProcess() {
 
     processBatch();
  }
-
