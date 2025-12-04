@@ -224,6 +224,12 @@
             object-fit: cover;
             border-radius: 5px;
             margin-bottom: 10px;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        .result-card img:hover {
+            opacity: 0.8;
         }
 
         .result-info {
@@ -236,10 +242,6 @@
         .result-info .status {
             font-weight: bold;
             margin-bottom: 5px;
-        }
-
-        .result-info .confidence {
-            color: #ffc107;
         }
 
         .result-info .checkbox-container {
@@ -316,34 +318,6 @@
             border-color: #007bff;
         }
 
-        .stats-section {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-        }
-
-        .stat-item {
-            text-align: center;
-        }
-
-        .stat-item .value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #007bff;
-        }
-
-        .stat-item .label {
-            font-size: 14px;
-            color: #999;
-            margin-top: 5px;
-        }
 
         .btn-reset {
             background: #dc3545;
@@ -362,6 +336,208 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
+        }
+
+        .btn-batch-verify {
+            background: #28a745;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-batch-verify:hover:not(:disabled) {
+            background: #218838;
+        }
+
+        .btn-batch-verify:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .metrics-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .confusion-matrix {
+            display: grid;
+            grid-template-columns: auto 1fr 1fr;
+            gap: 10px;
+            margin: 20px 0;
+            max-width: 500px;
+        }
+
+        .confusion-matrix-header {
+            font-weight: bold;
+            text-align: center;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+
+        .confusion-matrix-cell {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .confusion-matrix-cell.tp {
+            background: rgba(40, 167, 69, 0.3);
+            color: #28a745;
+        }
+
+        .confusion-matrix-cell.fp {
+            background: rgba(255, 193, 7, 0.3);
+            color: #ffc107;
+        }
+
+        .confusion-matrix-cell.fn {
+            background: rgba(255, 193, 7, 0.3);
+            color: #ffc107;
+        }
+
+        .confusion-matrix-cell.tn {
+            background: rgba(40, 167, 69, 0.3);
+            color: #28a745;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .metric-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+        }
+
+        .metric-item .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 5px;
+        }
+
+        .metric-item .label {
+            font-size: 14px;
+            color: #999;
+        }
+
+        .verification-options {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .verification-options label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #f6f6f6;
+            margin: 0;
+            margin-bottom: 0;
+            user-select: none;
+        }
+
+        .verification-options input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .btn-refresh-metrics {
+            background: #17a2b8;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+
+        .image-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            cursor: pointer;
+        }
+
+        .image-modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        .image-modal-close {
+            position: absolute;
+            top: 20px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .image-modal-close:hover {
+            color: #fff;
+        }
+
+        .btn-verify {
+            background: #28a745;
+            color: white;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 8px;
+            width: 100%;
+        }
+
+        .btn-verify:hover:not(:disabled) {
+            background: #218838;
+        }
+
+        .btn-verify:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .verification-options .option-desc {
+            font-size: 11px;
+            color: #999;
+            margin-left: 18px;
+            margin-top: 2px;
+            margin-bottom: 8px;
+            line-height: 1.3;
         }
     </style>
 </head>
@@ -434,30 +610,28 @@
                 </div>
             </section>
 
-            <!-- 통계 섹션 -->
-            <section class="stats-section" id="stats-section" style="display: none;">
-                <h2>요약 통계</h2>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="value" id="stat-total">0</div>
-                        <div class="label">총 이미지 수</div>
+            <!-- 이미지 확대 모달 -->
+            <div id="image-modal" class="image-modal" onclick="closeImageModal(event)">
+                <span class="image-modal-close">&times;</span>
+                <img class="image-modal-content" id="modal-image" src="" alt="확대 이미지" onclick="event.stopPropagation()">
+            </div>
+
+            <!-- 성능지표 섹션 -->
+            <section class="metrics-section" id="metrics-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2>성능 지표</h2>
+                    <div>
+                        <label style="display: flex; align-items: center; gap: 8px; color: #f6f6f6; font-size: 14px; margin-right: 10px;">
+                            <input type="checkbox" id="show-all-data" onchange="toggleShowAllData()" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span>DB 전체 데이터 보기</span>
+                        </label>
+                        <button class="btn-refresh-metrics" onclick="refreshMetrics()">새로고침</button>
                     </div>
-                    <div class="stat-item">
-                        <div class="value" id="stat-correct">0</div>
-                        <div class="label">정답</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="value" id="stat-incorrect">0</div>
-                        <div class="label">오답</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="value" id="stat-accuracy">0.0%</div>
-                        <div class="label">정확도(%)</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="value" id="stat-error-rate">0.0%</div>
-                        <div class="label">오답률(%)</div>
-                    </div>
+                </div>
+                
+
+                <div id="metrics-content">
+                    <p style="color: #999; text-align: center; padding: 20px;">검수 완료된 데이터가 없습니다.</p>
                 </div>
             </section>
 
@@ -471,6 +645,9 @@
                     </div>
                 </div>
                 <div class="results-grid" id="results-grid"></div>
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="btn-batch-verify" onclick="batchVerifyAll()">전체 검수 완료</button>
+                </div>
             </section>
         </main>
     </div>
