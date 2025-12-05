@@ -189,6 +189,31 @@ def init_database():
             cursor.execute(create_daily_visitors_table)
             connection.commit()
             print("DB 테이블 생성 완료: daily_visitors")
+            
+            # dress_check_logs 테이블 생성
+            create_dress_check_logs_table = """
+            CREATE TABLE IF NOT EXISTS dress_check_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                filename VARCHAR(255),
+                image_hash VARCHAR(64),
+                model VARCHAR(50),
+                mode VARCHAR(20),
+                predicted_dress BOOLEAN,
+                confidence FLOAT,
+                category VARCHAR(100),
+                verified_dress BOOLEAN DEFAULT NULL,
+                is_verified BOOLEAN DEFAULT FALSE,
+                verified_at TIMESTAMP NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_created_at (created_at),
+                INDEX idx_is_verified (is_verified),
+                INDEX idx_predicted (predicted_dress),
+                INDEX idx_verified (verified_dress)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='드레스 판별 로그 및 검수 결과';
+            """
+            cursor.execute(create_dress_check_logs_table)
+            connection.commit()
+            print("DB 테이블 생성 완료: dress_check_logs")
     except Exception as e:
         print(f"테이블 생성 오류: {e}")
     finally:

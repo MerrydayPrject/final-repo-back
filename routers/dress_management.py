@@ -1,4 +1,5 @@
 """드레스 관리 라우터"""
+import base64
 import os
 import json
 import csv
@@ -660,20 +661,24 @@ async def check_single_dress(
     model: str = Form("gpt-4o-mini"),
     mode: str = Form("fast")
 ):
-    """단일 이미지 드레스 판별"""
+    """
+    단일 이미지로 드레스 여부 판별
+    """
     try:
+        # 모델 검증
         if model not in ["gpt-4o-mini", "gpt-4o"]:
             return JSONResponse({
                 "success": False,
                 "error": "Invalid model",
-                "message": "모델은 gpt-4o-mini 또는 gpt-4o만 선택할 수 있습니다."
+                "message": "모델은 gpt-4o-mini 또는 gpt-4o만 선택해주세요."
             }, status_code=400)
 
+        # 모드 검증
         if mode not in ["fast", "accurate"]:
             return JSONResponse({
                 "success": False,
                 "error": "Invalid mode",
-                "message": "모드는 fast 또는 accurate만 선택할 수 있습니다."
+                "message": "모드는 fast 또는 accurate만 선택해주세요."
             }, status_code=400)
 
         try:
@@ -685,43 +690,100 @@ async def check_single_dress(
                 "message": f"서비스 초기화 실패: {str(e)}"
             }, status_code=500)
 
-        file_content = await file.read()
-        try:
-            image = Image.open(io.BytesIO(file_content)).convert("RGB")
-        except Exception as e:
+        connection = get_db_connection()
+        if not connection:
             return JSONResponse({
                 "success": False,
-                "error": "Invalid image",
-                "message": f"이미지 로드 실패: {str(e)}"
-            }, status_code=400)
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
 
-        check_result = dress_check_service.check_dress(
-            image=image,
-            model=model,
-            mode=mode
-        )
-
-        thumbnail = None
         try:
-            image.thumbnail((240, 240))
-            buffered = io.BytesIO()
-            image.save(buffered, format="PNG")
-            thumbnail = base64.b64encode(buffered.getvalue()).decode()
-            thumbnail = f"data:image/png;base64,{thumbnail}"
-        except Exception:
-            thumbnail = None
+            file_content = await file.read()
+            if not file_content:
+                return JSONResponse({
+                    "success": False,
+                    "error": "Empty file",
+                    "message": "업로드된 파일이 비어있습니다."
+                }, status_code=400)
 
-        return JSONResponse({
-            "success": True,
-            "data": {
-                "filename": file.filename,
-                "dress": check_result["dress"],
-                "confidence": check_result["confidence"],
-                "category": check_result["category"],
-                "thumbnail": thumbnail
-            },
-            "message": "드레스 판별이 완료되었습니다."
-        })
+            # 5MB 용량 제한
+            if len(file_content) > 5 * 1024 * 1024:
+                return JSONResponse({
+                    "success": False,
+                    "error": "File too large",
+                    "message": "파일 크기는 5MB 이하로 업로드해주세요."
+                }, status_code=400)
+
+            import hashlib
+
+            try:
+                image = Image.open(io.BytesIO(file_content)).convert("RGB")
+            except Exception as e:
+                return JSONResponse({
+                    "success": False,
+                    "error": "Invalid image",
+                    "message": f"이미지 로드 실패: {str(e)}"
+                }, status_code=400)
+
+            # 이미지 해시 생성
+            image_hash = hashlib.md5(file_content).hexdigest()
+
+            # 판별
+            check_result = dress_check_service.check_dress(
+                image=image,
+                model=model,
+                mode=mode
+            )
+
+            # 썸네일 생성
+            thumbnail = None
+            try:
+                preview = image.copy()
+                preview.thumbnail((300, 300))
+                buffered = io.BytesIO()
+                preview.save(buffered, format="PNG")
+                thumb_b64 = base64.b64encode(buffered.getvalue()).decode()
+                thumbnail = f"data:image/png;base64,{thumb_b64}"
+            except Exception:
+                pass
+
+            # 로그 저장
+            record_id = None
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO dress_check_logs 
+                        (filename, image_hash, model, mode, predicted_dress, confidence, category)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        file.filename or "uploaded_image",
+                        image_hash,
+                        model,
+                        mode,
+                        check_result["dress"],
+                        check_result["confidence"],
+                        check_result["category"]
+                    ))
+                    connection.commit()
+                    record_id = cursor.lastrowid
+            except Exception as db_error:
+                print(f"DB 기록 오류: {db_error}")
+
+            return JSONResponse({
+                "success": True,
+                "result": {
+                    "filename": file.filename or "uploaded_image",
+                    "dress": check_result["dress"],
+                    "confidence": check_result["confidence"],
+                    "category": check_result["category"],
+                    "thumbnail": thumbnail,
+                    "record_id": record_id
+                },
+                "message": "판별이 완료되었습니다."
+            })
+        finally:
+            connection.close()
 
     except Exception as e:
         import traceback
@@ -729,9 +791,8 @@ async def check_single_dress(
         return JSONResponse({
             "success": False,
             "error": str(e),
-            "message": f"드레스 판별 중 오류 발생: {str(e)}"
+            "message": f"단일 판별 처리 중 오류 발생: {str(e)}"
         }, status_code=500)
-
 
 
 @router.post("/batch-check", tags=["드레스 관리"])
@@ -799,69 +860,117 @@ async def batch_check_dresses(
                 "message": f"서비스 초기화 실패: {str(e)}"
             }, status_code=500)
         
-        results = []
+        # DB 연결
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
         
-        # 각 파일 처리
-        for index, file in enumerate(files):
-            try:
-                # 파일 읽기
-                file_content = await file.read()
-                
-                # 이미지로 변환
+        results = []
+        import hashlib
+        
+        try:
+            import asyncio
+            
+            # 각 파일 처리
+            for index, file in enumerate(files):
                 try:
-                    image = Image.open(io.BytesIO(file_content)).convert("RGB")
+                    # 파일 읽기
+                    file_content = await file.read()
+                    
+                    # 이미지 해시 생성
+                    image_hash = hashlib.md5(file_content).hexdigest()
+                    
+                    # 이미지로 변환
+                    try:
+                        image = Image.open(io.BytesIO(file_content)).convert("RGB")
+                    except Exception as e:
+                        results.append({
+                            "index": index,
+                            "filename": file.filename or f"file_{index}",
+                            "dress": False,
+                            "confidence": 0.0,
+                            "category": f"이미지 로드 실패: {str(e)}",
+                            "record_id": None
+                        })
+                        continue
+                    
+                    # Rate limit 방지를 위한 지연 (각 요청 사이에 0.1초 대기)
+                    if index > 0:
+                        await asyncio.sleep(0.1)
+                    
+                    # 드레스 판별
+                    check_result = dress_check_service.check_dress(
+                        image=image,
+                        model=model,
+                        mode=mode
+                    )
+                    
+                    # 썸네일 생성 (base64)
+                    thumbnail = None
+                    try:
+                        # 썸네일 크기로 리사이즈
+                        image.thumbnail((200, 200))
+                        import base64
+                        buffered = io.BytesIO()
+                        image.save(buffered, format="PNG")
+                        thumbnail = base64.b64encode(buffered.getvalue()).decode()
+                        thumbnail = f"data:image/png;base64,{thumbnail}"
+                    except Exception:
+                        pass  # 썸네일 생성 실패해도 계속 진행
+                    
+                    # DB에 저장
+                    record_id = None
+                    try:
+                        with connection.cursor() as cursor:
+                            cursor.execute("""
+                                INSERT INTO dress_check_logs 
+                                (filename, image_hash, model, mode, predicted_dress, confidence, category)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """, (
+                                file.filename or f"file_{index}",
+                                image_hash,
+                                model,
+                                mode,
+                                check_result["dress"],
+                                check_result["confidence"],
+                                check_result["category"]
+                            ))
+                            connection.commit()
+                            record_id = cursor.lastrowid
+                    except Exception as db_error:
+                        print(f"DB 저장 오류: {db_error}")
+                        # DB 저장 실패해도 결과는 반환
+                    
+                    results.append({
+                        "index": index,
+                        "filename": file.filename or f"file_{index}",
+                        "dress": check_result["dress"],
+                        "confidence": check_result["confidence"],
+                        "category": check_result["category"],
+                        "thumbnail": thumbnail,
+                        "record_id": record_id,
+                        "rejected": check_result.get("rejected", False),
+                        "rejection_reason": check_result.get("rejection_reason", "")
+                    })
+
                 except Exception as e:
+                    # 개별 파일 처리 실패 시에도 계속 진행
                     results.append({
                         "index": index,
                         "filename": file.filename or f"file_{index}",
                         "dress": False,
                         "confidence": 0.0,
-                        "category": f"이미지 로드 실패: {str(e)}"
+                        "category": f"처리 오류: {str(e)}",
+                        "record_id": None
                     })
                     continue
-                
-                # 드레스 판별
-                check_result = dress_check_service.check_dress(
-                    image=image,
-                    model=model,
-                    mode=mode
-                )
-                
-                # 썸네일 생성 (base64)
-                thumbnail = None
-                try:
-                    # 썸네일 크기로 리사이즈
-                    image.thumbnail((200, 200))
-                    import base64
-                    buffered = io.BytesIO()
-                    image.save(buffered, format="PNG")
-                    thumbnail = base64.b64encode(buffered.getvalue()).decode()
-                    thumbnail = f"data:image/png;base64,{thumbnail}"
-                except Exception:
-                    pass  # 썸네일 생성 실패해도 계속 진행
-                
-                results.append({
-                    "index": index,
-                    "filename": file.filename or f"file_{index}",
-                    "dress": check_result["dress"],
-                    "confidence": check_result["confidence"],
-                    "category": check_result["category"],
-                    "rejected": check_result.get("rejected", False),
-                    "rejection_reason": check_result.get("rejection_reason", ""),
-                    "thumbnail": thumbnail
-                })
-                
-            except Exception as e:
-                # 개별 파일 처리 실패 시에도 계속 진행
-                results.append({
-                    "index": index,
-                    "filename": file.filename or f"file_{index}",
-                    "dress": False,
-                    "confidence": 0.0,
-                    "category": f"처리 오류: {str(e)}"
-                })
-                continue
-        
+        finally:
+            connection.close()
+
         return JSONResponse({
             "success": True,
             "results": results,
@@ -875,4 +984,211 @@ async def batch_check_dresses(
             "success": False,
             "error": str(e),
             "message": f"배치 처리 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.post("/verify", tags=["드레스 관리"])
+async def verify_dress_check(request: Request):
+    """
+    드레스 판별 결과 검수 저장
+    
+    Args:
+        Body: {
+            "record_id": int,
+            "verified_dress": bool
+        }
+    
+    Returns:
+        {
+            "success": bool,
+            "message": str
+        }
+    """
+    try:
+        body = await request.json()
+        record_id = body.get("record_id")
+        verified_dress = body.get("verified_dress")
+        
+        if record_id is None:
+            return JSONResponse({
+                "success": False,
+                "error": "Missing record_id",
+                "message": "record_id는 필수입니다."
+            }, status_code=400)
+        
+        if verified_dress is None:
+            return JSONResponse({
+                "success": False,
+                "error": "Missing verified_dress",
+                "message": "verified_dress는 필수입니다."
+            }, status_code=400)
+        
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 레코드 존재 확인
+                cursor.execute("SELECT id FROM dress_check_logs WHERE id = %s", (record_id,))
+                if not cursor.fetchone():
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Record not found",
+                        "message": f"레코드 ID {record_id}를 찾을 수 없습니다."
+                    }, status_code=404)
+                
+                # 검수 결과 업데이트
+                cursor.execute("""
+                    UPDATE dress_check_logs 
+                    SET verified_dress = %s, 
+                        is_verified = TRUE, 
+                        verified_at = NOW()
+                    WHERE id = %s
+                """, (bool(verified_dress), record_id))
+                connection.commit()
+                
+                return JSONResponse({
+                    "success": True,
+                    "message": "검수 결과가 저장되었습니다."
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"검수 저장 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.get("/metrics", tags=["드레스 관리"])
+async def get_dress_metrics(
+    days: Optional[int] = Query(None, description="최근 N일 데이터만 사용"),
+    limit: Optional[int] = Query(None, description="최근 N건 데이터만 사용")
+):
+    """
+    드레스 판별 성능 지표 조회
+    
+    Args:
+        days: 최근 N일 데이터만 사용 (선택)
+        limit: 최근 N건 데이터만 사용 (선택)
+    
+    Returns:
+        {
+            "success": bool,
+            "confusion_matrix": {
+                "TP": int,
+                "FP": int,
+                "FN": int,
+                "TN": int
+            },
+            "metrics": {
+                "precision": float,
+                "recall": float,
+                "f1": float,
+                "accuracy": float
+            },
+            "sample_count": int
+        }
+    """
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 검수 완료된 데이터만 조회
+                query = """
+                    SELECT predicted_dress, verified_dress
+                    FROM dress_check_logs
+                    WHERE is_verified = TRUE AND verified_dress IS NOT NULL
+                """
+                params = []
+                
+                if days:
+                    query += " AND created_at >= DATE_SUB(NOW(), INTERVAL %s DAY)"
+                    params.append(days)
+                
+                query += " ORDER BY created_at DESC"
+                
+                if limit:
+                    query += " LIMIT %s"
+                    params.append(limit)
+                
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+                
+                # Confusion Matrix 계산
+                TP = 0  # True Positive: 예측 드레스, 실제 드레스
+                FP = 0  # False Positive: 예측 드레스, 실제 일반옷
+                FN = 0  # False Negative: 예측 일반옷, 실제 드레스
+                TN = 0  # True Negative: 예측 일반옷, 실제 일반옷
+                
+                for row in rows:
+                    predicted = bool(row['predicted_dress'])
+                    verified = bool(row['verified_dress'])
+                    
+                    if predicted and verified:
+                        TP += 1
+                    elif predicted and not verified:
+                        FP += 1
+                    elif not predicted and verified:
+                        FN += 1
+                    else:  # not predicted and not verified
+                        TN += 1
+                
+                # 성능 지표 계산
+                sample_count = len(rows)
+                
+                # Precision = TP / (TP + FP)
+                precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+                
+                # Recall = TP / (TP + FN)
+                recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+                
+                # F1 = 2 * (Precision * Recall) / (Precision + Recall)
+                f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+                
+                # Accuracy = (TP + TN) / (TP + FP + FN + TN)
+                accuracy = (TP + TN) / sample_count if sample_count > 0 else 0.0
+                
+                return JSONResponse({
+                    "success": True,
+                    "confusion_matrix": {
+                        "TP": TP,
+                        "FP": FP,
+                        "FN": FN,
+                        "TN": TN
+                    },
+                    "metrics": {
+                        "precision": round(precision, 4),
+                        "recall": round(recall, 4),
+                        "f1": round(f1, 4),
+                        "accuracy": round(accuracy, 4)
+                    },
+                    "sample_count": sample_count
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"성능 지표 조회 중 오류 발생: {str(e)}"
         }, status_code=500)

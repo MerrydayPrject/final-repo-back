@@ -31,6 +31,7 @@ app = FastAPI(
     },
 )
 
+
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
@@ -54,7 +55,8 @@ from routers import (
     info, web, segmentation, composition, prompt, 
     body_analysis, admin, image_processing,
     proxy, models, tryon_router, body_generation, fitting_router,
-    custom_v3_router, custom_v4_router, review, auth, visitor_router
+    custom_v3_router, custom_v4_router, custom_v5_router, custom_v4v5_router,
+    review, auth, visitor_router, nukki_v2_router, prompt_test_router
 )
 
 app.include_router(info.router)
@@ -73,14 +75,14 @@ app.include_router(body_generation.router)
 app.include_router(fitting_router.router)
 app.include_router(custom_v3_router.router)
 app.include_router(custom_v4_router.router)
+app.include_router(custom_v5_router.router)
+app.include_router(custom_v4v5_router.router)
 app.include_router(review.router)
 app.include_router(visitor_router.router)
 app.include_router(manual_label_router.router)
 app.include_router(nukki_v2_router.router)
 app.include_router(prompt_test_router.router)
 
-
-# Startup 이벤트
 @app.on_event("startup")
 async def startup_event():
     """애플리케이션 시작 시 DB 초기화 및 서비스 초기화"""

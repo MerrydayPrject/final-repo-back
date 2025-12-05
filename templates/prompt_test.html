@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>파이프라인 테스트</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/prompt_test.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>파이프라인 테스트</h1>
+                    <p id="header-desc">V4/V5 파이프라인을 선택하여 테스트합니다</p>
+                </div>
+                <a href="/" class="btn-home">홈으로</a>
+            </div>
+        </header>
+
+        <main>
+            <!-- 파이프라인 선택 섹션 -->
+            <section class="pipeline-section">
+                <h2>파이프라인 선택</h2>
+                <div class="pipeline-selector">
+                    <label class="pipeline-option">
+                        <input type="radio" name="pipeline" value="v4" checked onchange="onPipelineChange()">
+                        <div class="pipeline-card">
+                            <div class="pipeline-icon">🔄</div>
+                            <div class="pipeline-info">
+                                <span class="pipeline-name">V4 파이프라인</span>
+                                <span class="pipeline-desc">X.AI 분석 → Gemini 3 생성 (Stage 1/2/3 프롬프트)</span>
+                            </div>
+                        </div>
+                    </label>
+                    <label class="pipeline-option">
+                        <input type="radio" name="pipeline" value="v5" onchange="onPipelineChange()">
+                        <div class="pipeline-card">
+                            <div class="pipeline-icon">⚡</div>
+                            <div class="pipeline-info">
+                                <span class="pipeline-name">V5 파이프라인</span>
+                                <span class="pipeline-desc">Gemini 3 직접 처리 (통합 프롬프트 1개)</span>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </section>
+
+            <!-- 이미지 업로드 섹션 -->
+            <section class="upload-section">
+                <h2>이미지 업로드</h2>
+                <div class="upload-grid">
+                    <div class="upload-item">
+                        <label class="upload-label">
+                            <span class="upload-icon">👤</span>
+                            인물 이미지
+                        </label>
+                        <div class="upload-area" id="upload-person">
+                            <input type="file" id="input-person" accept="image/*" style="display: none;"
+                                onchange="handleImageUpload(event, 'person')">
+                            <div class="upload-content">
+                                <div class="upload-placeholder">📁</div>
+                                <p>클릭하여 업로드</p>
+                                <button class="upload-btn"
+                                    onclick="document.getElementById('input-person').click()">파일 선택</button>
+                            </div>
+                            <div class="preview-container" id="preview-person" style="display: none;">
+                                <img id="img-person" alt="Person Preview">
+                                <button class="remove-btn" onclick="removeImage('person')">&times;</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="upload-item">
+                        <label class="upload-label">
+                            <span class="upload-icon">👗</span>
+                            의상 이미지
+                        </label>
+                        <div class="upload-area" id="upload-garment">
+                            <input type="file" id="input-garment" accept="image/*" style="display: none;"
+                                onchange="handleImageUpload(event, 'garment')">
+                            <div class="upload-content">
+                                <div class="upload-placeholder">📁</div>
+                                <p>클릭하여 업로드</p>
+                                <button class="upload-btn"
+                                    onclick="document.getElementById('input-garment').click()">파일 선택</button>
+                            </div>
+                            <div class="preview-container" id="preview-garment" style="display: none;">
+                                <img id="img-garment" alt="Garment Preview">
+                                <button class="remove-btn" onclick="removeImage('garment')">&times;</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="upload-item">
+                        <label class="upload-label">
+                            <span class="upload-icon">🏞️</span>
+                            배경 이미지
+                        </label>
+                        <div class="upload-area" id="upload-background">
+                            <input type="file" id="input-background" accept="image/*" style="display: none;"
+                                onchange="handleImageUpload(event, 'background')">
+                            <div class="upload-content">
+                                <div class="upload-placeholder">📁</div>
+                                <p>클릭하여 업로드</p>
+                                <button class="upload-btn"
+                                    onclick="document.getElementById('input-background').click()">파일 선택</button>
+                            </div>
+                            <div class="preview-container" id="preview-background" style="display: none;">
+                                <img id="img-background" alt="Background Preview">
+                                <button class="remove-btn" onclick="removeImage('background')">&times;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- V4 프롬프트 선택 섹션 -->
+            <section class="prompt-section" id="v4-prompt-section">
+                <h2>V4 프롬프트 선택 및 편집</h2>
+                <p class="section-hint">💡 프롬프트를 선택한 후 직접 수정할 수 있습니다. 수정된 내용이 테스트에 적용됩니다.</p>
+                <div class="prompt-selectors-3col">
+                    <div class="prompt-selector">
+                        <label>Stage 1 프롬프트 (Grok 시스템)</label>
+                        <select id="stage1-select" onchange="loadPrompt('stage1')">
+                            <option value="">-- 선택하세요 --</option>
+                        </select>
+                    </div>
+                    <div class="prompt-selector">
+                        <label>Stage 2 프롬프트 (의상 교체)</label>
+                        <select id="stage2-select" onchange="loadPrompt('stage2')">
+                            <option value="">-- 선택하세요 --</option>
+                        </select>
+                    </div>
+                    <div class="prompt-selector">
+                        <label>Stage 3 프롬프트 (배경/조명)</label>
+                        <select id="stage3-select" onchange="loadPrompt('stage3')">
+                            <option value="">-- 선택하세요 --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="prompt-editors-3col">
+                    <div class="prompt-editor">
+                        <div class="editor-header">
+                            <span>Stage 1 편집</span>
+                            <span class="char-count" id="stage1-count">0자</span>
+                        </div>
+                        <textarea id="stage1-prompt" placeholder="Stage 1 프롬프트를 선택하거나 직접 입력하세요..." oninput="updateCharCount('stage1')"></textarea>
+                    </div>
+                    <div class="prompt-editor">
+                        <div class="editor-header">
+                            <span>Stage 2 편집</span>
+                            <span class="char-count" id="stage2-count">0자</span>
+                        </div>
+                        <textarea id="stage2-prompt" placeholder="Stage 2 프롬프트를 선택하거나 직접 입력하세요..." oninput="updateCharCount('stage2')"></textarea>
+                    </div>
+                    <div class="prompt-editor">
+                        <div class="editor-header">
+                            <span>Stage 3 편집</span>
+                            <span class="char-count" id="stage3-count">0자</span>
+                        </div>
+                        <textarea id="stage3-prompt" placeholder="Stage 3 프롬프트를 선택하거나 직접 입력하세요..." oninput="updateCharCount('stage3')"></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <!-- V5 프롬프트 선택 섹션 -->
+            <section class="prompt-section" id="v5-prompt-section" style="display: none;">
+                <h2>V5 통합 프롬프트 선택 및 편집</h2>
+                <p class="section-hint">💡 프롬프트를 선택한 후 직접 수정할 수 있습니다. 수정된 내용이 테스트에 적용됩니다.</p>
+                <div class="prompt-selectors">
+                    <div class="prompt-selector" style="grid-column: span 2;">
+                        <label>통합 프롬프트 (Gemini 직접 처리)</label>
+                        <select id="v5-unified-select" onchange="loadV5Prompt()">
+                            <option value="">-- 선택하세요 --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="prompt-editors">
+                    <div class="prompt-editor" style="grid-column: span 2;">
+                        <div class="editor-header">
+                            <span>통합 프롬프트 편집</span>
+                            <span class="char-count" id="v5-unified-count">0자</span>
+                        </div>
+                        <textarea id="v5-unified-prompt" placeholder="V5 통합 프롬프트를 선택하거나 직접 입력하세요..." oninput="updateV5CharCount()" style="min-height: 400px;"></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 실행 버튼 -->
+            <section class="action-section">
+                <button class="run-btn" id="run-btn" onclick="runTest()">
+                    <span class="btn-icon">🚀</span>
+                    테스트 실행
+                </button>
+                <p class="action-hint" id="action-hint">선택한 Stage 1/2/3 프롬프트로 V4 파이프라인을 실행합니다</p>
+            </section>
+
+            <!-- 로딩 -->
+            <div class="loading" id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p id="loading-text">처리 중...</p>
+                <p class="loading-hint" id="loading-hint">V4 파이프라인 실행 중입니다. 약 30~60초 소요됩니다.</p>
+            </div>
+
+            <!-- X.AI 프롬프트 표시 (V4 전용) -->
+            <section class="xai-section" id="xai-section" style="display: none;">
+                <h2>X.AI 생성 프롬프트 (Stage 1 결과)</h2>
+                <div class="xai-prompt" id="xai-prompt"></div>
+            </section>
+
+            <!-- 결과 섹션 -->
+            <section class="result-section" id="result-section" style="display: none;">
+                <h2>결과</h2>
+                <div class="result-info">
+                    <span>처리 시간: <strong id="run-time">-</strong></span>
+                    <span class="result-prompts" id="result-prompts"></span>
+                </div>
+                <div class="result-single">
+                    <div class="result-item-full">
+                        <div class="result-header">
+                            <span class="result-label">생성 결과</span>
+                            <span class="result-status" id="result-status"></span>
+                        </div>
+                        <div class="result-image-container-large">
+                            <img id="result-image" alt="Result">
+                        </div>
+                        <button class="download-btn" onclick="downloadImage()">
+                            💾 다운로드
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/common.js"></script>
+    <script src="/static/prompt_test.js"></script>
+</body>
+
+</html>

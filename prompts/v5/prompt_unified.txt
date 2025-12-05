@@ -1,0 +1,75 @@
+UNIFIED VIRTUAL TRY-ON PIPELINE — V5 (Hair & Expression Lock)
+================================================================================
+
+INPUT IMAGES:
+- Image 1: Person (Identity, Face, Hair, Expression Source)
+- Image 2: Garment/Outfit (The clothing to apply)
+- Image 3: Background (The final scene)
+
+================================================================================
+PHASE 1: OUTFIT REPLACEMENT (STRICT)
+================================================================================
+
+TASK: APPLY THE OUTFIT FROM IMAGE 2 ONTO THE PERSON IN IMAGE 1.
+
+MANDATORY "OVERWRITE" INSTRUCTIONS:
+1. IGNORE ORIGINAL CLOTHING VOLUME. Use the estimated slimmer body shape underneath.
+2. ERASE ORIGINAL COLORS & TEXTURES of the old clothes completely.
+3. **PROTECT HEAD REGION**: The area above the neck (Face + Hair) is a "Protected Zone".
+
+CONTEXT:
+- Target: Complete replacement of attire.
+- Constraint: **Face, Hairstyle, and Expression must remain IDENTICAL.**
+
+INSTRUCTIONS:
+- Apply the outfit from Image 2 (Length, Color, Material) exactly onto the person in Image 1.
+- If the new outfit is sleeveless, generate realistic skin texture for the arms.
+- If the new outfit is a short dress or skirt, generate realistic skin texture for the legs.
+- Completely replace the footwear with shoes matching the new style.
+
+================================================================================
+PHASE 2: IDENTITY, HAIR & BACKGROUND INTEGRATION
+================================================================================
+
+PURPOSE:
+Composite the result into Background Image 3 while strictly preserving the person's head features.
+
+IDENTITY & HAIR RULES (NEVER BREAK):
+1. **EXPRESSION LOCK**: 
+   - STRICTLY PRESERVE the original facial expression (smile, gaze direction, mouth shape).
+   - Do NOT relax or change the emotion of the face.
+2. **HAIRSTYLE LOCK**: 
+   - STRICTLY PRESERVE the hairstyle from Image 1.
+   - Do NOT change hair length, color, volume, or texture.
+   - Do NOT let the background lighting alter the hair color significantly.
+3. **FACE STRUCTURE**: 
+   - Do NOT change the structural facial features or identity (eyes, nose, mouth, face shape).
+   - Only subtle lighting adjustments on the skin are allowed for integration.
+
+BACKGROUND COMPOSITION:
+- Remove the original background behind the subject entirely.
+- Use ONLY Background Image 3 as the final background.
+- Place the person at a natural scale and perspective inside the scene.
+
+LIGHTING AND COLOR MATCHING RULES:
+- Match the global light direction and intensity to Image 3.
+- Adjust the brightness of the **Body and Dress** to match the scene.
+- **CAUTION WITH FACE/HAIR**: Apply lighting adjustments very gently to the face and hair to avoid changing their appearance or color.
+- Ensure cast shadows and contact shadows are realistic.
+
+================================================================================
+WHAT TO AVOID (STRICT FINAL CHECK):
+================================================================================
+- **Don't change the hairstyle, hair color, or hair length.**
+- **Don't change the facial expression (e.g., making a serious face smile).**
+- Don't replace the person with a different individual.
+- Don't leave traces of the original clothing.
+- Don't change the dress design from Image 2.
+
+================================================================================
+OUTPUT:
+================================================================================
+Return a single photorealistic image where:
+1. The person's **Face, Hair, and Expression** are exactly from Image 1.
+2. The person is wearing ONLY the outfit from Image 2.
+3. The background is Image 3 with harmonized lighting.
