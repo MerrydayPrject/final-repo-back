@@ -89,10 +89,13 @@ class BodyAnalysisService:
             else:
                 rotation_angle = 90.0
         
+        # 어깨와 엉덩이 사이의 실제 거리 계산
+        distance = np.sqrt(dx**2 + dy**2)
+        
         print(f"[방향 감지] 세로: {is_vertical}, 가로: {is_horizontal}, 회전 필요: {needs_rotation}, 각도: {rotation_angle:.1f}도")
         print(f"  어깨 중심: ({shoulder_center_x:.3f}, {shoulder_center_y:.3f})")
         print(f"  엉덩이 중심: ({hip_center_x:.3f}, {hip_center_y:.3f})")
-        print(f"  x 차이: {dx:.3f}, y 차이: {dy:.3f}")
+        print(f"  거리: {distance:.3f}")
         
         return {
             "is_vertical": is_vertical,
@@ -122,13 +125,12 @@ class BodyAnalysisService:
         corrected_image = image.rotate(-rotation_angle, expand=True, fillcolor='white')
         return corrected_image
     
-    def extract_landmarks(self, image: Image.Image, auto_correct_orientation: bool = False) -> Optional[List[Dict]]:
+    def extract_landmarks(self, image: Image.Image) -> Optional[List[Dict]]:
         """
-        이미지에서 포즈 랜드마크 추출 (방향 자동 보정 포함)
+        이미지에서 포즈 랜드마크 추출
         
         Args:
-            image: PIL Image 객체
-            auto_correct_orientation: 자동 방향 보정 여부 (기본값: True)
+            image: PIL Image 객체 (EXIF orientation이 이미 적용된 이미지)
             
         Returns:
             랜드마크 좌표 리스트 (33개 포인트) 또는 None
@@ -137,23 +139,8 @@ class BodyAnalysisService:
             print("서비스가 초기화되지 않았습니다.")
             return None
         
-        # 1차 랜드마크 추출 (방향 확인용)
+        # 랜드마크 추출
         landmarks = self.pose_landmark_service.extract_landmarks(image)
-        
-        if landmarks is None or len(landmarks) < 33:
-            return landmarks
-        
-        # 방향 감지 및 자동 보정
-        if auto_correct_orientation:
-            orientation = self._detect_orientation(landmarks)
-            
-            if orientation["needs_rotation"]:
-                print(f"[방향 보정] 가로로 누운 이미지 감지, {orientation['rotation_angle']:.1f}도 회전 적용")
-                # 이미지 회전
-                corrected_image = self._correct_image_orientation(image, orientation["rotation_angle"])
-                # 회전된 이미지로 다시 랜드마크 추출
-                landmarks = self.pose_landmark_service.extract_landmarks(corrected_image)
-                print(f"[방향 보정] 회전 후 랜드마크 재추출 완료")
         
         return landmarks
     
