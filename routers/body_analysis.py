@@ -5,7 +5,7 @@ import traceback
 import math
 from fastapi import APIRouter, File, UploadFile, Form, Query
 from fastapi.responses import JSONResponse
-from PIL import Image
+from PIL import Image, ImageOps
 
 from core.model_loader import get_body_analysis_service, get_image_classifier_service
 from services.body_service import determine_body_features, analyze_body_with_gemini
@@ -24,10 +24,13 @@ async def pose_landmark_visualizer(
     """
     포즈 랜드마크 시각화용 API (테스트 페이지용)
     
-    이미지를 업로드하면 MediaPipe Pose 랜드마크를 추출하고 방향 자동 보정을 적용합니다.
-    회전된 이미지(핸드폰 세로 촬영 등)도 자동으로 보정되어 표시됩니다.
+    이미지를 업로드하면 MediaPipe Pose 랜드마크를 추출합니다.
+    EXIF orientation 정보를 자동으로 적용하여 핸드폰으로 찍은 사진도 올바른 방향으로 표시됩니다.
     """
     try:
+        import base64
+        from io import BytesIO
+        
         # 체형 분석 서비스 확인
         body_analysis_service = get_body_analysis_service()
         if not body_analysis_service or not body_analysis_service.is_initialized:
@@ -37,12 +40,14 @@ async def pose_landmark_visualizer(
                 "message": "체형 분석 서비스가 초기화되지 않았습니다."
             }, status_code=500)
         
-        # 이미지 읽기
+        # 이미지 읽기 및 EXIF orientation 자동 적용
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
+        # EXIF orientation 정보에 따라 이미지 자동 회전
+        image = ImageOps.exif_transpose(image)
         
-        # 랜드마크 추출 (회전 보정 포함 - 체형 분석과 동일한 방식)
-        landmarks = body_analysis_service.extract_landmarks(image, auto_correct_orientation=True)
+        # 랜드마크 추출
+        landmarks = body_analysis_service.pose_landmark_service.extract_landmarks(image)
         
         if landmarks is None or len(landmarks) == 0:
             return JSONResponse({
@@ -74,6 +79,12 @@ async def pose_landmark_visualizer(
         else:
             body_height_diff = 0
         
+        # EXIF 적용된 이미지를 base64로 인코딩
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        corrected_image_url = f"data:image/png;base64,{image_base64}"
+        
         return JSONResponse({
             "success": True,
             "landmarks": landmarks,
@@ -82,6 +93,7 @@ async def pose_landmark_visualizer(
                 "width": image_width,
                 "height": image_height
             },
+            "corrected_image": corrected_image_url,  # EXIF 적용된 이미지
             "body_height_diff": float(body_height_diff),
             "message": "랜드마크 추출 완료"
         })
@@ -105,9 +117,11 @@ async def validate_person(
     체형분석에서는 전신 랜드마크가 필수이므로, 전신 랜드마크가 없으면 차단합니다.
     """
     try:
-        # 이미지 읽기
+        # 이미지 읽기 및 EXIF orientation 자동 적용
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
+        # EXIF orientation 정보에 따라 이미지 자동 회전
+        image = ImageOps.exif_transpose(image)
         
         classification_result = None
         is_animal_detected = False
@@ -155,7 +169,7 @@ async def validate_person(
         # 2. 전신 랜드마크 확인 (가장 중요 - 체형분석에서는 전신 랜드마크가 필수)
         body_analysis_service = get_body_analysis_service()
         if body_analysis_service and body_analysis_service.is_initialized:
-            landmarks = body_analysis_service.extract_landmarks(image, auto_correct_orientation=True)
+            landmarks = body_analysis_service.extract_landmarks(image)
             if landmarks is None or len(landmarks) == 0:
                 # 전신 랜드마크가 없으면 무조건 차단
                 print(f"❌ 전신 랜드마크 없음 - 차단")
@@ -264,7 +278,7 @@ async def validate_person(
                 # 실제 거리가 0.3 미만이거나, y 좌표 차이가 0.2 미만이면 전신이 아닌 것으로 판단
                 # (회전된 이미지도 고려하여 실제 거리와 y 좌표 차이 모두 확인)
                 if body_height_distance < 0.3 or body_height_ratio < 0.2:
-                    print(f"❌ 전신 비율 부족 (실제 거리: {body_height_distance:.3f}, y 차이: {body_height_ratio:.3f}) - 차단")
+                    print(f"❌ 전신 비율 부족 (거리: {body_height_distance:.3f}) - 차단")
                     return JSONResponse({
                         "success": True,
                         "is_person": False,
@@ -337,9 +351,11 @@ async def analyze_body(
                 "message": "체형 분석 서비스가 초기화되지 않았습니다. 모델 파일을 확인해주세요."
             }, status_code=500)
         
-        # 이미지 읽기
+        # 이미지 읽기 및 EXIF orientation 자동 적용
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
+        # EXIF orientation 정보에 따라 이미지 자동 회전
+        image = ImageOps.exif_transpose(image)
         
         # 0. 동물 감지 검증 (validatePerson과 동일한 방식)
         is_animal_detected = False
@@ -377,8 +393,8 @@ async def analyze_body(
             except Exception as e:
                 print(f"동물 감지 검증 오류 (무시): {e}")
         
-        # 1. 포즈 랜드마크 추출 (전신 감지, 회전 보정 포함)
-        landmarks = body_analysis_service.extract_landmarks(image, auto_correct_orientation=True)
+        # 1. 포즈 랜드마크 추출 (전신 감지)
+        landmarks = body_analysis_service.extract_landmarks(image)
         
         if landmarks is None:
             return JSONResponse({
@@ -608,11 +624,13 @@ async def get_pose_landmarks(
     기존 랜드마크 추출 방식과 동일하게 body_analysis_service.extract_landmarks()를 사용합니다.
     """
     try:
-        # 이미지 읽기
+        # 이미지 읽기 및 EXIF orientation 자동 적용
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
+        # EXIF orientation 정보에 따라 이미지 자동 회전
+        image = ImageOps.exif_transpose(image)
         
-        # 포즈 랜드마크 추출 (기존과 동일한 방식)
+        # 포즈 랜드마크 추출
         body_analysis_service = get_body_analysis_service()
         if not body_analysis_service or not body_analysis_service.is_initialized:
             return JSONResponse({

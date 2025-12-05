@@ -267,7 +267,7 @@ async function analyzeLandmarks() {
         const file = fileInput.files[0];
         formData.append('file', file);
         
-        const response = await fetch('/api/pose-landmarks', {
+        const response = await fetch('/api/pose-landmark-visualizer', {
             method: 'POST',
             body: formData
         });
@@ -280,32 +280,86 @@ async function analyzeLandmarks() {
         
         if (data.success && data.landmarks) {
             currentLandmarks = data.landmarks;
-            imageWidth = data.image_width;
-            imageHeight = data.image_height;
             
-            // 랜드마크 그리기
-            drawImage();
-            
-            // 정보 패널 업데이트
-            landmarkCount.textContent = data.landmarks_count;
-            imageSize.textContent = `${imageWidth} × ${imageHeight}`;
-            
-            // 상체-하체 차이 계산 (거리 공식 사용: 왼쪽 어깨(12)와 왼쪽 발목(27) 사이의 거리)
-            // sqrt((x1-x2)² + (y1-y2)²)
-            const leftShoulder = currentLandmarks.find(l => l.id === 12); // 왼쪽 어깨 (파란색)
-            const leftAnkle = currentLandmarks.find(l => l.id === 27); // 왼쪽 발목 (노란색)
-            
-            if (leftShoulder && leftAnkle && 
-                leftShoulder.visibility >= 0.3 && leftAnkle.visibility >= 0.3) {
-                const dx = leftShoulder.x - leftAnkle.x;
-                const dy = leftShoulder.y - leftAnkle.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                bodyRatio.textContent = distance.toFixed(3);
+            // 회전 보정된 이미지가 있으면 사용
+            if (data.corrected_image) {
+                const img = new Image();
+                img.onload = () => {
+                    currentImage = img;
+                    imageWidth = data.image_size.width;
+                    imageHeight = data.image_size.height;
+                    
+                    // 캔버스 크기 설정
+                    const maxWidth = 800;
+                    const maxHeight = 600;
+                    let canvasWidth = imageWidth;
+                    let canvasHeight = imageHeight;
+                    
+                    if (canvasWidth > maxWidth) {
+                        canvasHeight = (canvasHeight * maxWidth) / canvasWidth;
+                        canvasWidth = maxWidth;
+                    }
+                    if (canvasHeight > maxHeight) {
+                        canvasWidth = (canvasWidth * maxHeight) / canvasHeight;
+                        canvasHeight = maxHeight;
+                    }
+                    
+                    canvas.width = canvasWidth;
+                    canvas.height = canvasHeight;
+                    
+                    // 랜드마크 그리기
+                    drawImage();
+                    
+                    // 정보 패널 업데이트
+                    landmarkCount.textContent = data.landmarks_count;
+                    imageSize.textContent = `${imageWidth} × ${imageHeight}`;
+                    
+                    // 상체-하체 차이 계산 (거리 공식 사용: 왼쪽 어깨(12)와 왼쪽 발목(27) 사이의 거리)
+                    // sqrt((x1-x2)² + (y1-y2)²)
+                    const leftShoulder = currentLandmarks.find(l => l.id === 12); // 왼쪽 어깨 (파란색)
+                    const leftAnkle = currentLandmarks.find(l => l.id === 27); // 왼쪽 발목 (노란색)
+                    
+                    if (leftShoulder && leftAnkle && 
+                        leftShoulder.visibility >= 0.3 && leftAnkle.visibility >= 0.3) {
+                        const dx = leftShoulder.x - leftAnkle.x;
+                        const dy = leftShoulder.y - leftAnkle.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        bodyRatio.textContent = distance.toFixed(3);
+                    } else {
+                        bodyRatio.textContent = 'N/A';
+                    }
+                    
+                    infoPanel.style.display = 'block';
+                };
+                img.src = data.corrected_image;
             } else {
-                bodyRatio.textContent = 'N/A';
+                // 회전 보정된 이미지가 없으면 원본 이미지 사용 (기존 방식)
+                imageWidth = data.image_size.width;
+                imageHeight = data.image_size.height;
+                
+                // 랜드마크 그리기
+                drawImage();
+                
+                // 정보 패널 업데이트
+                landmarkCount.textContent = data.landmarks_count;
+                imageSize.textContent = `${imageWidth} × ${imageHeight}`;
+                
+                // 상체-하체 차이 계산
+                const leftShoulder = currentLandmarks.find(l => l.id === 12);
+                const leftAnkle = currentLandmarks.find(l => l.id === 27);
+                
+                if (leftShoulder && leftAnkle && 
+                    leftShoulder.visibility >= 0.3 && leftAnkle.visibility >= 0.3) {
+                    const dx = leftShoulder.x - leftAnkle.x;
+                    const dy = leftShoulder.y - leftAnkle.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    bodyRatio.textContent = distance.toFixed(3);
+                } else {
+                    bodyRatio.textContent = 'N/A';
+                }
+                
+                infoPanel.style.display = 'block';
             }
-            
-            infoPanel.style.display = 'block';
         } else {
             throw new Error('랜드마크 데이터를 찾을 수 없습니다.');
         }
