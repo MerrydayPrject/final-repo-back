@@ -244,6 +244,90 @@ async def compose_v5(
         )
 
 
+@router.post("/fit/v5v5/compose", tags=["통합 트라이온 V5V5일반"], response_model=UnifiedTryonResponse)
+async def compose_v5v5(
+    person_image: UploadFile = File(..., description="인물 이미지 파일"),
+    garment_image: UploadFile = File(..., description="의상 이미지 파일"),
+    background_image: UploadFile = File(..., description="배경 이미지 파일"),
+):
+    """
+    V5V5일반 통합 트라이온 파이프라인: V5 파이프라인을 두 번 병렬 실행하고 v5_result 반환
+    
+    - V5-1: X.AI 없이 Gemini 3 Flash 직접 처리
+    - V5-2: X.AI 없이 Gemini 3 Flash 직접 처리
+    
+    같은 V5 파이프라인을 두 번 병렬로 실행하고 v5_result만 반환합니다.
+    /fit/ 경로로 배포 가능하도록 설계되었습니다.
+    
+    Returns:
+        UnifiedTryonResponse: v5_result를 직접 반환 (단일 결과)
+    """
+    try:
+        # 이미지 읽기
+        person_bytes = await person_image.read()
+        garment_bytes = await garment_image.read()
+        background_bytes = await background_image.read()
+        
+        if not person_bytes or not garment_bytes or not background_bytes:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "prompt": "",
+                    "result_image": "",
+                    "message": "인물 이미지, 의상 이미지, 배경 이미지를 모두 업로드해주세요.",
+                    "llm": None
+                },
+                status_code=400,
+            )
+        
+        # PIL Image로 변환
+        person_img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
+        garment_img = Image.open(io.BytesIO(garment_bytes)).convert("RGB")
+        background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
+        
+        # V4V5일반 비교 실행
+        result = await run_v4v5_compare(person_img, garment_img, background_img)
+        
+        # v5_result만 반환
+        if result.get("success") and result.get("v5_result"):
+            v5_result = result["v5_result"]
+            return JSONResponse({
+                "success": v5_result.get("success", False),
+                "prompt": v5_result.get("prompt", ""),
+                "result_image": v5_result.get("result_image", ""),
+                "message": v5_result.get("message") or result.get("message", "V5V5일반 파이프라인이 완료되었습니다."),
+                "llm": v5_result.get("llm")
+            })
+        else:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "prompt": "",
+                    "result_image": "",
+                    "message": result.get("message", "V5V5일반 파이프라인 처리 중 오류가 발생했습니다."),
+                    "llm": None
+                },
+                status_code=500,
+            )
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"V5V5일반 통합 트라이온 엔드포인트 오류: {e}")
+        print(error_detail)
+        
+        return JSONResponse(
+            {
+                "success": False,
+                "prompt": "",
+                "result_image": "",
+                "message": f"V5V5일반 통합 트라이온 처리 중 오류가 발생했습니다: {str(e)}",
+                "llm": None
+            },
+            status_code=500,
+        )
+
+
 @router.post("/tryon/compare", tags=["V4V5일반"], response_model=V4V5CompareResponse)
 async def compare_v4v5(
     person_image: UploadFile = File(..., description="인물 이미지 파일"),
