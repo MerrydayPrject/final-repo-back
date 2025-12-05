@@ -251,15 +251,15 @@ async def compare_v4v5(
     background_image: UploadFile = File(..., description="배경 이미지 파일"),
 ):
     """
-    V4V5일반 비교 엔드포인트: V4/V5 파이프라인을 병렬 실행하고 두 결과를 반환
+    V4V5일반 비교 엔드포인트: V5 파이프라인을 두 번 병렬 실행하고 두 결과를 반환
     
-    - V4: X.AI 프롬프트 생성 + Gemini 3 Flash
-    - V5: X.AI 없이 Gemini 3 Flash 직접 처리
+    - V5-1: X.AI 없이 Gemini 3 Flash 직접 처리
+    - V5-2: X.AI 없이 Gemini 3 Flash 직접 처리
     
-    두 파이프라인을 병렬로 실행하여 결과를 비교할 수 있습니다.
+    같은 V5 파이프라인을 두 번 병렬로 실행하여 결과를 비교할 수 있습니다.
     
     Returns:
-        V4V5CompareResponse: V4와 V5 결과를 모두 포함한 비교 응답
+        V4V5CompareResponse: V5-1과 V5-2 결과를 모두 포함한 비교 응답
     """
     try:
         # 이미지 읽기
