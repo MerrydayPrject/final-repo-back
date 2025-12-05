@@ -17,16 +17,16 @@ async def compare_v4v5_custom(
     background_image: UploadFile = File(..., description="배경 이미지 파일"),
 ):
     """
-    V4V5커스텀 비교 엔드포인트: CustomV4/CustomV5 파이프라인을 병렬 실행하고 두 결과를 반환
+    V4V5커스텀 비교 엔드포인트: CustomV5 파이프라인을 두 번 병렬 실행하고 두 결과를 반환
     
-    - CustomV4: 의상 누끼 + X.AI 프롬프트 생성 + Gemini 3 Flash
-    - CustomV5: 의상 누끼 + V5 프롬프트 + Gemini 3 Flash 직접 처리
+    - CustomV5-1: 의상 누끼 + V5 프롬프트 + Gemini 3 Flash 직접 처리
+    - CustomV5-2: 의상 누끼 + V5 프롬프트 + Gemini 3 Flash 직접 처리
     
-    두 파이프라인을 병렬로 실행하여 결과를 비교할 수 있습니다.
+    같은 CustomV5 파이프라인을 두 번 병렬로 실행하여 결과를 비교할 수 있습니다.
     V4V5일반과 달리 의상 이미지에 누끼(배경 제거) 처리가 적용됩니다.
     
     Returns:
-        V4V5CustomCompareResponse: CustomV4와 CustomV5 결과를 모두 포함한 비교 응답
+        V4V5CustomCompareResponse: CustomV5-1과 CustomV5-2 결과를 모두 포함한 비교 응답
     """
     try:
         # 이미지 읽기

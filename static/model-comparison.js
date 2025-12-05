@@ -87,14 +87,14 @@ function renderModelButtons() {
         <div class="model-button-card" style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
             <div class="model-button-icon">⚖️</div>
             <div class="model-button-content">
-                <h3>V4V5 비교</h3>
-                <p>V4와 V5 파이프라인을 병렬 실행하여 결과를 비교합니다</p>
+                <h3>V5V5 비교</h3>
+                <p>V5 파이프라인을 두 번 병렬 실행하여 결과를 비교합니다</p>
                 <span class="model-category">합성</span>
             </div>
             <div style="width: 100%; padding: 0 10px;">
                 <select id="v4v5-pipeline-select-button" style="width: 100%; padding: 8px; border: 2px solid #e5e7eb; border-radius: 6px; font-size: 0.9em; cursor: pointer;">
-                    <option value="normal">V4V5일반 (누끼 처리 없음)</option>
-                    <option value="custom">V4V5커스텀 (누끼 처리 포함)</option>
+                    <option value="normal">V5V5일반 (누끼 처리 없음)</option>
+                    <option value="custom">V5V5커스텀 (누끼 처리 포함)</option>
                 </select>
             </div>
             <button class="model-run-btn" onclick="openV4V5CompareModal()" style="width: calc(100% - 20px); padding: 12px; font-size: 1em; margin: 0 10px;">
@@ -187,8 +187,8 @@ function createModelModals() {
                     <div class="model-modal-title">
                         <div class="model-modal-icon">⚖️</div>
                         <div>
-                            <h2>V4V5 비교</h2>
-                            <p>V4와 V5 파이프라인을 병렬 실행하여 결과를 비교합니다</p>
+                            <h2>V5V5 비교</h2>
+                            <p>V5 파이프라인을 두 번 병렬 실행하여 결과를 비교합니다</p>
                         </div>
                     </div>
                     <button class="model-modal-close" onclick="closeV4V5CompareModal()">&times;</button>
@@ -3305,12 +3305,12 @@ function openV4V5CompareModal() {
         const modalDescription = modal.querySelector('.model-modal-title p');
         
         if (modalTitle) {
-            modalTitle.textContent = isCustom ? 'V4V5커스텀 비교' : 'V4V5일반 비교';
+            modalTitle.textContent = isCustom ? 'V5V5커스텀 비교' : 'V5V5일반 비교';
         }
         if (modalDescription) {
             modalDescription.textContent = isCustom 
-                ? 'CustomV4와 CustomV5 파이프라인을 병렬 실행하여 결과를 비교합니다 (누끼 처리 포함)'
-                : 'V4와 V5 파이프라인을 병렬 실행하여 결과를 비교합니다 (누끼 처리 없음)';
+                ? 'CustomV5 파이프라인을 두 번 병렬 실행하여 결과를 비교합니다 (누끼 처리 포함)'
+                : 'V5 파이프라인을 두 번 병렬 실행하여 결과를 비교합니다 (누끼 처리 없음)';
         }
         
         modal.classList.add('show');
@@ -3438,7 +3438,7 @@ async function runV4V5Compare() {
     const isCustom = selectedPipeline === 'custom';
     
     // 로딩 텍스트 업데이트
-    const pipelineName = isCustom ? 'V4V5커스텀' : 'V4V5일반';
+    const pipelineName = isCustom ? 'V5V5커스텀' : 'V5V5일반';
     loadingText.textContent = `${pipelineName} 파이프라인을 병렬 실행 중...`;
     
     loadingDiv.style.display = 'flex';
@@ -3471,9 +3471,9 @@ async function runV4V5Compare() {
         if (data.success) {
             timeSpan.textContent = `${data.total_time || processingTime}초`;
             
-            // V4와 V5 결과 표시 (커스텀인 경우 라벨 변경)
-            const v4Label = isCustom ? 'CustomV4 결과' : 'V4 결과';
-            const v5Label = isCustom ? 'CustomV5 결과' : 'V5 결과';
+            // V5-1과 V5-2 결과 표시 (커스텀인 경우 라벨 변경)
+            const v4Label = isCustom ? 'CustomV5-1 결과' : 'V5-1 결과';
+            const v5Label = isCustom ? 'CustomV5-2 결과' : 'V5-2 결과';
             
             resultImagesDiv.innerHTML = `
                 <div class="model-result-image-item">

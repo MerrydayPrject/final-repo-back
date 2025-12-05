@@ -6,7 +6,7 @@ import base64
 from typing import Dict
 from PIL import Image
 
-from services.tryon_service import generate_unified_tryon_v4, generate_unified_tryon_v5
+from services.tryon_service import generate_unified_tryon_v5
 from services.log_service import save_test_log
 from core.s3_client import upload_log_to_s3
 
@@ -14,19 +14,6 @@ from core.s3_client import upload_log_to_s3
 # ============================================================
 # Adapter 클래스: 기존 서비스 함수를 동일한 인터페이스로 래핑
 # ============================================================
-
-class V4Adapter:
-    """V4 파이프라인 어댑터"""
-    
-    @staticmethod
-    async def run(
-        person_img: Image.Image,
-        garment_img: Image.Image,
-        background_img: Image.Image
-    ) -> Dict:
-        """V4 파이프라인 실행"""
-        return await generate_unified_tryon_v4(person_img, garment_img, background_img)
-
 
 class V5Adapter:
     """V5 파이프라인 어댑터"""
@@ -49,8 +36,8 @@ class V4V5Orchestrator:
     """V4V5일반 파이프라인 오케스트레이터"""
     
     def __init__(self):
-        self.v4_adapter = V4Adapter()
-        self.v5_adapter = V5Adapter()
+        self.v5_adapter_1 = V5Adapter()
+        self.v5_adapter_2 = V5Adapter()
     
     async def run_parallel(
         self,
@@ -88,8 +75,8 @@ class V4V5Orchestrator:
         
         # asyncio.gather로 병렬 실행
         v4_result, v5_result = await asyncio.gather(
-            self.v4_adapter.run(person_img, garment_img, background_img),
-            self.v5_adapter.run(person_img, garment_img, background_img),
+            self.v5_adapter_1.run(person_img, garment_img, background_img),
+            self.v5_adapter_2.run(person_img, garment_img, background_img),
             return_exceptions=True
         )
         
@@ -101,7 +88,7 @@ class V4V5Orchestrator:
                 "success": False,
                 "prompt": "",
                 "result_image": "",
-                "message": f"V4 파이프라인 오류: {str(v4_result)}",
+                "message": f"V5-1 파이프라인 오류: {str(v4_result)}",
                 "llm": None
             }
         
@@ -110,7 +97,7 @@ class V4V5Orchestrator:
                 "success": False,
                 "prompt": "",
                 "result_image": "",
-                "message": f"V5 파이프라인 오류: {str(v5_result)}",
+                "message": f"V5-2 파이프라인 오류: {str(v5_result)}",
                 "llm": None
             }
         
@@ -126,26 +113,26 @@ class V4V5Orchestrator:
                     image_bytes = base64.b64decode(base64_data)
                     
                     # S3 업로드
-                    v4_result_s3_url = upload_log_to_s3(image_bytes, f"{model_id}-v4", "result") or ""
+                    v4_result_s3_url = upload_log_to_s3(image_bytes, f"{model_id}-v5-1", "result") or ""
                     
                     # 로그 저장
                     save_test_log(
                         person_url=person_s3_url or "",
                         dress_url=garment_s3_url or None,
                         result_url=v4_result_s3_url or "",
-                        model=f"{model_id}-v4",
+                        model=f"{model_id}-v5-1",
                         prompt=v4_result.get("prompt", ""),
                         success=True,
                         run_time=total_time
                     )
             except Exception as e:
-                print(f"[V4V5일반] V4 결과 로깅 실패: {e}")
+                print(f"[V4V5일반] V5-1 결과 로깅 실패: {e}")
                 try:
                     save_test_log(
                         person_url=person_s3_url or "",
                         dress_url=garment_s3_url or None,
                         result_url="",
-                        model=f"{model_id}-v4",
+                        model=f"{model_id}-v5-1",
                         prompt=v4_result.get("prompt", ""),
                         success=False,
                         run_time=total_time
@@ -153,13 +140,13 @@ class V4V5Orchestrator:
                 except:
                     pass
         else:
-            # V4 실패 로깅
+            # V5-1 실패 로깅
             try:
                 save_test_log(
                     person_url=person_s3_url or "",
                     dress_url=garment_s3_url or None,
                     result_url="",
-                    model=f"{model_id}-v4",
+                    model=f"{model_id}-v5-1",
                     prompt=v4_result.get("prompt", ""),
                     success=False,
                     run_time=total_time
@@ -179,26 +166,26 @@ class V4V5Orchestrator:
                     image_bytes = base64.b64decode(base64_data)
                     
                     # S3 업로드
-                    v5_result_s3_url = upload_log_to_s3(image_bytes, f"{model_id}-v5", "result") or ""
+                    v5_result_s3_url = upload_log_to_s3(image_bytes, f"{model_id}-v5-2", "result") or ""
                     
                     # 로그 저장
                     save_test_log(
                         person_url=person_s3_url or "",
                         dress_url=garment_s3_url or None,
                         result_url=v5_result_s3_url or "",
-                        model=f"{model_id}-v5",
+                        model=f"{model_id}-v5-2",
                         prompt=v5_result.get("prompt", ""),
                         success=True,
                         run_time=total_time
                     )
             except Exception as e:
-                print(f"[V4V5일반] V5 결과 로깅 실패: {e}")
+                print(f"[V4V5일반] V5-2 결과 로깅 실패: {e}")
                 try:
                     save_test_log(
                         person_url=person_s3_url or "",
                         dress_url=garment_s3_url or None,
                         result_url="",
-                        model=f"{model_id}-v5",
+                        model=f"{model_id}-v5-2",
                         prompt=v5_result.get("prompt", ""),
                         success=False,
                         run_time=total_time
@@ -206,13 +193,13 @@ class V4V5Orchestrator:
                 except:
                     pass
         else:
-            # V5 실패 로깅
+            # V5-2 실패 로깅
             try:
                 save_test_log(
                     person_url=person_s3_url or "",
                     dress_url=garment_s3_url or None,
                     result_url="",
-                    model=f"{model_id}-v5",
+                    model=f"{model_id}-v5-2",
                     prompt=v5_result.get("prompt", ""),
                     success=False,
                     run_time=total_time
@@ -226,8 +213,8 @@ class V4V5Orchestrator:
         print("\n" + "="*80)
         print("[V4V5일반] 병렬 파이프라인 완료")
         print(f"전체 실행 시간: {total_time:.2f}초")
-        print(f"V4 성공: {v4_result.get('success', False)}")
-        print(f"V5 성공: {v5_result.get('success', False)}")
+        print(f"V5-1 성공: {v4_result.get('success', False)}")
+        print(f"V5-2 성공: {v5_result.get('success', False)}")
         print("="*80 + "\n")
         
         return {
