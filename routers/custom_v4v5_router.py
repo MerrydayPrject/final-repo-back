@@ -52,8 +52,8 @@ async def compose_v5v5_custom(
         garment_img = Image.open(io.BytesIO(garment_bytes)).convert("RGB")
         background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
         
-        # V4V5커스텀 비교 실행
-        result = await run_v4v5_custom_compare(person_img, garment_img, background_img)
+        # V4V5커스텀 비교 실행 (로깅 비활성화)
+        result = await run_v4v5_custom_compare(person_img, garment_img, background_img, enable_logging=False)
         
         # v5_result만 반환
         if result.get("success") and result.get("v5_result"):
