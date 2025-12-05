@@ -2,6 +2,7 @@
 import time
 import io
 import traceback
+import math
 from fastapi import APIRouter, File, UploadFile, Form, Query
 from fastapi.responses import JSONResponse
 from PIL import Image
@@ -24,6 +25,7 @@ async def pose_landmark_visualizer(
     포즈 랜드마크 시각화용 API (테스트 페이지용)
     
     이미지를 업로드하면 MediaPipe Pose 랜드마크를 추출하고 방향 자동 보정을 적용합니다.
+    회전된 이미지(핸드폰 세로 촬영 등)도 자동으로 보정되어 표시됩니다.
     """
     try:
         # 체형 분석 서비스 확인
@@ -39,8 +41,8 @@ async def pose_landmark_visualizer(
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
         
-        # 랜드마크 추출 (시각화용이므로 원본 이미지 방향 그대로 표시)
-        landmarks = body_analysis_service.extract_landmarks(image, auto_correct_orientation=False)
+        # 랜드마크 추출 (회전 보정 포함 - 체형 분석과 동일한 방식)
+        landmarks = body_analysis_service.extract_landmarks(image, auto_correct_orientation=True)
         
         if landmarks is None or len(landmarks) == 0:
             return JSONResponse({
@@ -153,7 +155,7 @@ async def validate_person(
         # 2. 전신 랜드마크 확인 (가장 중요 - 체형분석에서는 전신 랜드마크가 필수)
         body_analysis_service = get_body_analysis_service()
         if body_analysis_service and body_analysis_service.is_initialized:
-            landmarks = body_analysis_service.extract_landmarks(image)
+            landmarks = body_analysis_service.extract_landmarks(image, auto_correct_orientation=True)
             if landmarks is None or len(landmarks) == 0:
                 # 전신 랜드마크가 없으면 무조건 차단
                 print(f"❌ 전신 랜드마크 없음 - 차단")
@@ -183,29 +185,38 @@ async def validate_person(
             lower_body_ids = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
             upper_body_ids = [11, 12]  # 어깨
             
-            # 하체 랜드마크가 감지되었는지 확인
+            # 하체 랜드마크가 감지되었는지 확인 및 좌표 저장
             lower_body_detected = False
-            upper_body_y = None
-            lower_body_y = None
+            upper_shoulder = None  # 상체 어깨 좌표 (x, y)
+            lower_ankle = None     # 하체 발목 좌표 (x, y) - 발목 우선, 없으면 하체 중 가장 아래
+            lower_body_fallback = None  # 하체 중 가장 아래 (발목이 없을 때 사용)
+            ankle_ids = [27, 28]   # 왼쪽 발목, 오른쪽 발목
             
             for landmark in landmarks:
                 landmark_id = landmark.get("id")
                 visibility = landmark.get("visibility", 0)
+                x = landmark.get("x", 0)
                 y = landmark.get("y", 0)
                 
                 # visibility가 0.3 이상이면 감지된 것으로 판단
                 if visibility >= 0.3:
                     if landmark_id in upper_body_ids:
-                        # 어깨의 y 좌표 (상체)
-                        if upper_body_y is None or y < upper_body_y:
-                            upper_body_y = y
+                        # 어깨 좌표 저장 (y가 작은 것, 즉 위쪽)
+                        if upper_shoulder is None or y < upper_shoulder[1]:
+                            upper_shoulder = (x, y)
                     
                     if landmark_id in lower_body_ids:
                         # 하체 랜드마크 감지
                         lower_body_detected = True
-                        # 하체의 y 좌표 (하체)
-                        if lower_body_y is None or y > lower_body_y:
-                            lower_body_y = y
+                        
+                        # 발목이 있으면 발목 우선 사용
+                        if landmark_id in ankle_ids:
+                            if lower_ankle is None or y > lower_ankle[1]:
+                                lower_ankle = (x, y)
+                        else:
+                            # 하체 중 가장 아래 좌표 저장 (발목이 없을 때 대비)
+                            if lower_body_fallback is None or y > lower_body_fallback[1]:
+                                lower_body_fallback = (x, y)
             
             # 하체 랜드마크가 감지되지 않으면 차단
             if not lower_body_detected:
@@ -221,13 +232,39 @@ async def validate_person(
                     "message": "전신 사진을 넣어주세요."
                 })
             
-            # 어깨와 하체의 y 좌표 차이로 전신 여부 추가 확인
-            # 전신 사진이라면 하체가 어깨보다 아래에 있어야 함
-            if upper_body_y is not None and lower_body_y is not None:
-                body_height_ratio = lower_body_y - upper_body_y
-                # y 좌표 차이가 0.2 미만이면 전신이 아닌 것으로 판단 (너무 작은 차이)
-                if body_height_ratio < 0.2:
-                    print(f"❌ 전신 비율 부족 (상체-하체 차이: {body_height_ratio:.3f}) - 차단")
+            # 발목이 없으면 하체 중 가장 아래 좌표 사용
+            if lower_ankle is None:
+                lower_ankle = lower_body_fallback
+            
+            # 하체 좌표를 찾을 수 없으면 차단
+            if lower_ankle is None:
+                print(f"❌ 하체 좌표를 찾을 수 없음 - 차단")
+                return JSONResponse({
+                    "success": True,
+                    "is_person": False,
+                    "is_face_only": True,
+                    "face_detected": False,
+                    "landmarks_count": len(landmarks) if landmarks else 0,
+                    "detection_type": None,
+                    "classification_result": classification_result[:3] if classification_result else None,
+                    "message": "전신 사진을 넣어주세요."
+                })
+            
+            # 어깨와 하체(발목) 사이의 실제 거리로 전신 여부 확인
+            # 전신 사진이라면 상체와 하체 사이의 거리가 충분해야 함
+            if upper_shoulder is not None and lower_ankle is not None:
+                # 유클리드 거리 계산 (실제 거리)
+                dx = lower_ankle[0] - upper_shoulder[0]
+                dy = lower_ankle[1] - upper_shoulder[1]
+                body_height_distance = math.sqrt(dx**2 + dy**2)
+                
+                # y 좌표 차이 (상체-하체 높이 차이)
+                body_height_ratio = dy
+                
+                # 실제 거리가 0.3 미만이거나, y 좌표 차이가 0.2 미만이면 전신이 아닌 것으로 판단
+                # (회전된 이미지도 고려하여 실제 거리와 y 좌표 차이 모두 확인)
+                if body_height_distance < 0.3 or body_height_ratio < 0.2:
+                    print(f"❌ 전신 비율 부족 (실제 거리: {body_height_distance:.3f}, y 차이: {body_height_ratio:.3f}) - 차단")
                     return JSONResponse({
                         "success": True,
                         "is_person": False,
@@ -340,8 +377,8 @@ async def analyze_body(
             except Exception as e:
                 print(f"동물 감지 검증 오류 (무시): {e}")
         
-        # 1. 포즈 랜드마크 추출 (전신 감지)
-        landmarks = body_analysis_service.extract_landmarks(image)
+        # 1. 포즈 랜드마크 추출 (전신 감지, 회전 보정 포함)
+        landmarks = body_analysis_service.extract_landmarks(image, auto_correct_orientation=True)
         
         if landmarks is None:
             return JSONResponse({
