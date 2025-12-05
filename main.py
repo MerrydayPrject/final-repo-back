@@ -11,6 +11,7 @@ from core.model_loader import load_models
 from routers import manual_label_router
 
 
+
 # 디렉토리 생성
 Path("static").mkdir(exist_ok=True)
 Path("templates").mkdir(exist_ok=True)
@@ -51,7 +52,7 @@ templates = Jinja2Templates(directory="templates")
 # 라우터 등록
 from routers import (
     info, web, segmentation, composition, prompt, 
-    body_analysis, admin, dress_management, image_processing,
+    body_analysis, admin, image_processing,
     proxy, models, tryon_router, body_generation, fitting_router,
     custom_v3_router, custom_v4_router, review, auth, visitor_router
 )
@@ -64,7 +65,6 @@ app.include_router(composition.router)
 app.include_router(prompt.router)
 app.include_router(body_analysis.router)
 app.include_router(admin.router)
-app.include_router(dress_management.router)
 app.include_router(image_processing.router)
 app.include_router(proxy.router)
 app.include_router(models.router)
@@ -76,6 +76,9 @@ app.include_router(custom_v4_router.router)
 app.include_router(review.router)
 app.include_router(visitor_router.router)
 app.include_router(manual_label_router.router)
+app.include_router(nukki_v2_router.router)
+app.include_router(prompt_test_router.router)
+
 
 # Startup 이벤트
 @app.on_event("startup")
