@@ -1,7 +1,15 @@
 """방문자 수 관리 라우터"""
 from fastapi import APIRouter, HTTPException
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from services.database import get_db_connection
+
+# 한국 시간대(KST, UTC+9) 기준으로 날짜 계산
+KST = ZoneInfo("Asia/Seoul")
+
+def get_today_kst() -> date:
+    """한국 시간 기준 오늘 날짜 반환"""
+    return datetime.now(KST).date()
 
 router = APIRouter(prefix="/visitor", tags=["Visitor"])
 
@@ -15,7 +23,7 @@ async def increment_visitor():
     
     try:
         with connection.cursor() as cursor:
-            today = date.today()
+            today = get_today_kst()
             # UPSERT: 있으면 증가, 없으면 삽입
             cursor.execute("""
                 INSERT INTO daily_visitors (visit_date, count) 
@@ -40,7 +48,7 @@ async def get_today_visitors():
     
     try:
         with connection.cursor() as cursor:
-            today = date.today()
+            today = get_today_kst()
             cursor.execute("SELECT count FROM daily_visitors WHERE visit_date = %s", (today,))
             result = cursor.fetchone()
             return {"date": str(today), "count": result['count'] if result else 0}

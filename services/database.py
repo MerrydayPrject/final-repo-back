@@ -214,6 +214,19 @@ def init_database():
             cursor.execute(create_dress_check_logs_table)
             connection.commit()
             print("DB 테이블 생성 완료: dress_check_logs")
+            
+            # daily_synthesis_count 테이블 생성
+            create_daily_synthesis_count_table = """
+            CREATE TABLE IF NOT EXISTS daily_synthesis_count (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                synthesis_date DATE NOT NULL UNIQUE,
+                count INT DEFAULT 0,
+                INDEX idx_synthesis_date (synthesis_date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='일별 합성 카운트';
+            """
+            cursor.execute(create_daily_synthesis_count_table)
+            connection.commit()
+            print("DB 테이블 생성 완료: daily_synthesis_count")
     except Exception as e:
         print(f"테이블 생성 오류: {e}")
     finally:

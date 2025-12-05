@@ -432,3 +432,301 @@ async def delete_category_rule(request: Request):
             "message": f"규칙 삭제 중 오류 발생: {str(e)}"
         }, status_code=500)
 
+
+@router.get("/api/admin/daily-synthesis-stats", tags=["관리자"])
+async def get_daily_synthesis_stats(
+    request: Request,
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수"),
+    date: Optional[str] = Query(None, description="날짜 검색 (YYYY-MM-DD)")
+):
+    """
+    날짜별 합성 통계 조회
+    
+    daily_synthesis_count 테이블에서 날짜별 합성 통계 목록을 조회합니다.
+    """
+    # 인증 확인
+    await require_admin(request)
+    
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 날짜 필터 조건
+                where_clause = ""
+                params = []
+                
+                if date:
+                    where_clause = "WHERE synthesis_date = %s"
+                    params.append(date)
+                
+                try:
+                    # 전체 건수 조회 (테이블이 없으면 예외 발생)
+                    count_query = f"SELECT COUNT(*) as total FROM daily_synthesis_count {where_clause}"
+                    if params:
+                        cursor.execute(count_query, tuple(params))
+                    else:
+                        cursor.execute(count_query)
+                    count_result = cursor.fetchone()
+                    total = count_result['total'] if count_result else 0
+                except Exception as table_error:
+                    # 테이블이 없으면 빈 결과 반환
+                    error_str = str(table_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        return JSONResponse({
+                            "success": True,
+                            "data": [],
+                            "pagination": {
+                                "page": page,
+                                "limit": limit,
+                                "total": 0,
+                                "total_pages": 0
+                            },
+                            "message": "테이블이 아직 생성되지 않았습니다. 합성을 실행하면 자동으로 생성됩니다."
+                        })
+                    raise  # 다른 오류는 다시 발생시킴
+                
+                # 총 페이지 수 계산
+                total_pages = (total + limit - 1) // limit if total > 0 else 0
+                
+                # 오프셋 계산
+                offset = (page - 1) * limit
+                
+                # 날짜별 합성 통계 목록 조회
+                try:
+                    query = f"""
+                        SELECT 
+                            id,
+                            synthesis_date,
+                            count
+                        FROM daily_synthesis_count
+                        {where_clause}
+                        ORDER BY synthesis_date DESC
+                        LIMIT %s OFFSET %s
+                    """
+                    query_params = params + [limit, offset]
+                    cursor.execute(query, tuple(query_params))
+                    stats = cursor.fetchall() or []
+                except Exception as query_error:
+                    # 쿼리 실행 실패 시 빈 결과 반환
+                    error_str = str(query_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        stats = []
+                    else:
+                        raise  # 다른 오류는 다시 발생시킴
+                
+                # 날짜 형식 변환 (JSON 직렬화 가능하도록)
+                formatted_stats = []
+                for stat in stats:
+                    synthesis_date = stat.get('synthesis_date')
+                    # date 객체를 문자열로 변환
+                    date_str = None
+                    if synthesis_date:
+                        if hasattr(synthesis_date, 'isoformat'):
+                            date_str = synthesis_date.isoformat()
+                        else:
+                            date_str = str(synthesis_date)
+                    
+                    formatted_stat = {
+                        'id': stat.get('id'),
+                        'date': date_str,
+                        'count': stat.get('count', 0)
+                    }
+                    formatted_stats.append(formatted_stat)
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": formatted_stats,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total,
+                        "total_pages": total_pages
+                    }
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"날짜별 합성 통계 조회 오류: {error_detail}")
+        
+        # 테이블이 없거나 SQL 오류인 경우 빈 결과 반환
+        error_str = str(e).lower()
+        if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+            return JSONResponse({
+                "success": True,
+                "data": [],
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": 0,
+                    "total_pages": 0
+                },
+                "message": "테이블이 아직 생성되지 않았습니다. 합성을 한 번 실행하면 테이블이 생성됩니다."
+            })
+        
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "error_detail": error_detail,
+            "message": f"날짜별 합성 통계 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.get("/api/admin/daily-visitor-stats", tags=["관리자"])
+async def get_daily_visitor_stats(
+    request: Request,
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수"),
+    date: Optional[str] = Query(None, description="날짜 검색 (YYYY-MM-DD)")
+):
+    """
+    날짜별 조회수 통계 조회
+    
+    daily_visitors 테이블에서 날짜별 방문자 수 목록을 조회합니다.
+    """
+    # 인증 확인
+    await require_admin(request)
+    
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 날짜 필터 조건
+                where_clause = ""
+                params = []
+                
+                if date:
+                    where_clause = "WHERE visit_date = %s"
+                    params.append(date)
+                
+                try:
+                    # 전체 건수 조회 (테이블이 없으면 예외 발생)
+                    count_query = f"SELECT COUNT(*) as total FROM daily_visitors {where_clause}"
+                    if params:
+                        cursor.execute(count_query, tuple(params))
+                    else:
+                        cursor.execute(count_query)
+                    count_result = cursor.fetchone()
+                    total = count_result['total'] if count_result else 0
+                except Exception as table_error:
+                    # 테이블이 없으면 빈 결과 반환
+                    error_str = str(table_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        return JSONResponse({
+                            "success": True,
+                            "data": [],
+                            "pagination": {
+                                "page": page,
+                                "limit": limit,
+                                "total": 0,
+                                "total_pages": 0
+                            },
+                            "message": "테이블이 아직 생성되지 않았습니다."
+                        })
+                    raise  # 다른 오류는 다시 발생시킴
+                
+                # 총 페이지 수 계산
+                total_pages = (total + limit - 1) // limit if total > 0 else 0
+                
+                # 오프셋 계산
+                offset = (page - 1) * limit
+                
+                # 날짜별 방문자 통계 목록 조회
+                try:
+                    query = f"""
+                        SELECT 
+                            id,
+                            visit_date,
+                            count
+                        FROM daily_visitors
+                        {where_clause}
+                        ORDER BY visit_date DESC
+                        LIMIT %s OFFSET %s
+                    """
+                    query_params = params + [limit, offset]
+                    cursor.execute(query, tuple(query_params))
+                    stats = cursor.fetchall() or []
+                except Exception as query_error:
+                    # 쿼리 실행 실패 시 빈 결과 반환
+                    error_str = str(query_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        stats = []
+                    else:
+                        raise  # 다른 오류는 다시 발생시킴
+                
+                # 날짜 형식 변환 (JSON 직렬화 가능하도록)
+                formatted_stats = []
+                for stat in stats:
+                    visit_date = stat.get('visit_date')
+                    # date 객체를 문자열로 변환
+                    date_str = None
+                    if visit_date:
+                        if hasattr(visit_date, 'isoformat'):
+                            date_str = visit_date.isoformat()
+                        else:
+                            date_str = str(visit_date)
+                    
+                    formatted_stat = {
+                        'id': stat.get('id'),
+                        'date': date_str,
+                        'count': stat.get('count', 0)
+                    }
+                    formatted_stats.append(formatted_stat)
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": formatted_stats,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total,
+                        "total_pages": total_pages
+                    }
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"날짜별 조회수 통계 조회 오류: {error_detail}")
+        
+        # 테이블이 없거나 SQL 오류인 경우 빈 결과 반환
+        error_str = str(e).lower()
+        if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+            return JSONResponse({
+                "success": True,
+                "data": [],
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": 0,
+                    "total_pages": 0
+                },
+                "message": "테이블이 아직 생성되지 않았습니다."
+            })
+        
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "error_detail": error_detail,
+            "message": f"날짜별 조회수 통계 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+

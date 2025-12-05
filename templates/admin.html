@@ -14,18 +14,28 @@
         <section class="logs-section">
             <div class="logs-header">
                 <div class="logs-header-top">
-                    <div class="tab-buttons" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <div class="tab-buttons" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                        <!-- 로그 탭 그룹 -->
                         <button id="tabSynthesis" class="tab-button active"
                             style="padding: 10px 20px; border: 1px solid #ddd; background: #007bff; color: #fff; cursor: pointer; border-radius: 5px;">
-                            📋 합성 로그 목록
+                            📋 합성 로그
                         </button>
                         <button id="tabBodyAnalysis" class="tab-button"
                             style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
-                            📊 분석 결과 로그 목록
+                            📊 분석 로그
                         </button>
                         <button id="tabReviews" class="tab-button"
                             style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
-                            ⭐ 리뷰 로그 목록
+                            ⭐ 리뷰 로그
+                        </button>
+                        <!-- 통계 탭 그룹 -->
+                        <button id="tabSynthesisStats" class="tab-button"
+                            style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                            📈 합성 통계
+                        </button>
+                        <button id="tabVisitorStats" class="tab-button"
+                            style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                            👥 조회수 통계
                         </button>
                     </div>
                     <h2 id="section-title">📋 합성 로그 목록</h2>
@@ -37,7 +47,8 @@
                         <a href="/" class="btn-home">홈으로</a>
                     </div>
                 </div>
-                <div class="search-container">
+                <!-- 검색 컨테이너 (합성 로그용) -->
+                <div class="search-container" id="search-container-text">
                     <div class="search-box">
                         <input type="text" id="search-input" class="search-input" placeholder="모델명으로 검색..."
                             autocomplete="off">
@@ -45,6 +56,20 @@
                             🔍 검색
                         </button>
                         <button class="search-clear-button" id="search-clear-button" onclick="clearSearch()"
+                            style="display: none;">
+                            ✕ 초기화
+                        </button>
+                    </div>
+                </div>
+                <!-- 날짜 검색 컨테이너 (통계 탭용) -->
+                <div class="search-container" id="search-container-date" style="display: none;">
+                    <div class="search-box">
+                        <input type="date" id="date-search-input" class="search-input" placeholder="날짜 선택..."
+                            autocomplete="off">
+                        <button class="search-button" id="date-search-button" onclick="handleDateSearch()">
+                            🔍 검색
+                        </button>
+                        <button class="search-clear-button" id="date-search-clear-button" onclick="clearDateSearch()"
                             style="display: none;">
                             ✕ 초기화
                         </button>
@@ -131,6 +156,54 @@
 
                 <!-- 페이지네이션 -->
                 <div class="pagination" id="reviews-pagination">
+                    <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+
+            <!-- 날짜별 합성 통계 -->
+            <div id="synthesis-stats-section" style="display: none;">
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>날짜</th>
+                                <th>합성 카운트</th>
+                            </tr>
+                        </thead>
+                        <tbody id="synthesis-stats-tbody">
+                            <tr>
+                                <td colspan="2" class="loading">데이터를 불러오는 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 페이지네이션 -->
+                <div class="pagination" id="synthesis-stats-pagination">
+                    <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+
+            <!-- 날짜별 조회수 통계 -->
+            <div id="visitor-stats-section" style="display: none;">
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>날짜</th>
+                                <th>조회수</th>
+                            </tr>
+                        </thead>
+                        <tbody id="visitor-stats-tbody">
+                            <tr>
+                                <td colspan="2" class="loading">데이터를 불러오는 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 페이지네이션 -->
+                <div class="pagination" id="visitor-stats-pagination">
                     <!-- 동적으로 생성됨 -->
                 </div>
             </div>

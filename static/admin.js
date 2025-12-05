@@ -2,9 +2,12 @@
 let currentPage = 1;
 const itemsPerPage = 20;
 let currentSearchModel = null;
-let currentTab = 'synthesis'; // 'synthesis', 'body', or 'reviews'
+let currentTab = 'synthesis'; // 'synthesis', 'body', 'reviews', 'synthesis-stats', 'visitor-stats'
 let currentBodyPage = 1;
 let currentReviewsPage = 1;
+let currentSynthesisStatsPage = 1;
+let currentVisitorStatsPage = 1;
+let currentSearchDate = null; // 날짜 검색용
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', async () => {
@@ -64,6 +67,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabSynthesis = document.getElementById('tabSynthesis');
     const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
     const tabReviews = document.getElementById('tabReviews');
+    const tabSynthesisStats = document.getElementById('tabSynthesisStats');
+    const tabVisitorStats = document.getElementById('tabVisitorStats');
 
     if (tabSynthesis) {
         tabSynthesis.addEventListener('click', () => switchTab('synthesis'));
@@ -74,6 +79,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (tabReviews) {
         tabReviews.addEventListener('click', () => switchTab('reviews'));
     }
+    if (tabSynthesisStats) {
+        tabSynthesisStats.addEventListener('click', () => switchTab('synthesis-stats'));
+    }
+    if (tabVisitorStats) {
+        tabVisitorStats.addEventListener('click', () => switchTab('visitor-stats'));
+    }
 
     // 검색 입력 필드에 Enter 키 이벤트 추가
     const searchInput = document.getElementById('search-input');
@@ -81,6 +92,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 handleSearch();
+            }
+        });
+    }
+
+    // 날짜 검색 입력 필드에 Enter 키 이벤트 추가
+    const dateSearchInput = document.getElementById('date-search-input');
+    if (dateSearchInput) {
+        dateSearchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleDateSearch();
             }
         });
     }
@@ -93,17 +114,24 @@ function switchTab(tab) {
     const synthesisSection = document.getElementById('synthesis-logs-section');
     const bodySection = document.getElementById('body-logs-section');
     const reviewsSection = document.getElementById('reviews-logs-section');
+    const synthesisStatsSection = document.getElementById('synthesis-stats-section');
+    const visitorStatsSection = document.getElementById('visitor-stats-section');
     const tabSynthesis = document.getElementById('tabSynthesis');
     const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
     const tabReviews = document.getElementById('tabReviews');
+    const tabSynthesisStats = document.getElementById('tabSynthesisStats');
+    const tabVisitorStats = document.getElementById('tabVisitorStats');
     const sectionTitle = document.getElementById('section-title');
     const logsCountLabel = document.getElementById('logs-count-label');
-    const searchContainer = document.querySelector('.search-container');
+    const searchContainerText = document.getElementById('search-container-text');
+    const searchContainerDate = document.getElementById('search-container-date');
 
     // 모든 섹션 숨기기
     if (synthesisSection) synthesisSection.style.display = 'none';
     if (bodySection) bodySection.style.display = 'none';
     if (reviewsSection) reviewsSection.style.display = 'none';
+    if (synthesisStatsSection) synthesisStatsSection.style.display = 'none';
+    if (visitorStatsSection) visitorStatsSection.style.display = 'none';
 
     // 모든 탭 버튼 초기화
     if (tabSynthesis) {
@@ -121,6 +149,16 @@ function switchTab(tab) {
         tabReviews.style.background = '#fff';
         tabReviews.style.color = '#333';
     }
+    if (tabSynthesisStats) {
+        tabSynthesisStats.classList.remove('active');
+        tabSynthesisStats.style.background = '#fff';
+        tabSynthesisStats.style.color = '#333';
+    }
+    if (tabVisitorStats) {
+        tabVisitorStats.classList.remove('active');
+        tabVisitorStats.style.background = '#fff';
+        tabVisitorStats.style.color = '#333';
+    }
 
     if (tab === 'synthesis') {
         if (synthesisSection) synthesisSection.style.display = 'block';
@@ -129,9 +167,12 @@ function switchTab(tab) {
             tabSynthesis.style.background = '#007bff';
             tabSynthesis.style.color = '#fff';
         }
-        if (sectionTitle) sectionTitle.textContent = '📋 합성 로그 목록';
+        if (sectionTitle) sectionTitle.textContent = '📋 합성 로그';
         if (logsCountLabel) logsCountLabel.textContent = '전체 합성:';
-        if (searchContainer) searchContainer.style.display = 'block';
+        if (searchContainerText) searchContainerText.style.display = 'block';
+        if (searchContainerDate) searchContainerDate.style.display = 'none';
+        // 다른 탭으로 전환 시 날짜 검색 초기화
+        currentSearchDate = null;
         loadLogs(currentPage, currentSearchModel);
     } else if (tab === 'body') {
         if (bodySection) bodySection.style.display = 'block';
@@ -140,9 +181,12 @@ function switchTab(tab) {
             tabBodyAnalysis.style.background = '#007bff';
             tabBodyAnalysis.style.color = '#fff';
         }
-        if (sectionTitle) sectionTitle.textContent = '📊 분석 결과 로그 목록';
+        if (sectionTitle) sectionTitle.textContent = '📊 분석 로그';
         if (logsCountLabel) logsCountLabel.textContent = '전체 분석:';
-        if (searchContainer) searchContainer.style.display = 'none';
+        if (searchContainerText) searchContainerText.style.display = 'none';
+        if (searchContainerDate) searchContainerDate.style.display = 'none';
+        // 다른 탭으로 전환 시 날짜 검색 초기화
+        currentSearchDate = null;
         loadBodyLogs(currentBodyPage);
     } else if (tab === 'reviews') {
         if (reviewsSection) reviewsSection.style.display = 'block';
@@ -151,10 +195,55 @@ function switchTab(tab) {
             tabReviews.style.background = '#007bff';
             tabReviews.style.color = '#fff';
         }
-        if (sectionTitle) sectionTitle.textContent = '⭐ 리뷰 로그 목록';
+        if (sectionTitle) sectionTitle.textContent = '⭐ 리뷰 로그';
         if (logsCountLabel) logsCountLabel.textContent = '전체 리뷰:';
-        if (searchContainer) searchContainer.style.display = 'none';
+        if (searchContainerText) searchContainerText.style.display = 'none';
+        if (searchContainerDate) searchContainerDate.style.display = 'none';
+        // 다른 탭으로 전환 시 날짜 검색 초기화
+        currentSearchDate = null;
         loadReviews(currentReviewsPage);
+    } else if (tab === 'synthesis-stats') {
+        if (synthesisStatsSection) synthesisStatsSection.style.display = 'block';
+        if (tabSynthesisStats) {
+            tabSynthesisStats.classList.add('active');
+            tabSynthesisStats.style.background = '#007bff';
+            tabSynthesisStats.style.color = '#fff';
+        }
+        if (sectionTitle) sectionTitle.textContent = '📈 합성 통계';
+        if (logsCountLabel) logsCountLabel.textContent = '전체 날짜:';
+        if (searchContainerText) searchContainerText.style.display = 'none';
+        if (searchContainerDate) searchContainerDate.style.display = 'block';
+        // 날짜 검색 입력 필드에 현재 검색 날짜 설정
+        const dateSearchInput = document.getElementById('date-search-input');
+        const dateSearchClearButton = document.getElementById('date-search-clear-button');
+        if (dateSearchInput && currentSearchDate) {
+            dateSearchInput.value = currentSearchDate;
+        }
+        if (dateSearchClearButton) {
+            dateSearchClearButton.style.display = currentSearchDate ? 'inline-block' : 'none';
+        }
+        loadDailySynthesisStats(currentSynthesisStatsPage, currentSearchDate);
+    } else if (tab === 'visitor-stats') {
+        if (visitorStatsSection) visitorStatsSection.style.display = 'block';
+        if (tabVisitorStats) {
+            tabVisitorStats.classList.add('active');
+            tabVisitorStats.style.background = '#007bff';
+            tabVisitorStats.style.color = '#fff';
+        }
+        if (sectionTitle) sectionTitle.textContent = '👥 조회수 통계';
+        if (logsCountLabel) logsCountLabel.textContent = '전체 날짜:';
+        if (searchContainerText) searchContainerText.style.display = 'none';
+        if (searchContainerDate) searchContainerDate.style.display = 'block';
+        // 날짜 검색 입력 필드에 현재 검색 날짜 설정
+        const dateSearchInput = document.getElementById('date-search-input');
+        const dateSearchClearButton = document.getElementById('date-search-clear-button');
+        if (dateSearchInput && currentSearchDate) {
+            dateSearchInput.value = currentSearchDate;
+        }
+        if (dateSearchClearButton) {
+            dateSearchClearButton.style.display = currentSearchDate ? 'inline-block' : 'none';
+        }
+        loadDailyVisitorStats(currentVisitorStatsPage, currentSearchDate);
     }
 }
 
@@ -252,6 +341,53 @@ function clearSearch() {
     currentSearchModel = null;
     currentPage = 1;
     loadLogs(currentPage);
+}
+
+// 날짜 검색 처리
+function handleDateSearch() {
+    const dateSearchInput = document.getElementById('date-search-input');
+    const dateValue = dateSearchInput ? dateSearchInput.value.trim() : '';
+    const clearButton = document.getElementById('date-search-clear-button');
+
+    currentSearchDate = dateValue || null;
+    
+    // 통계 탭에 따라 해당 페이지 초기화 및 데이터 로드
+    if (currentTab === 'synthesis-stats') {
+        currentSynthesisStatsPage = 1;
+        loadDailySynthesisStats(currentSynthesisStatsPage, currentSearchDate);
+    } else if (currentTab === 'visitor-stats') {
+        currentVisitorStatsPage = 1;
+        loadDailyVisitorStats(currentVisitorStatsPage, currentSearchDate);
+    }
+
+    // 검색어가 있으면 초기화 버튼 표시
+    if (clearButton) {
+        clearButton.style.display = dateValue ? 'inline-block' : 'none';
+    }
+}
+
+// 날짜 검색 초기화
+function clearDateSearch() {
+    const dateSearchInput = document.getElementById('date-search-input');
+    const clearButton = document.getElementById('date-search-clear-button');
+
+    if (dateSearchInput) {
+        dateSearchInput.value = '';
+    }
+    if (clearButton) {
+        clearButton.style.display = 'none';
+    }
+
+    currentSearchDate = null;
+    
+    // 통계 탭에 따라 해당 페이지 초기화 및 데이터 로드
+    if (currentTab === 'synthesis-stats') {
+        currentSynthesisStatsPage = 1;
+        loadDailySynthesisStats(currentSynthesisStatsPage);
+    } else if (currentTab === 'visitor-stats') {
+        currentVisitorStatsPage = 1;
+        loadDailyVisitorStats(currentVisitorStatsPage);
+    }
 }
 
 // 로그 갯수 업데이트
@@ -988,6 +1124,250 @@ function renderReviewsPagination(total, currentPage) {
     html += `<span class="pagination-info">총 ${total}개 항목 (${currentPage}/${totalPages} 페이지)</span>`;
 
     paginationDiv.innerHTML = html;
+}
+
+// 날짜별 합성 통계 로드
+async function loadDailySynthesisStats(page, date = null) {
+    try {
+        let url = `/api/admin/daily-synthesis-stats?page=${page}&limit=${itemsPerPage}`;
+        if (date && date.trim() !== '') {
+            url += `&date=${encodeURIComponent(date.trim())}`;
+        }
+
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch(url, {
+            headers: headers
+        });
+
+        // 401 오류 처리
+        if (response.status === 401) {
+            window.location.href = '/';
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            renderDailySynthesisStats(data.data);
+            renderDailySynthesisStatsPagination(data.pagination);
+            updateSynthesisStatsCount(data.pagination.total);
+            currentSynthesisStatsPage = page;
+        } else {
+            showError('날짜별 합성 통계를 불러오는 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('날짜별 합성 통계 로드 오류:', error);
+        const tbody = document.getElementById('synthesis-stats-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="2" class="loading">데이터를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        }
+    }
+}
+
+// 날짜별 합성 통계 테이블 렌더링
+function renderDailySynthesisStats(stats) {
+    const tbody = document.getElementById('synthesis-stats-tbody');
+
+    if (!tbody) return;
+
+    if (stats.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="2" class="loading">데이터가 없습니다.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = stats.map(stat => {
+        const date = stat.date || stat.synthesis_date || '-';
+        const count = stat.count !== undefined ? stat.count : 0;
+
+        return `
+        <tr>
+            <td>${date}</td>
+            <td>${count}</td>
+        </tr>
+    `;
+    }).join('');
+}
+
+// 날짜별 합성 통계 페이지네이션 렌더링
+function renderDailySynthesisStatsPagination(pagination) {
+    const paginationDiv = document.getElementById('synthesis-stats-pagination');
+
+    if (!paginationDiv) return;
+
+    if (pagination.total_pages === 0) {
+        paginationDiv.innerHTML = '';
+        return;
+    }
+
+    const createPageButton = (pageNum, text, disabled = false, active = false) => {
+        if (disabled) {
+            return `<button disabled>${text}</button>`;
+        }
+        const activeClass = active ? ' class="active"' : '';
+        const dateParam = currentSearchDate ? `, '${currentSearchDate}'` : '';
+        return `<button onclick="loadDailySynthesisStats(${pageNum}${dateParam})"${activeClass}>${text}</button>`;
+    };
+
+    let html = createPageButton(1, '처음', pagination.page === 1);
+
+    if (pagination.page > 1) {
+        html += createPageButton(pagination.page - 1, '이전');
+    }
+
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.total_pages, pagination.page + 2);
+
+    if (startPage > 1) {
+        html += '<button disabled>...</button>';
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        html += createPageButton(i, i.toString(), false, i === pagination.page);
+    }
+
+    if (endPage < pagination.total_pages) {
+        html += '<button disabled>...</button>';
+    }
+
+    if (pagination.page < pagination.total_pages) {
+        html += createPageButton(pagination.page + 1, '다음');
+    }
+
+    html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
+
+    html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
+
+    paginationDiv.innerHTML = html;
+}
+
+// 날짜별 합성 통계 카운트 업데이트
+function updateSynthesisStatsCount(count) {
+    const logsCountElement = document.getElementById('logs-count');
+    if (logsCountElement) {
+        logsCountElement.textContent = count;
+    }
+}
+
+// 날짜별 조회수 통계 로드
+async function loadDailyVisitorStats(page, date = null) {
+    try {
+        let url = `/api/admin/daily-visitor-stats?page=${page}&limit=${itemsPerPage}`;
+        if (date && date.trim() !== '') {
+            url += `&date=${encodeURIComponent(date.trim())}`;
+        }
+
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch(url, {
+            headers: headers
+        });
+
+        // 401 오류 처리
+        if (response.status === 401) {
+            window.location.href = '/';
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            renderDailyVisitorStats(data.data);
+            renderDailyVisitorStatsPagination(data.pagination);
+            updateVisitorStatsCount(data.pagination.total);
+            currentVisitorStatsPage = page;
+        } else {
+            showError('날짜별 조회수 통계를 불러오는 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('날짜별 조회수 통계 로드 오류:', error);
+        const tbody = document.getElementById('visitor-stats-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="2" class="loading">데이터를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        }
+    }
+}
+
+// 날짜별 조회수 통계 테이블 렌더링
+function renderDailyVisitorStats(stats) {
+    const tbody = document.getElementById('visitor-stats-tbody');
+
+    if (!tbody) return;
+
+    if (stats.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="2" class="loading">데이터가 없습니다.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = stats.map(stat => {
+        const date = stat.date || stat.visit_date || '-';
+        const count = stat.count !== undefined ? stat.count : 0;
+
+        return `
+        <tr>
+            <td>${date}</td>
+            <td>${count}</td>
+        </tr>
+    `;
+    }).join('');
+}
+
+// 날짜별 조회수 통계 페이지네이션 렌더링
+function renderDailyVisitorStatsPagination(pagination) {
+    const paginationDiv = document.getElementById('visitor-stats-pagination');
+
+    if (!paginationDiv) return;
+
+    if (pagination.total_pages === 0) {
+        paginationDiv.innerHTML = '';
+        return;
+    }
+
+    const createPageButton = (pageNum, text, disabled = false, active = false) => {
+        if (disabled) {
+            return `<button disabled>${text}</button>`;
+        }
+        const activeClass = active ? ' class="active"' : '';
+        const dateParam = currentSearchDate ? `, '${currentSearchDate}'` : '';
+        return `<button onclick="loadDailyVisitorStats(${pageNum}${dateParam})"${activeClass}>${text}</button>`;
+    };
+
+    let html = createPageButton(1, '처음', pagination.page === 1);
+
+    if (pagination.page > 1) {
+        html += createPageButton(pagination.page - 1, '이전');
+    }
+
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.total_pages, pagination.page + 2);
+
+    if (startPage > 1) {
+        html += '<button disabled>...</button>';
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        html += createPageButton(i, i.toString(), false, i === pagination.page);
+    }
+
+    if (endPage < pagination.total_pages) {
+        html += '<button disabled>...</button>';
+    }
+
+    if (pagination.page < pagination.total_pages) {
+        html += createPageButton(pagination.page + 1, '다음');
+    }
+
+    html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
+
+    html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
+
+    paginationDiv.innerHTML = html;
+}
+
+// 날짜별 조회수 통계 카운트 업데이트
+function updateVisitorStatsCount(count) {
+    const logsCountElement = document.getElementById('logs-count');
+    if (logsCountElement) {
+        logsCountElement.textContent = count;
+    }
 }
 
 
