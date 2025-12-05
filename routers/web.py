@@ -167,6 +167,14 @@ async def dress_batch_test_page(request: Request):
     return templates.TemplateResponse("dress-batch-test.html", {"request": request})
 
 
+@router.get("/dress-check-test", response_class=HTMLResponse, tags=["관리자"])
+async def dress_check_test_page(request: Request):
+    """
+    단일 이미지 드레스 판별 테스트 페이지
+    """
+    return templates.TemplateResponse("dress-check-test.html", {"request": request})
+
+
 @router.get("/pose-landmark-visualizer", response_class=HTMLResponse, tags=["Web Interface"])
 async def pose_landmark_visualizer_page(request: Request):
     """
@@ -191,4 +199,3 @@ async def prompt_test_page(request: Request):
 async def favicon():
     """파비콘 제공"""
     return FileResponse("static/favicon.ico")
-

@@ -1,4 +1,5 @@
 """드레스 관리 라우터"""
+import base64
 import os
 import json
 import csv
@@ -639,6 +640,146 @@ async def import_dresses(file: UploadFile = File(...)):
         }, status_code=500)
 
 
+@router.post("/api/dress/check", tags=["드레스 관리"])
+async def check_single_dress(
+    file: UploadFile = File(...),
+    model: str = Form("gpt-4o-mini"),
+    mode: str = Form("fast")
+):
+    """
+    단일 이미지로 드레스 여부 판별
+    """
+    try:
+        # 모델 검증
+        if model not in ["gpt-4o-mini", "gpt-4o"]:
+            return JSONResponse({
+                "success": False,
+                "error": "Invalid model",
+                "message": "모델은 gpt-4o-mini 또는 gpt-4o만 선택해주세요."
+            }, status_code=400)
+
+        # 모드 검증
+        if mode not in ["fast", "accurate"]:
+            return JSONResponse({
+                "success": False,
+                "error": "Invalid mode",
+                "message": "모드는 fast 또는 accurate만 선택해주세요."
+            }, status_code=400)
+
+        try:
+            dress_check_service = get_dress_check_service()
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": "Service initialization failed",
+                "message": f"서비스 초기화 실패: {str(e)}"
+            }, status_code=500)
+
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+
+        try:
+            file_content = await file.read()
+            if not file_content:
+                return JSONResponse({
+                    "success": False,
+                    "error": "Empty file",
+                    "message": "업로드된 파일이 비어있습니다."
+                }, status_code=400)
+
+            # 5MB 용량 제한
+            if len(file_content) > 5 * 1024 * 1024:
+                return JSONResponse({
+                    "success": False,
+                    "error": "File too large",
+                    "message": "파일 크기는 5MB 이하로 업로드해주세요."
+                }, status_code=400)
+
+            import hashlib
+
+            try:
+                image = Image.open(io.BytesIO(file_content)).convert("RGB")
+            except Exception as e:
+                return JSONResponse({
+                    "success": False,
+                    "error": "Invalid image",
+                    "message": f"이미지 로드 실패: {str(e)}"
+                }, status_code=400)
+
+            # 이미지 해시 생성
+            image_hash = hashlib.md5(file_content).hexdigest()
+
+            # 판별
+            check_result = dress_check_service.check_dress(
+                image=image,
+                model=model,
+                mode=mode
+            )
+
+            # 썸네일 생성
+            thumbnail = None
+            try:
+                preview = image.copy()
+                preview.thumbnail((300, 300))
+                buffered = io.BytesIO()
+                preview.save(buffered, format="PNG")
+                thumb_b64 = base64.b64encode(buffered.getvalue()).decode()
+                thumbnail = f"data:image/png;base64,{thumb_b64}"
+            except Exception:
+                pass
+
+            # 로그 저장
+            record_id = None
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO dress_check_logs 
+                        (filename, image_hash, model, mode, predicted_dress, confidence, category)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        file.filename or "uploaded_image",
+                        image_hash,
+                        model,
+                        mode,
+                        check_result["dress"],
+                        check_result["confidence"],
+                        check_result["category"]
+                    ))
+                    connection.commit()
+                    record_id = cursor.lastrowid
+            except Exception as db_error:
+                print(f"DB 기록 오류: {db_error}")
+
+            return JSONResponse({
+                "success": True,
+                "result": {
+                    "filename": file.filename or "uploaded_image",
+                    "dress": check_result["dress"],
+                    "confidence": check_result["confidence"],
+                    "category": check_result["category"],
+                    "thumbnail": thumbnail,
+                    "record_id": record_id
+                },
+                "message": "판별이 완료되었습니다."
+            })
+        finally:
+            connection.close()
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"단일 판별 처리 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
 @router.post("/api/dress/batch-check", tags=["드레스 관리"])
 async def batch_check_dresses(
     files: List[UploadFile] = File(...),
@@ -1032,4 +1173,3 @@ async def get_dress_metrics(
             "error": str(e),
             "message": f"성능 지표 조회 중 오류 발생: {str(e)}"
         }, status_code=500)
-
