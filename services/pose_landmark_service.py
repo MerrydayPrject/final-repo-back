@@ -120,7 +120,6 @@ class PoseLandmarkService:
             # 여러 사람 감지 지원: landmarks가 리스트의 리스트일 수 있음
             if "landmarks" in result:
                 landmarks_data = result["landmarks"]
-                print(f"[PoseLandmarkService] 랜드마크 데이터 발견 - 타입: {type(landmarks_data)}, 값: {landmarks_data}")
                 
                 if landmarks_data is None:
                     return None
