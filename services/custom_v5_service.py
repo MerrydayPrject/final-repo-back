@@ -6,6 +6,38 @@ import traceback
 from typing import Dict
 from PIL import Image
 
+# Safety settings import (google-genai 패키지 구조에 맞게 조정)
+try:
+    from google.genai.types import (
+        HarmCategory, 
+        HarmBlockThreshold,
+        GenerateContentConfig,
+        SafetySetting
+    )
+except ImportError:
+    try:
+        from google.generativeai.types import (
+            HarmCategory, 
+            HarmBlockThreshold,
+            GenerateContentConfig,
+            SafetySetting
+        )
+    except ImportError:
+        # Fallback: 직접 enum 정의 (패키지에서 제공하지 않는 경우)
+        from enum import Enum
+        class HarmCategory(Enum):
+            HARM_CATEGORY_HARASSMENT = "HARM_CATEGORY_HARASSMENT"
+            HARM_CATEGORY_HATE_SPEECH = "HARM_CATEGORY_HATE_SPEECH"
+            HARM_CATEGORY_SEXUALLY_EXPLICIT = "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+            HARM_CATEGORY_DANGEROUS_CONTENT = "HARM_CATEGORY_DANGEROUS_CONTENT"
+        
+        class HarmBlockThreshold(Enum):
+            BLOCK_NONE = "BLOCK_NONE"
+        
+        # Fallback: GenerateContentConfig와 SafetySetting은 None으로 처리
+        GenerateContentConfig = None
+        SafetySetting = None
+
 from core.s3_client import upload_log_to_s3
 from services.log_service import save_test_log
 from core.segformer_garment_parser import parse_garment_image_v4
@@ -15,6 +47,78 @@ from services.tryon_service import (
 )
 from config.settings import GEMINI_3_FLASH_MODEL
 from core.gemini_client import get_gemini_client_pool
+
+
+# ============================================================
+# 이미지 리사이징 유틸리티 함수
+# ============================================================
+
+def force_resize_to_1024(img: Image.Image) -> Image.Image:
+    """
+    이미지를 무조건 긴 변 기준 1024px로 리사이징 (비율 유지)
+    이미지가 1024px보다 작아도 1024px로 키우고, 크면 1024px로 줄입니다.
+    
+    Args:
+        img: 원본 이미지 (PIL Image)
+    
+    Returns:
+        리사이징된 이미지 (PIL Image, 긴 변이 정확히 1024px)
+    """
+    width, height = img.size
+    long_edge = max(width, height)
+    
+    # 이미 정확히 1024px이면 리사이징 불필요
+    if long_edge == 1024:
+        return img
+    
+    # 비율 유지하면서 리사이징
+    if width > height:
+        # 가로가 더 긴 경우
+        new_width = 1024
+        new_height = int(height * (1024 / width))
+    else:
+        # 세로가 더 긴 경우
+        new_height = 1024
+        new_width = int(width * (1024 / height))
+    
+    resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    print(f"[강제 리사이징] {width}x{height} → {new_width}x{new_height} (긴 변: {long_edge}px → {max(new_width, new_height)}px)")
+    
+    return resized_img
+
+
+def resize_image_long_edge(img: Image.Image, max_long_edge: int = 1024) -> Image.Image:
+    """
+    이미지의 긴 변(Long edge)을 기준으로 리사이징 (비율 유지)
+    
+    Args:
+        img: 원본 이미지 (PIL Image)
+        max_long_edge: 긴 변의 최대 크기 (기본값: 1024px, 속도 최적화)
+    
+    Returns:
+        리사이징된 이미지 (PIL Image)
+    """
+    width, height = img.size
+    long_edge = max(width, height)
+    
+    # 이미 긴 변이 max_long_edge보다 작거나 같으면 리사이징 불필요
+    if long_edge <= max_long_edge:
+        return img
+    
+    # 비율 유지하면서 리사이징
+    if width > height:
+        # 가로가 더 긴 경우
+        new_width = max_long_edge
+        new_height = int(height * (max_long_edge / width))
+    else:
+        # 세로가 더 긴 경우
+        new_height = max_long_edge
+        new_width = int(width * (max_long_edge / height))
+    
+    resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    print(f"[이미지 리사이징] {width}x{height} → {new_width}x{new_height} (긴 변: {long_edge}px → {max(new_width, new_height)}px)")
+    
+    return resized_img
 
 
 async def generate_unified_tryon_custom_v5(
@@ -84,10 +188,22 @@ async def generate_unified_tryon_custom_v5(
                 print(f"[Stage 0] 누끼 처리된 이미지 크기: {garment_nukki_rgb.size[0]}x{garment_nukki_rgb.size[1]}, 모드: {garment_nukki_rgb.mode}")
         
         # ============================================================
-        # Stage 1 준비: 배경 이미지 처리
+        # Stage 1 준비: 이미지 리사이징 (속도 최적화: 긴 변을 무조건 1024px로 강제 리사이징)
         # ============================================================
-        # 배경 이미지는 원본 그대로 유지
-        background_img_processed = background_img
+        # Gemini API 호출 전에 이미지를 리사이징하여 속도 개선
+        # 품질(얼굴 보존)은 유지하면서 속도 향상 (42초 → 15~20초대 목표)
+        print("\n[이미지 리사이징] API 호출 전 이미지 최적화 시작...")
+        print(f"[이미지 리사이징] 원본 크기 - person: {person_img.size[0]}x{person_img.size[1]}, garment_nukki: {garment_nukki_rgb.size[0]}x{garment_nukki_rgb.size[1]}, background: {background_img.size[0]}x{background_img.size[1]}")
+        
+        # 긴 변을 무조건 1024px로 강제 리사이징 (속도 최적화)
+        person_img_resized = force_resize_to_1024(person_img)
+        garment_nukki_resized = force_resize_to_1024(garment_nukki_rgb)
+        background_img_resized = force_resize_to_1024(background_img)
+        
+        print(f"[이미지 리사이징] 리사이징 완료 - person: {person_img_resized.size[0]}x{person_img_resized.size[1]}, garment_nukki: {garment_nukki_resized.size[0]}x{garment_nukki_resized.size[1]}, background: {background_img_resized.size[0]}x{background_img_resized.size[1]}")
+        
+        # 배경 이미지 처리
+        background_img_processed = background_img_resized
         
         # S3 업로드 (현재 비활성화)
         person_s3_url = ""
@@ -121,14 +237,84 @@ async def generate_unified_tryon_custom_v5(
         unified_prompt = load_v5_unified_prompt()
         used_prompt = unified_prompt
         
+        # ------------------------------------------------------------------
+        # [STEP 1] Payload 구성 (Interleaving 방식: 텍스트-이미지 교차 배치)
+        # ------------------------------------------------------------------
+        # 설명: 모델에게 각 이미지가 무엇인지 명확히 라벨링해줍니다.
+        interleaved_contents = [
+            "Input 1(Person):", person_img_resized,
+            "Input 2(Garment):", garment_nukki_resized,
+            "Input 3(Background):", background_img_processed,
+            "Task:", unified_prompt
+        ]
+        
+        # ------------------------------------------------------------------
+        # [STEP 2] 설정값 (Configuration & Safety) - 필수 적용
+        # ------------------------------------------------------------------
+        
+        # 1. Generation Config: 창의성을 억제하여 지시 이행률 극대화
+        # Temperature를 0.0으로 설정하여 얼굴 변형 최소화 (가장 중요)
+        
+        # 2. Safety Settings: 신체 노출로 인한 생성 거부(Block) 방지
+        # 모든 카테고리를 BLOCK_NONE으로 설정하여 필터 간섭 방지
+        gen_config_obj = None
+        
+        try:
+            # SafetySetting 객체 리스트 생성
+            if SafetySetting is not None and HarmCategory is not None and HarmBlockThreshold is not None:
+                safety_settings_list = [
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ]
+                
+                # GenerateContentConfig 객체 생성
+                if GenerateContentConfig is not None:
+                    gen_config_obj = GenerateContentConfig(
+                        temperature=0.0,  # 0.0으로 강제 설정: 얼굴 유지 및 환각 방지
+                        top_p=1,
+                        top_k=32,
+                        safety_settings=safety_settings_list
+                    )
+                    print(f"[CustomV5] ✅ GenerateContentConfig 객체 생성 완료: temperature=0.0, safety_settings=BLOCK_NONE")
+                else:
+                    print(f"[CustomV5] ⚠️ GenerateContentConfig를 사용할 수 없습니다 (Fallback)")
+                    gen_config_obj = None
+            else:
+                print(f"[CustomV5] ⚠️ SafetySetting 객체를 사용할 수 없습니다 (Fallback)")
+                gen_config_obj = None
+        except Exception as e:
+            print(f"[CustomV5] ⚠️ Config 객체 생성 중 오류: {e}")
+            print(f"[CustomV5] ⚠️ 기본값 사용 (필터가 작동할 수 있음)")
+            gen_config_obj = None
+        
         print("[Stage 1] Gemini API 호출 시작 (다중 키 풀 사용)...")
         print(f"[Stage 1] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_nukki_rgb ({garment_nukki_rgb.size[0]}x{garment_nukki_rgb.size[1]}), background_img ({background_img_processed.size[0]}x{background_img_processed.size[1]})")
+        if gen_config_obj is not None:
+            print(f"[CustomV5] ✅ GenerateContentConfig 객체 사용: temperature=0.0, safety_settings=BLOCK_NONE")
+        else:
+            print(f"[CustomV5] ⚠️ GenerateContentConfig 객체를 사용할 수 없습니다 (기본값 사용)")
         stage1_start_time = time.time()
         
         try:
             stage1_response = await client_pool.generate_content_with_retry_async(
                 model=GEMINI_3_FLASH_MODEL,
-                contents=[person_img, garment_nukki_rgb, background_img_processed, unified_prompt]
+                contents=interleaved_contents,   # 수정된 Payload (인터리빙 방식)
+                generation_config=gen_config_obj,    # GenerateContentConfig 객체 전달
+                safety_settings=None  # GenerateContentConfig에 포함되어 있으므로 None
             )
         except Exception as exc:
             run_time = time.time() - start_time
