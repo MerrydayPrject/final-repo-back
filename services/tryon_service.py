@@ -4,9 +4,41 @@ import io
 import base64
 import time
 import traceback
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 from PIL import Image
 from google import genai
+
+# Safety settings import (google-genai 패키지 구조에 맞게 조정)
+try:
+    from google.genai.types import (
+        HarmCategory, 
+        HarmBlockThreshold,
+        GenerateContentConfig,
+        SafetySetting
+    )
+except ImportError:
+    try:
+        from google.generativeai.types import (
+            HarmCategory, 
+            HarmBlockThreshold,
+            GenerateContentConfig,
+            SafetySetting
+        )
+    except ImportError:
+        # Fallback: 직접 enum 정의 (패키지에서 제공하지 않는 경우)
+        from enum import Enum
+        class HarmCategory(Enum):
+            HARM_CATEGORY_HARASSMENT = "HARM_CATEGORY_HARASSMENT"
+            HARM_CATEGORY_HATE_SPEECH = "HARM_CATEGORY_HATE_SPEECH"
+            HARM_CATEGORY_SEXUALLY_EXPLICIT = "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+            HARM_CATEGORY_DANGEROUS_CONTENT = "HARM_CATEGORY_DANGEROUS_CONTENT"
+        
+        class HarmBlockThreshold(Enum):
+            BLOCK_NONE = "BLOCK_NONE"
+        
+        # Fallback: GenerateContentConfig와 SafetySetting은 None으로 처리
+        GenerateContentConfig = None
+        SafetySetting = None
 
 from core.xai_client import generate_prompt_from_images
 from core.s3_client import upload_log_to_s3
@@ -2441,14 +2473,100 @@ async def generate_unified_tryon_v5(
         unified_prompt = load_v5_unified_prompt()
         used_prompt = unified_prompt
         
+        # ------------------------------------------------------------------
+        # [STEP 1] Payload 구성 (Interleaving 방식: 텍스트-이미지 교차 배치)
+        # ------------------------------------------------------------------
+        # 설명: 모델에게 각 이미지가 무엇인지 명확히 라벨링해줍니다.
+        interleaved_contents = [
+            "Tasks inputs:",
+            
+            "First, this is [Image 1] The Target Person:",
+            person_img,
+            
+            "Second, this is [Image 2] The Garment:",
+            garment_img,
+            
+            "Third, this is [Image 3] The User-Selected Background:",
+            background_img_processed,
+            
+            "Instructions:",
+            unified_prompt
+        ]
+        
+        # ------------------------------------------------------------------
+        # [STEP 2] 설정값 (Configuration & Safety) - 필수 적용
+        # ------------------------------------------------------------------
+        
+        # 1. Generation Config: 창의성을 억제하여 지시 이행률 극대화
+        # Temperature를 0.0으로 설정하여 얼굴 변형 최소화 (가장 중요)
+        
+        # 2. Safety Settings: 신체 노출로 인한 생성 거부(Block) 방지
+        # 모든 카테고리를 BLOCK_NONE으로 설정하여 필터 간섭 방지
+        gen_config_obj = None
+        
+        try:
+            # SafetySetting 객체 리스트 생성
+            if SafetySetting is not None and HarmCategory is not None and HarmBlockThreshold is not None:
+                safety_settings_list = [
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ]
+                
+                # GenerateContentConfig 객체 생성
+                if GenerateContentConfig is not None:
+                    gen_config_obj = GenerateContentConfig(
+                        temperature=0.0,  # 0.0으로 강제 설정: 얼굴 유지 및 환각 방지
+                        top_p=1,
+                        top_k=32,
+                        safety_settings=safety_settings_list
+                    )
+                    print(f"[V5] ✅ GenerateContentConfig 객체 생성 완료: temperature=0.0, safety_settings=BLOCK_NONE")
+                else:
+                    print(f"[V5] ⚠️ GenerateContentConfig를 사용할 수 없습니다 (Fallback)")
+                    gen_config_obj = None
+            else:
+                print(f"[V5] ⚠️ SafetySetting 객체를 사용할 수 없습니다 (Fallback)")
+                gen_config_obj = None
+        except Exception as e:
+            print(f"[V5] ⚠️ Config 객체 생성 중 오류: {e}")
+            print(f"[V5] ⚠️ 기본값 사용 (필터가 작동할 수 있음)")
+            gen_config_obj = None
+        
+        # 기존 딕셔너리 형태도 유지 (Fallback용, 사용하지 않음)
+        gen_config_dict = {
+            "temperature": 0.0,
+            "top_p": 1,
+            "top_k": 32
+        }
+        
         print("[V5] Gemini API 호출 시작...")
         print(f"[V5] 입력 이미지: person_img ({person_img.size[0]}x{person_img.size[1]}), garment_img ({garment_img.size[0]}x{garment_img.size[1]}), background_img ({background_img_processed.size[0]}x{background_img_processed.size[1]})")
+        if gen_config_obj is not None:
+            print(f"[V5] ✅ GenerateContentConfig 객체 사용: temperature=0.0, safety_settings=BLOCK_NONE")
+        else:
+            print(f"[V5] ⚠️ GenerateContentConfig 객체를 사용할 수 없습니다 (기본값 사용)")
         gemini_start_time = time.time()
         
         try:
             response = await client_pool.generate_content_with_retry_async(
                 model=GEMINI_3_FLASH_MODEL,
-                contents=[person_img, garment_img, background_img_processed, unified_prompt]
+                contents=interleaved_contents,   # 수정된 Payload (인터리빙 방식)
+                generation_config=gen_config_obj,    # GenerateContentConfig 객체 전달
+                safety_settings=None  # GenerateContentConfig에 포함되어 있으므로 None
             )
         except Exception as exc:
             run_time = time.time() - start_time
