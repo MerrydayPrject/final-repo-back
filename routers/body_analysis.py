@@ -8,7 +8,12 @@ from fastapi.responses import JSONResponse
 from PIL import Image, ImageOps
 
 from core.model_loader import get_body_analysis_service, get_image_classifier_service
-from services.body_service import determine_body_features, analyze_body_with_gemini
+from services.body_service import (
+    determine_body_features, 
+    analyze_body_with_gemini,
+    load_body_line_definitions,
+    classify_body_line_with_gemini
+)
 from services.database import get_db_connection
 from services.body_analysis_database import save_body_analysis_result, get_body_logs, get_body_logs_count
 import numpy as np
@@ -402,10 +407,34 @@ async def analyze_body(
         # 2. 체형 측정값 계산
         measurements = body_analysis_service.calculate_measurements(landmarks)
         
-        # 3. 체형 타입 분류 (랜드마크 기반)
-        body_type = body_analysis_service.classify_body_type(measurements)
+        # 3. 라인별 체형 정의 로드 (DB에서)
+        body_line_definitions = load_body_line_definitions()
         
-        # 4. BMI 계산 및 체형 특징 판단
+        # 4. Gemini API로 라인 판별 (DB 정의 + 랜드마크 정보 활용)
+        gemini_line_result = None
+        try:
+            gemini_line_result = await classify_body_line_with_gemini(
+                image, measurements, body_line_definitions
+            )
+            print(f"[라인 판별] Gemini 결과: {gemini_line_result}")
+        except Exception as e:
+            print(f"[WARN] Gemini 라인 판별 실패: {e}")
+            import traceback
+            print(traceback.format_exc())
+        
+        # Gemini 라인 판별 결과가 있으면 사용, 없으면 랜드마크 기반 분류 사용
+        if gemini_line_result and gemini_line_result.get('body_line'):
+            body_type = {
+                'type': gemini_line_result['body_line'],
+                'confidence': gemini_line_result.get('confidence', 'medium'),
+                'description': f"{gemini_line_result['body_line']} 체형 (Gemini 판별)"
+            }
+            print(f"[라인 판별] Gemini 결과 사용: {body_type['type']}")
+        else:
+            # 랜드마크 기반 분류 (폴백)
+            body_type = body_analysis_service.classify_body_type(measurements)
+            print(f"[라인 판별] 랜드마크 기반 분류 사용: {body_type['type']}")
+        # 5. BMI 계산 및 체형 특징 판단
         bmi = None
         body_features = []
         if height and weight:
@@ -414,7 +443,7 @@ async def analyze_body(
             bmi = weight / (height_m ** 2)
             body_features = determine_body_features(body_type, bmi, height, measurements)
         
-        # 5. Gemini API로 상세 분석
+        # 6. Gemini API로 상세 분석
         gemini_analysis = None
         gemini_analysis_text = None
         try:
@@ -426,10 +455,10 @@ async def analyze_body(
         except Exception as e:
             print(f"Gemini 분석 실패: {e}")
         
-        # 6. 처리 시간 계산
+        # 7. 처리 시간 계산
         run_time = time.time() - start_time
         
-        # 7. 분석 결과를 DB에 저장
+        # 8. 분석 결과를 DB에 저장
         try:
             # 체형 특징을 문자열로 변환 (쉼표로 구분)
             characteristic_str = ', '.join(body_features) if body_features else None
@@ -459,9 +488,13 @@ async def analyze_body(
             "success": True,
             "body_analysis": {
                 "body_type": body_type.get('type', 'unknown'),
+                "body_type_confidence": body_type.get('confidence', 'medium'),
+                "body_type_description": body_type.get('description', ''),
                 "body_features": body_features,
-                "measurements": measurements
+                "measurements": measurements,
+                "line_classification_method": "gemini" if gemini_line_result and gemini_line_result.get('body_line') else "landmark"
             },
+            "gemini_line_classification": gemini_line_result,
             "gemini_analysis": gemini_analysis,
             "run_time": run_time,
             "message": "체형 분석이 완료되었습니다."
