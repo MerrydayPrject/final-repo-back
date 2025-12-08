@@ -354,13 +354,6 @@ async def generate_unified_tryon_custom_v4(
         #     run_time=run_time
         # )
         
-        # 날짜별 합성 카운트 증가
-        from services.synthesis_stats_service import increment_synthesis_count
-        try:
-            increment_synthesis_count()
-        except Exception as e:
-            print(f"합성 카운트 증가 실패 (계속 진행): {e}")
-        
         return {
             "success": True,
             "prompt": used_prompt,

@@ -232,14 +232,6 @@ class V4V5CustomOrchestrator:
             print(f"CustomV5-2 성공: {v5_result.get('success', False)}")
             print("="*80 + "\n")
         
-        # 날짜별 합성 카운트 증가 (v5_result가 성공한 경우에만)
-        if v5_result.get("success", False):
-            from services.synthesis_stats_service import increment_synthesis_count
-            try:
-                increment_synthesis_count()
-            except Exception as e:
-                print(f"합성 카운트 증가 실패 (계속 진행): {e}")
-        
         return {
             "success": overall_success,
             "v4_result": v4_result,
