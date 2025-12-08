@@ -272,12 +272,8 @@ async def validate_person(
                 dy = lower_ankle[1] - upper_shoulder[1]
                 body_height_distance = math.sqrt(dx**2 + dy**2)
                 
-                # y 좌표 차이 (상체-하체 높이 차이)
-                body_height_ratio = dy
-                
-                # 실제 거리가 0.3 미만이거나, y 좌표 차이가 0.2 미만이면 전신이 아닌 것으로 판단
-                # (회전된 이미지도 고려하여 실제 거리와 y 좌표 차이 모두 확인)
-                if body_height_distance < 0.3 or body_height_ratio < 0.2:
+                # 실제 거리가 0.3 미만이면 전신이 아닌 것으로 판단
+                if body_height_distance < 0.3:
                     print(f"❌ 전신 비율 부족 (거리: {body_height_distance:.3f}) - 차단")
                     return JSONResponse({
                         "success": True,
