@@ -1,35 +1,38 @@
-# MISSION: VIRTUAL TRY-ON (STRICT FACE CLONING MODE)
+# MISSION: VIRTUAL TRY-ON (NATURAL LIGHTING INTEGRATION)
 
 ## CRITICAL SETTINGS
-- **CREATIVITY:** 0% (Do not invent anything)
-- **IDENTITY:** 100% (Bitwise copy of the face)
+- **CREATIVITY:** 0% (Do not invent new features)
+- **IDENTITY:** 100% (Preserve facial structure)
+- **LIGHTING:** ADAPTIVE (Match background atmosphere)
 
 ## INPUTS
 - [Image 1]: Target Person (Source of Identity).
 - [Image 2]: Garment (Source of Outfit).
 - [Image 3]: Background (Target Scene).
 
-## 1. FACE CLONING (ABSOLUTE PRIORITY)
-- **THE RULE:** You are NOT a painter. You are a COMPOSITOR.
-- **ACTION:** Crop the head (face, hair, ears, neck) from [Image 1] and **PASTE** it onto the generated body.
-- **PIXEL PRESERVATION:** The pixel values of the face region must remain identical to [Image 1].
+## 1. IDENTITY PRESERVATION (STRUCTURE LOCK)
+- **THE RULE:** Keep the facial **GEOMETRY and FEATURES** of [Image 1] exactly the same, but adapt the **ILLUMINATION**.
+- **ACTION:** Composite the head from [Image 1], but update its lighting to match the new scene.
+- **ALLOWED:**
+    - Apply the color temperature of [Image 3] to the face (e.g., warm sunset, cool neon).
+    - Cast realistic shadows on the face consistent with the light direction in [Image 3].
 - **PROHIBITED:**
-    - DO NOT re-light the face heavily.
-    - DO NOT sharpen or "enhance" the eyes/nose/mouth.
-    - DO NOT change the skin texture of the face.
-    - DO NOT alter the gaze direction.
-- **INTEGRATION:** Only blend the *edges* of the neck where it meets the new clothes. The center of the face must be the original raw pixels.
+    - DO NOT change the shape of eyes, nose, mouth, or jawline.
+    - DO NOT apply heavy, high-contrast shadows that obscure the identity.
+- **GOAL:** The face must look like it is physically present in the environment of [Image 3], not like a cutout sticker.
 
 ## 2. BODY & GARMENT GENERATION
 - **TASK:** Generate the body wearing [Image 2] *below* the neck.
 - **FIT:** Adapts the garment to the pose of [Image 1].
-- **HANDS/FEET:** If hands or feet are visible in [Image 1], keep their original shape and posture. Do not regenerate fingers if possible.
+- **PHYSICS:** Ensure the cloth drapes naturally over the body shape.
 
-## 3. BACKGROUND COMPOSITION
+## 3. BACKGROUND COMPOSITION & GLOBAL ILLUMINATION
 - **SCENE:** Place the composited person into [Image 3].
-- **LIGHTING:** Adjust the *garment's* lighting to match [Image 3].
-- **FACE LIGHTING EXCEPTION:** Keep the face lighting NEUTRAL or consistent with [Image 1]. Do not force the background's strong lighting onto the face if it distorts the identity.
+- **LIGHTING HARMONY:** - Analyze the light source in [Image 3] (direction, intensity, color).
+    - **Re-light BOTH the face and the garment** to match this light source.
+    - Ensure the skin tone reacts naturally to the ambient light (e.g., slight blue tint in a shadow, golden tint in sun).
+- **SHADOWS:** Cast a realistic contact shadow on the ground/floor based on the person's position.
 
 ## 4. OUTPUT QUALITY
-- The result should look like a "Head-Swap" where the original head is placed on a new body.
-- If you must choose between "Realistic Lighting on Face" and "Original Identity", **CHOOSE IDENTITY.**
+- The final image must look like a cohesive photograph.
+- **Prioritize "Photorealism" and "Lighting Consistency"** while maintaining the person's recognizable identity.
