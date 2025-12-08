@@ -714,12 +714,16 @@ async def check_single_dress(
             # 이미지 해시 생성
             image_hash = hashlib.md5(file_content).hexdigest()
 
-            # 판별
-            check_result = dress_check_service.check_dress(
+            # 웨딩드레스 여부 판별 (업로드 차단 전용)
+            evaluation = dress_check_service.check_wedding_dress(
                 image=image,
                 model=model,
                 mode=mode
             )
+            raw_result = evaluation.get("raw", {})
+            predicted_dress = bool(raw_result.get("dress", False))
+            confidence = evaluation.get("confidence", 0.0)
+            category = evaluation.get("category", "")
 
             # 썸네일 생성
             thumbnail = None
@@ -733,40 +737,64 @@ async def check_single_dress(
             except Exception:
                 pass
 
-            # 로그 저장
-            record_id = None
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute("""
-                        INSERT INTO dress_check_logs 
-                        (filename, image_hash, model, mode, predicted_dress, confidence, category)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """, (
-                        file.filename or "uploaded_image",
-                        image_hash,
-                        model,
-                        mode,
-                        check_result["dress"],
-                        check_result["confidence"],
-                        check_result["category"]
-                    ))
-                    connection.commit()
-                    record_id = cursor.lastrowid
-            except Exception as db_error:
-                print(f"DB 기록 오류: {db_error}")
+            # 로그 저장 헬퍼
+            def log_check(predicted_flag: bool) -> Optional[int]:
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            INSERT INTO dress_check_logs
+                            (filename, image_hash, model, mode, predicted_dress, confidence, category)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """, (
+                            file.filename or "uploaded_image",
+                            image_hash,
+                            model,
+                            mode,
+                            predicted_flag,
+                            confidence,
+                            category
+                        ))
+                        connection.commit()
+                        return cursor.lastrowid
+                except Exception as db_error:
+                    print(f"DB 기록 오류: {db_error}")
+                    return None
 
+            # 웨딩드레스 여부 판별
+            record_id = None  # 변수 초기화
+            if not evaluation.get("is_wedding_dress", False):
+                record_id = log_check(predicted_dress)
+                return JSONResponse({
+                    "success": False,
+                    "error": "NotWeddingDress",
+                    "message": "웨딩드레스 이미지가 아니어서 업로드를 차단했습니다.",
+                    "result": {
+                        "filename": file.filename or "uploaded_image",
+                        "dress": False,
+                        "is_wedding_dress": False,
+                        "confidence": confidence,
+                        "category": category,
+                        "thumbnail": thumbnail,
+                        "record_id": record_id
+                    }
+                }, status_code=400)
+
+            # 정상 처리
+            record_id = log_check(predicted_dress)
             return JSONResponse({
                 "success": True,
                 "result": {
                     "filename": file.filename or "uploaded_image",
-                    "dress": check_result["dress"],
-                    "confidence": check_result["confidence"],
-                    "category": check_result["category"],
+                    "dress": predicted_dress,
+                    "is_wedding_dress": True,
+                    "confidence": confidence,
+                    "category": category,
                     "thumbnail": thumbnail,
                     "record_id": record_id
                 },
                 "message": "판별이 완료되었습니다."
             })
+
         finally:
             connection.close()
 

@@ -98,12 +98,26 @@ async function runCheck() {
         });
 
         const data = await res.json();
+
         if (!res.ok || !data.success) {
-            throw new Error(data.message || `요청 실패 (status: ${res.status})`);
+            const message = data.message || `요청 실패 (status: ${res.status})`;
+            alert(message);
+            setStatus(message, true);
+            return;
         }
 
-        renderResult(data.result || {});
+        // --- 웨딩드레스가 아님 → 차단 ---
+        if (!data.result?.is_wedding_dress) {
+            const message = data.message || '웨딩드레스 이미지가 아니어서 업로드를 차단했습니다.';
+            alert(message);
+            setStatus(message, true);
+            return;
+        }
+
+        // --- 웨딩드레스일 때 결과 표시 ---
+        renderResult(data.result);
         setStatus('판별을 완료했습니다.');
+
     } catch (err) {
         console.error(err);
         setStatus(err.message || '처리 중 오류가 발생했습니다.', true);

@@ -34,53 +34,35 @@ class DressCheckService:
         return base64.b64encode(buffered.getvalue()).decode()
 
     def _build_prompt(self, mode: str) -> str:
-        """프롬프트 텍스트 로드 (파일 없으면 기본값 반환)."""
-        prompt_filename = "dress_check_fast.txt" if mode == "fast" else "dress_check_accurate.txt"
-        prompt_path = os.path.join(os.getcwd(), "prompts", "dress_check", prompt_filename)
-        try:
-            with open(prompt_path, "r", encoding="utf-8") as f:
-                return f.read().strip()
-        except FileNotFoundError:
-            print(f"WARNING: 드레스 체크 프롬프트 파일을 찾을 수 없습니다: {prompt_path}")
-            return (
-                "{\n"
-                '    "dress": true 또는 false,\n'
-                '    "confidence": 0.0~1.0,\n'
-                '    "category": "드레스일 경우 카테고리, 비드레스일 경우 종류"\n'
-                "}"
-            )
-        except Exception as e:
-            print(f"ERROR: 드레스 체크 프롬프트 로드 실패: {e}")
-            return (
-                "{\n"
-                '    "dress": true 또는 false,\n'
-                '    "confidence": 0.0~1.0,\n'
-                '    "category": "드레스일 경우 카테고리, 비드레스일 경우 종류"\n'
-                "}"
-            )
+        """프롬프트 텍스트 로드."""
+        filename = "dress_check_fast.txt" if mode == "fast" else "dress_check_accurate.txt"
+        path = os.path.join(os.getcwd(), "prompts", "dress_check", filename)
 
-    def check_dress(
-        self,
-        image: Image.Image,
-        model: str = "gpt-4o-mini",
-        mode: str = "fast",
-    ) -> Dict:
-        """이미지가 드레스인지 판별한다. 예외 발생 시 로그를 남기고 기본값 반환."""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except Exception:
+            return """
+다음 이미지를 분석해 JSON으로만 응답하라:
+
+{
+  "dress": true 또는 false,
+  "confidence": 0.0 ~ 1.0,
+  "category": "웨딩드레스 종류 또는 비드레스 종류"
+}
+            """.strip()
+
+    def check_dress(self, image: Image.Image, model="gpt-4o-mini", mode="fast") -> Dict:
+        """이미지가 드레스인지 판별."""
         import traceback
 
         try:
-            # 이미지 base64 변환
             img_base64 = self._image_to_base64(image)
-
-            # 프롬프트 구성
             prompt = self._build_prompt(mode)
-
-            # 모델명 설정
             model_name = GPT4O_MODEL_NAME if model == "gpt-4o" else "gpt-4o-mini"
 
-            # OpenAI 호출 (재시도 포함)
+            # --- OpenAI API ---
             max_retries = 5
-            retry_delay = 0.5
             response = None
 
             for attempt in range(max_retries):
@@ -94,7 +76,9 @@ class DressCheckService:
                                     {"type": "text", "text": prompt},
                                     {
                                         "type": "image_url",
-                                        "image_url": {"url": f"data:image/png;base64,{img_base64}"},
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{img_base64}"
+                                        },
                                     },
                                 ],
                             }
@@ -104,57 +88,108 @@ class DressCheckService:
                     )
                     break
                 except Exception as e:
-                    error_msg = str(e)
-                    is_rate_limit = (
-                        "429" in error_msg
-                        or "rate limit" in error_msg.lower()
-                        or "rate_limit" in error_msg.lower()
-                        or isinstance(e, RateLimitError)
-                        if RateLimitError != Exception
-                        else False
-                    )
-                    if is_rate_limit and attempt < max_retries - 1:
-                        wait_time = retry_delay * (2**attempt)
-                        print(f"Rate limit 오류 발생. {wait_time:.2f}초 뒤 재시도.. (시도 {attempt+1}/{max_retries})")
-                        time.sleep(wait_time)
+                    if "429" in str(e) or "rate limit" in str(e).lower():
+                        time.sleep(0.4 * (2**attempt))
                         continue
                     raise
 
             if response is None:
-                raise RuntimeError("OpenAI 응답이 비어 있습니다.")
+                raise RuntimeError("OpenAI 응답 없음")
 
-            # 디버그용 원본 출력
-            print("OpenAI 응답 원본:", response)
-
-            # JSON 파싱
+            # --- JSON 파싱 ---
             response_text = response.choices[0].message.content.strip()
+
             try:
                 result = json.loads(response_text)
-            except json.JSONDecodeError:
-                json_match = re.search(r"\{[^}]+\}", response_text)
-                if json_match:
-                    result = json.loads(json_match.group())
+            except Exception:
+                match = re.search(r"\{.*\}", response_text, re.DOTALL)
+                if match:
+                    result = json.loads(match.group())
                 else:
-                    raise ValueError("JSON 형식의 응답을 받지 못했습니다.")
+                    raise ValueError("JSON 파싱 실패")
 
+            # --- 안전 검증 ---
             dress = bool(result.get("dress", False))
-            confidence = max(0.0, min(1.0, float(result.get("confidence", 0.5))))
-            category = str(result.get("category", "알 수 없음"))
+            confidence = float(result.get("confidence", 0.0))
+            confidence = max(0.0, min(1.0, confidence))
+            category = str(result.get("category", "비드레스" if not dress else "드레스"))
 
-            return {"dress": dress, "confidence": confidence, "category": category}
+            # 드레스가 아닌데 category가 '웨딩드레스'로 잘못 오는 케이스 방지
+            if not dress:
+                category = "비드레스"
+
+            return {
+                "dress": dress,
+                "confidence": confidence,
+                "category": category,
+            }
 
         except Exception:
             print("드레스 판별 예외 발생:")
             traceback.print_exc()
-            return {"dress": False, "confidence": 0.0, "category": "오류 발생"}
+            return {
+                "dress": False,
+                "confidence": 0.0,
+                "category": "오류",
+            }
+
+    def check_wedding_dress(self, image: Image.Image, model="gpt-4o-mini", mode="fast", threshold=0.7) -> Dict:
+        """웨딩드레스 여부 추가 판별.
+
+        조건:
+        - 드레스 판정(dress=True)
+        - 신뢰도 threshold 이상
+        - 카테고리에 '웨딩/브라이덜/wedding/bridal/신부' 키워드 포함
+        """
+        raw = self.check_dress(image, model, mode)
+
+        dress = raw.get("dress", False)
+        confidence = float(raw.get("confidence", 0.0))
+        category = raw.get("category", "") or ""
+        category_lower = category.lower()
+
+        # 카테고리 키워드 확인 (한글/영문)
+        wedding_keywords = ("웨딩", "브라이덜", "신부", "wedding", "bridal")
+        non_wedding_keywords = (
+            "캐주얼",
+            "하객",
+            "데일리",
+            "정장",
+            "투피스",
+            "세트",
+            "바지",
+            "팬츠",
+            "점프수트",
+            "슬랙스",
+            "셔츠",
+            "블라우스",
+            "니트",
+            "점퍼",
+            "코트",
+            "자켓",
+        )
+        has_wedding_keyword = any(k.lower() in category_lower for k in wedding_keywords)
+        has_non_wedding_keyword = any(k.lower() in category_lower for k in non_wedding_keywords)
+
+        is_wedding = (
+            dress
+            and confidence >= threshold
+            and has_wedding_keyword
+            and not has_non_wedding_keyword
+        )
+
+        return {
+            "is_wedding_dress": is_wedding,
+            "confidence": confidence,
+            "category": category,
+            "raw": raw,
+        }
 
 
-# 싱글톤 인스턴스
+# --- 싱글톤 ---
 _service_instance: Optional[DressCheckService] = None
 
-
 def get_dress_check_service() -> DressCheckService:
-    """싱글톤 DressCheckService 인스턴스 반환."""
     global _service_instance
     if _service_instance is None:
         _service_instance = DressCheckService()
