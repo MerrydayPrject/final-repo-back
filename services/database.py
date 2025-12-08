@@ -1,4 +1,4 @@
-﻿"""데이터베이스 연결 및 초기화"""
+"""데이터베이스 연결 및 초기화"""
 import pymysql
 from config.database import (
     MYSQL_HOST, MYSQL_PORT, MYSQL_USER, 

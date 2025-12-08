@@ -298,9 +298,9 @@ class BodyAnalysisService:
         # 디버깅: 조건 체크
         print(f"  [조건 체크]")
         print(f"    X라인 (허리/어깨<0.82, 허리/엉덩이<1.30): {waist_shoulder_ratio < 0.82 and waist_hip_ratio < 1.30}")
-        print(f"    A라인 (< 1.40): {shoulder_hip_ratio < 1.40}")
-        print(f"    H라인 (1.40-1.65, 허리>=0.82): {1.40 <= shoulder_hip_ratio <= 1.65 and waist_shoulder_ratio >= 0.82}")
-        print(f"    O라인 (> 1.65): {shoulder_hip_ratio > 1.65}")
+        print(f"    A라인 (< 1.50): {shoulder_hip_ratio < 1.50}")
+        print(f"    H라인 (1.50-1.60, 허리>=0.90): {1.50 <= shoulder_hip_ratio <= 1.60 and waist_shoulder_ratio >= 0.90}")
+        print(f"    O라인 (> 1.60): {shoulder_hip_ratio > 1.60}")
         
         # 1. X라인 (모래시계형) - 허리가 매우 얇음
         # 허리/어깨 비율이 낮고 (< 0.82), 허리/엉덩이 비율도 낮은 경우
@@ -310,23 +310,26 @@ class BodyAnalysisService:
             description = "X라인(모래시계형) 체형에 가깝습니다. 어깨와 엉덩이가 비슷하고 허리가 얇은 특징을 보입니다."
         
         # 2. A라인 (역삼각형) - 어깨 < 엉덩이 (상대적으로)
-        # 실제 측정값: 1.4 미만인 경우 (엉덩이가 상대적으로 넓음)
-        elif shoulder_hip_ratio < 1.40:
+        # 실제 측정값: 1.5 미만인 경우 (엉덩이가 상대적으로 넓음)
+        # 사진에서 어깨가 넓게 나오는 것을 감안하여 기준 완화 (1.40 → 1.50)
+        elif shoulder_hip_ratio < 1.50:
             body_type = "A라인"
             confidence = 0.85
             description = "A라인 체형에 가깝습니다. 어깨보다 엉덩이가 넓은 특징을 보입니다."
         
-        # 3. H라인 (직선형) - 어깨 ≈ 엉덩이, 허리도 비슷
-        # 실제 측정값: 1.4-1.65 범위에서 허리가 그렇게 얇지 않은 경우
-        elif (1.40 <= shoulder_hip_ratio <= 1.65 and
-              waist_shoulder_ratio >= 0.82):  # 허리가 그렇게 얇지 않음
+        # 3. H라인 (직선형) - 어깨 ≈ 엉덩이, 허리도 비슷 (매우 엄격한 기준)
+        # 실제 측정값: 1.50-1.60 범위에서 허리가 거의 일자여야 함
+        # H라인은 거의 일자 체형만 해당되므로 범위를 좁히고 기준을 엄격하게
+        elif (1.50 <= shoulder_hip_ratio <= 1.60 and
+              waist_shoulder_ratio >= 0.90):  # 허리가 거의 일자 (더 엄격)
             body_type = "H라인"
             confidence = 0.85
             description = "H라인 체형에 가깝습니다. 어깨와 엉덩이가 비슷한 직선형 특징을 보입니다."
         
         # 4. O라인 (원형) - 어깨 > 엉덩이 또는 둥근 체형
-        # 실제 측정값: 1.65 이상인 경우 (어깨가 상대적으로 넓음)
-        elif shoulder_hip_ratio > 1.65:
+        # 실제 측정값: 1.60 이상인 경우 (어깨가 상대적으로 넓음)
+        # H라인 범위 축소로 인해 O라인 범위 확대 (1.65 → 1.60)
+        elif shoulder_hip_ratio > 1.60:
             body_type = "O라인"
             confidence = 0.80
             description = "O라인 체형에 가깝습니다. 어깨가 넓거나 균형잡힌 둥근 특징을 보입니다."
