@@ -60,6 +60,15 @@ async def compose_v5v5_custom(
         # v5_result만 반환
         if result.get("success") and result.get("v5_result"):
             v5_result = result["v5_result"]
+            
+            # 날짜별 합성 카운트 증가 (v5_result가 성공한 경우에만)
+            if v5_result.get("success", False):
+                from services.synthesis_stats_service import increment_synthesis_count
+                try:
+                    increment_synthesis_count()
+                except Exception as e:
+                    print(f"합성 카운트 증가 실패 (계속 진행): {e}")
+            
             return JSONResponse({
                 "success": v5_result.get("success", False),
                 "prompt": v5_result.get("prompt", ""),

@@ -2297,13 +2297,6 @@ async def generate_unified_tryon_v4(
         #     run_time=run_time
         # )
         
-        # 날짜별 합성 카운트 증가
-        from services.synthesis_stats_service import increment_synthesis_count
-        try:
-            increment_synthesis_count()
-        except Exception as e:
-            print(f"합성 카운트 증가 실패 (계속 진행): {e}")
-        
         return {
             "success": True,
             "prompt": used_prompt,
@@ -2589,13 +2582,6 @@ async def generate_unified_tryon_v5(
         print(f"Gemini 지연 시간: {gemini_latency:.2f}초")
         print(f"최종 이미지 크기: {final_img.size[0]}x{final_img.size[1]} (고정 크기: 960x1280)")
         print("="*80 + "\n")
-        
-        # 날짜별 합성 카운트 증가
-        from services.synthesis_stats_service import increment_synthesis_count
-        try:
-            increment_synthesis_count()
-        except Exception as e:
-            print(f"합성 카운트 증가 실패 (계속 진행): {e}")
         
         return {
             "success": True,

@@ -230,13 +230,6 @@ async def generate_unified_tryon_custom_v5(
         print(f"최종 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
         print("="*80 + "\n")
         
-        # 날짜별 합성 카운트 증가
-        from services.synthesis_stats_service import increment_synthesis_count
-        try:
-            increment_synthesis_count()
-        except Exception as e:
-            print(f"합성 카운트 증가 실패 (계속 진행): {e}")
-        
         return {
             "success": True,
             "prompt": used_prompt,
