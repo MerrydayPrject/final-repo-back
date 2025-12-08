@@ -47,6 +47,9 @@ class V4V5Orchestrator:
         enable_logging: bool = True
     ) -> Dict:
         """V4/V5 파이프라인 병렬 실행"""
+        # 디버그: enable_logging 값 확인
+        print(f"[DEBUG V4V5일반] enable_logging={enable_logging}")
+        
         start_time = time.time()
         model_id = "v4v5-compare"
         
@@ -61,20 +64,22 @@ class V4V5Orchestrator:
         background_s3_url = ""
         
         if enable_logging:
-            try:
-                person_buffered = io.BytesIO()
-                person_img.save(person_buffered, format="PNG")
-                person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
-                
-                garment_buffered = io.BytesIO()
-                garment_img.save(garment_buffered, format="PNG")
-                garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
-                
-                background_buffered = io.BytesIO()
-                background_img.save(background_buffered, format="PNG")
-                background_s3_url = upload_log_to_s3(background_buffered.getvalue(), model_id, "background") or ""
-            except Exception as e:
-                print(f"[V4V5일반] 입력 이미지 S3 업로드 실패: {e}")
+            # S3 업로드 비활성화
+            # try:
+            #     person_buffered = io.BytesIO()
+            #     person_img.save(person_buffered, format="PNG")
+            #     person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
+            #     
+            #     garment_buffered = io.BytesIO()
+            #     garment_img.save(garment_buffered, format="PNG")
+            #     garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
+            #     
+            #     background_buffered = io.BytesIO()
+            #     background_img.save(background_buffered, format="PNG")
+            #     background_s3_url = upload_log_to_s3(background_buffered.getvalue(), model_id, "background") or ""
+            # except Exception as e:
+            #     print(f"[V4V5일반] 입력 이미지 S3 업로드 실패: {e}")
+            pass
         
         # asyncio.gather로 병렬 실행
         v4_result, v5_result = await asyncio.gather(
@@ -116,47 +121,49 @@ class V4V5Orchestrator:
                         base64_data = result_image_data.split(",")[1]
                         image_bytes = base64.b64decode(base64_data)
                         
-                        # S3 업로드
-                        v4_result_s3_url = upload_log_to_s3(image_bytes, f"{model_id}-v5-1", "result") or ""
+                        # S3 업로드 (비활성화)
+                        # v4_result_s3_url = upload_log_to_s3(image_bytes, f"{model_id}-v5-1", "result") or ""
+                        v4_result_s3_url = ""
                         
-                        # 로그 저장
-                        save_test_log(
-                            person_url=person_s3_url or "",
-                            dress_url=garment_s3_url or None,
-                            result_url=v4_result_s3_url or "",
-                            model=f"{model_id}-v5-1",
-                            prompt=v4_result.get("prompt", ""),
-                            success=True,
-                            run_time=total_time
-                        )
+                        # 로그 저장 (비활성화)
+                        # save_test_log(
+                        #     person_url=person_s3_url or "",
+                        #     dress_url=garment_s3_url or None,
+                        #     result_url=v4_result_s3_url or "",
+                        #     model=f"{model_id}-v5-1",
+                        #     prompt=v4_result.get("prompt", ""),
+                        #     success=True,
+                        #     run_time=total_time
+                        # )
                 except Exception as e:
                     print(f"[V4V5일반] V5-1 결과 로깅 실패: {e}")
-                    try:
-                        save_test_log(
-                            person_url=person_s3_url or "",
-                            dress_url=garment_s3_url or None,
-                            result_url="",
-                            model=f"{model_id}-v5-1",
-                            prompt=v4_result.get("prompt", ""),
-                            success=False,
-                            run_time=total_time
-                        )
-                    except:
-                        pass
+                    # try:
+                    #     save_test_log(
+                    #         person_url=person_s3_url or "",
+                    #         dress_url=garment_s3_url or None,
+                    #         result_url="",
+                    #         model=f"{model_id}-v5-1",
+                    #         prompt=v4_result.get("prompt", ""),
+                    #         success=False,
+                    #         run_time=total_time
+                    #     )
+                    # except:
+                    #     pass
             else:
-                # V5-1 실패 로깅
-                try:
-                    save_test_log(
-                        person_url=person_s3_url or "",
-                        dress_url=garment_s3_url or None,
-                        result_url="",
-                        model=f"{model_id}-v5-1",
-                        prompt=v4_result.get("prompt", ""),
-                        success=False,
-                        run_time=total_time
-                    )
-                except:
-                    pass
+                # V5-1 실패 로깅 (비활성화)
+                # try:
+                #     save_test_log(
+                #         person_url=person_s3_url or "",
+                #         dress_url=garment_s3_url or None,
+                #         result_url="",
+                #         model=f"{model_id}-v5-1",
+                #         prompt=v4_result.get("prompt", ""),
+                #         success=False,
+                #         run_time=total_time
+                #     )
+                # except:
+                #     pass
+                pass
         
         # V5 결과 로깅 (로깅 활성화 시에만)
         v5_result_s3_url = ""
@@ -170,47 +177,49 @@ class V4V5Orchestrator:
                         base64_data = result_image_data.split(",")[1]
                         image_bytes = base64.b64decode(base64_data)
                         
-                        # S3 업로드
-                        v5_result_s3_url = upload_log_to_s3(image_bytes, f"{model_id}-v5-2", "result") or ""
+                        # S3 업로드 (비활성화)
+                        # v5_result_s3_url = upload_log_to_s3(image_bytes, f"{model_id}-v5-2", "result") or ""
+                        v5_result_s3_url = ""
                         
-                        # 로그 저장
-                        save_test_log(
-                            person_url=person_s3_url or "",
-                            dress_url=garment_s3_url or None,
-                            result_url=v5_result_s3_url or "",
-                            model=f"{model_id}-v5-2",
-                            prompt=v5_result.get("prompt", ""),
-                            success=True,
-                            run_time=total_time
-                        )
+                        # 로그 저장 (비활성화)
+                        # save_test_log(
+                        #     person_url=person_s3_url or "",
+                        #     dress_url=garment_s3_url or None,
+                        #     result_url=v5_result_s3_url or "",
+                        #     model=f"{model_id}-v5-2",
+                        #     prompt=v5_result.get("prompt", ""),
+                        #     success=True,
+                        #     run_time=total_time
+                        # )
                 except Exception as e:
                     print(f"[V4V5일반] V5-2 결과 로깅 실패: {e}")
-                    try:
-                        save_test_log(
-                            person_url=person_s3_url or "",
-                            dress_url=garment_s3_url or None,
-                            result_url="",
-                            model=f"{model_id}-v5-2",
-                            prompt=v5_result.get("prompt", ""),
-                            success=False,
-                            run_time=total_time
-                        )
-                    except:
-                        pass
+                    # try:
+                    #     save_test_log(
+                    #         person_url=person_s3_url or "",
+                    #         dress_url=garment_s3_url or None,
+                    #         result_url="",
+                    #         model=f"{model_id}-v5-2",
+                    #         prompt=v5_result.get("prompt", ""),
+                    #         success=False,
+                    #         run_time=total_time
+                    #     )
+                    # except:
+                    #     pass
             else:
-                # V5-2 실패 로깅
-                try:
-                    save_test_log(
-                        person_url=person_s3_url or "",
-                        dress_url=garment_s3_url or None,
-                        result_url="",
-                        model=f"{model_id}-v5-2",
-                        prompt=v5_result.get("prompt", ""),
-                        success=False,
-                        run_time=total_time
-                    )
-                except:
-                    pass
+                # V5-2 실패 로깅 (비활성화)
+                # try:
+                #     save_test_log(
+                #         person_url=person_s3_url or "",
+                #         dress_url=garment_s3_url or None,
+                #         result_url="",
+                #         model=f"{model_id}-v5-2",
+                #         prompt=v5_result.get("prompt", ""),
+                #         success=False,
+                #         run_time=total_time
+                #     )
+                # except:
+                #     pass
+                pass
         
         # 전체 성공 여부 판단
         overall_success = v4_result.get("success", False) or v5_result.get("success", False)
@@ -222,6 +231,14 @@ class V4V5Orchestrator:
             print(f"V5-1 성공: {v4_result.get('success', False)}")
             print(f"V5-2 성공: {v5_result.get('success', False)}")
             print("="*80 + "\n")
+        
+        # 날짜별 합성 카운트 증가 (v5_result가 성공한 경우에만)
+        if v5_result.get("success", False):
+            from services.synthesis_stats_service import increment_synthesis_count
+            try:
+                increment_synthesis_count()
+            except Exception as e:
+                print(f"합성 카운트 증가 실패 (계속 진행): {e}")
         
         return {
             "success": overall_success,
@@ -254,6 +271,7 @@ async def run_v4v5_compare(
     Returns:
         dict: V4V5 비교 결과
     """
+    print(f"[DEBUG run_v4v5_compare] enable_logging={enable_logging}")
     orchestrator = V4V5Orchestrator()
     return await orchestrator.run_parallel(person_img, garment_img, background_img, enable_logging)
 

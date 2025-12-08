@@ -285,7 +285,9 @@ async def compose_v5v5(
         garment_img = Image.open(io.BytesIO(garment_bytes)).convert("RGB")
         background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
         
-        # V4V5일반 비교 실행 (로깅 비활성화)
+        # V4V5일반 비교 실행 (로깅 비활성화 - 프론트엔드 일반 피팅용)
+        # enable_logging=False: S3 업로드 및 DB 로그 저장 비활성화
+        print("[DEBUG 라우터] /fit/v5v5/compose - enable_logging=False로 호출")
         result = await run_v4v5_compare(person_img, garment_img, background_img, enable_logging=False)
         
         # v5_result만 반환
