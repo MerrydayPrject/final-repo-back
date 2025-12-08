@@ -649,6 +649,14 @@ async def check_single_dress(
     """
     단일 이미지로 드레스 여부 판별
     """
+    import time
+    start_time = time.time()
+    
+    print("\n" + "="*80)
+    print("[드레스 체크] 요청 시작")
+    print(f"파일명: {file.filename}")
+    print(f"모델: {model}, 모드: {mode}")
+    print("="*80)
     try:
         # 모델 검증
         if model not in ["gpt-4o-mini", "gpt-4o"]:
@@ -713,28 +721,26 @@ async def check_single_dress(
 
             # 이미지 해시 생성
             image_hash = hashlib.md5(file_content).hexdigest()
+            print(f"[드레스 체크] 이미지 해시: {image_hash}")
+            print(f"[드레스 체크] 이미지 크기: {image.size[0]}x{image.size[1]}")
+            print(f"[드레스 체크] 파일 크기: {len(file_content) / 1024:.2f} KB")
 
             # 판별
+            print(f"[드레스 체크] 판별 시작...")
+            check_start_time = time.time()
             check_result = dress_check_service.check_dress(
                 image=image,
                 model=model,
                 mode=mode
             )
+            check_elapsed_time = time.time() - check_start_time
+            print(f"[드레스 체크] 판별 결과:")
+            print(f"  - 드레스 여부: {check_result['dress']}")
+            print(f"  - 신뢰도: {check_result['confidence']:.2%}")
+            print(f"  - 카테고리: {check_result['category']}")
+            print(f"  - 판별 소요 시간: {check_elapsed_time:.2f}초")
 
-            # 썸네일 생성
-            thumbnail = None
-            try:
-                preview = image.copy()
-                preview.thumbnail((300, 300))
-                buffered = io.BytesIO()
-                preview.save(buffered, format="PNG")
-                thumb_b64 = base64.b64encode(buffered.getvalue()).decode()
-                thumbnail = f"data:image/png;base64,{thumb_b64}"
-            except Exception:
-                pass
-
-            # 로그 저장
-            record_id = None
+            # 로그 저장 (내부 용도, 응답에는 포함하지 않음)
             try:
                 with connection.cursor() as cursor:
                     cursor.execute("""
@@ -751,28 +757,30 @@ async def check_single_dress(
                         check_result["category"]
                     ))
                     connection.commit()
-                    record_id = cursor.lastrowid
             except Exception as db_error:
                 print(f"DB 기록 오류: {db_error}")
 
+            # 전체 소요 시간 계산
+            total_elapsed_time = time.time() - start_time
+            
+            # 프론트엔드에 드레스 여부만 반환
+            print(f"[드레스 체크] 응답 전송: dress={check_result['dress']}")
+            print(f"[드레스 체크] 전체 소요 시간: {total_elapsed_time:.2f}초")
+            print("="*80 + "\n")
             return JSONResponse({
                 "success": True,
                 "result": {
-                    "filename": file.filename or "uploaded_image",
-                    "dress": check_result["dress"],
-                    "confidence": check_result["confidence"],
-                    "category": check_result["category"],
-                    "thumbnail": thumbnail,
-                    "record_id": record_id
-                },
-                "message": "판별이 완료되었습니다."
+                    "dress": check_result["dress"]
+                }
             })
         finally:
             connection.close()
 
     except Exception as e:
         import traceback
+        print(f"\n[드레스 체크] ❌ 오류 발생: {str(e)}")
         traceback.print_exc()
+        print("="*80 + "\n")
         return JSONResponse({
             "success": False,
             "error": str(e),

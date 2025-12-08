@@ -213,9 +213,45 @@ async def generate_unified_tryon_custom_v5(
         print(f"[Stage 1] 의상 교체 + 배경 합성 완료 - 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
         
         # ============================================================
+        # 결과 이미지 크기 고정 (960x1280, 비율 유지 리사이즈 후 중앙 크롭)
+        # ============================================================
+        target_width = 960
+        target_height = 1280
+        target_ratio = target_width / target_height  # 0.75
+        
+        original_width, original_height = final_img.size
+        original_ratio = original_width / original_height
+        
+        # 비율 유지하면서 리사이즈 (긴 쪽 기준)
+        if original_ratio > target_ratio:
+            # 원본이 더 넓음 - 높이를 기준으로 리사이즈
+            new_height = target_height
+            new_width = int(original_width * (target_height / original_height))
+        else:
+            # 원본이 더 높음 - 너비를 기준으로 리사이즈
+            new_width = target_width
+            new_height = int(original_height * (target_width / original_width))
+        
+        # 리사이즈
+        resized_img = final_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        print(f"[CustomV5] 비율 유지 리사이즈 완료 - 이미지 크기: {resized_img.size[0]}x{resized_img.size[1]}")
+        
+        # 중앙 크롭하여 960x1280으로 맞춤
+        left = (new_width - target_width) // 2
+        top = (new_height - target_height) // 2
+        right = left + target_width
+        bottom = top + target_height
+        
+        final_img = resized_img.crop((left, top, right, bottom))
+        print(f"[CustomV5] 중앙 크롭 완료 - 최종 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
+        
+        # ============================================================
         # 최종 결과 처리
         # ============================================================
-        result_image_base64 = base64.b64encode(stage1_image_parts[0]).decode()
+        # 크기 고정된 이미지를 base64로 인코딩
+        img_buffer = io.BytesIO()
+        final_img.save(img_buffer, format="PNG")
+        result_image_base64 = base64.b64encode(img_buffer.getvalue()).decode()
         
         # S3 업로드 (현재 비활성화)
         result_s3_url = ""
@@ -227,7 +263,7 @@ async def generate_unified_tryon_custom_v5(
         print("="*80)
         print(f"전체 실행 시간: {run_time:.2f}초")
         print(f"Stage 1 지연 시간: {stage1_latency:.2f}초")
-        print(f"최종 이미지 크기: {final_img.size[0]}x{final_img.size[1]}")
+        print(f"최종 이미지 크기: {final_img.size[0]}x{final_img.size[1]} (고정 크기: 960x1280)")
         print("="*80 + "\n")
         
         return {
