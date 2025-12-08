@@ -2403,6 +2403,78 @@ Maintain the person's identity and face. Output a single photorealistic image.""
 
 
 # ============================================================
+# 이미지 리사이징 유틸리티 함수
+# ============================================================
+
+def force_resize_to_1024(img: Image.Image) -> Image.Image:
+    """
+    이미지를 무조건 긴 변 기준 1024px로 리사이징 (비율 유지)
+    이미지가 1024px보다 작아도 1024px로 키우고, 크면 1024px로 줄입니다.
+    
+    Args:
+        img: 원본 이미지 (PIL Image)
+    
+    Returns:
+        리사이징된 이미지 (PIL Image, 긴 변이 정확히 1024px)
+    """
+    width, height = img.size
+    long_edge = max(width, height)
+    
+    # 이미 정확히 1024px이면 리사이징 불필요
+    if long_edge == 1024:
+        return img
+    
+    # 비율 유지하면서 리사이징
+    if width > height:
+        # 가로가 더 긴 경우
+        new_width = 1024
+        new_height = int(height * (1024 / width))
+    else:
+        # 세로가 더 긴 경우
+        new_height = 1024
+        new_width = int(width * (1024 / height))
+    
+    resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    print(f"[강제 리사이징] {width}x{height} → {new_width}x{new_height} (긴 변: {long_edge}px → {max(new_width, new_height)}px)")
+    
+    return resized_img
+
+
+def resize_image_long_edge(img: Image.Image, max_long_edge: int = 1024) -> Image.Image:
+    """
+    이미지의 긴 변(Long edge)을 기준으로 리사이징 (비율 유지)
+    
+    Args:
+        img: 원본 이미지 (PIL Image)
+        max_long_edge: 긴 변의 최대 크기 (기본값: 1024px, 속도 최적화)
+    
+    Returns:
+        리사이징된 이미지 (PIL Image)
+    """
+    width, height = img.size
+    long_edge = max(width, height)
+    
+    # 이미 긴 변이 max_long_edge보다 작거나 같으면 리사이징 불필요
+    if long_edge <= max_long_edge:
+        return img
+    
+    # 비율 유지하면서 리사이징
+    if width > height:
+        # 가로가 더 긴 경우
+        new_width = max_long_edge
+        new_height = int(height * (max_long_edge / width))
+    else:
+        # 세로가 더 긴 경우
+        new_height = max_long_edge
+        new_width = int(width * (max_long_edge / height))
+    
+    resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    print(f"[이미지 리사이징] {width}x{height} → {new_width}x{new_height} (긴 변: {long_edge}px → {max(new_width, new_height)}px)")
+    
+    return resized_img
+
+
+# ============================================================
 # V5 파이프라인 메인 함수
 # ============================================================
 
@@ -2444,8 +2516,23 @@ async def generate_unified_tryon_v5(
         print("V5 파이프라인 시작 (X.AI 제거, Gemini 직접 처리)")
         print("="*80)
         
-        # 배경 이미지는 원본 그대로 유지
-        background_img_processed = background_img
+        # ============================================================
+        # 이미지 리사이징 (속도 최적화: 긴 변을 1024px로 제한)
+        # ============================================================
+        # Gemini API 호출 전에 이미지를 리사이징하여 속도 개선
+        # 품질(얼굴 보존)은 유지하면서 속도 향상 (42초 → 15~20초대 목표)
+        print("\n[이미지 리사이징] API 호출 전 이미지 최적화 시작...")
+        print(f"[이미지 리사이징] 원본 크기 - person: {person_img.size[0]}x{person_img.size[1]}, garment: {garment_img.size[0]}x{garment_img.size[1]}, background: {background_img.size[0]}x{background_img.size[1]}")
+        
+        # 긴 변을 무조건 1024px로 강제 리사이징 (속도 최적화)
+        person_img_resized = force_resize_to_1024(person_img)
+        garment_img_resized = force_resize_to_1024(garment_img)
+        background_img_resized = force_resize_to_1024(background_img)
+        
+        print(f"[이미지 리사이징] 리사이징 완료 - person: {person_img_resized.size[0]}x{person_img_resized.size[1]}, garment: {garment_img_resized.size[0]}x{garment_img_resized.size[1]}, background: {background_img_resized.size[0]}x{background_img_resized.size[1]}")
+        
+        # 배경 이미지 처리
+        background_img_processed = background_img_resized
         
         # ============================================================
         # Gemini 3 Flash로 의상 교체 + 배경 합성 통합 처리
@@ -2478,19 +2565,10 @@ async def generate_unified_tryon_v5(
         # ------------------------------------------------------------------
         # 설명: 모델에게 각 이미지가 무엇인지 명확히 라벨링해줍니다.
         interleaved_contents = [
-            "Tasks inputs:",
-            
-            "First, this is [Image 1] The Target Person:",
-            person_img,
-            
-            "Second, this is [Image 2] The Garment:",
-            garment_img,
-            
-            "Third, this is [Image 3] The User-Selected Background:",
-            background_img_processed,
-            
-            "Instructions:",
-            unified_prompt
+            "Input 1(Person):", person_img_resized,
+            "Input 2(Garment):", garment_img_resized,
+            "Input 3(Background):", background_img_processed,
+            "Task:", unified_prompt
         ]
         
         # ------------------------------------------------------------------
