@@ -1,7 +1,7 @@
 """Gemini API 클라이언트 풀 관리자 (다중 API 키 지원)"""
 import asyncio
 import threading
-from typing import List, Optional, Callable, Any
+from typing import List, Optional, Callable, Any, Dict
 from google import genai
 from config.settings import get_gemini_3_api_keys
 
@@ -146,7 +146,9 @@ class GeminiClientPool:
         self,
         model: str,
         contents: List[Any],
-        max_retries: Optional[int] = None
+        max_retries: Optional[int] = None,
+        generation_config: Optional[Dict[str, Any]] = None,
+        safety_settings: Optional[Dict[str, Any]] = None
     ) -> Any:
         """
         여러 API 키를 사용하여 Gemini API 호출 (자동 재시도 포함)
@@ -156,6 +158,8 @@ class GeminiClientPool:
             model: 사용할 모델명 (예: "gemini-3-pro-image-preview")
             contents: 생성할 콘텐츠 리스트
             max_retries: 최대 재시도 횟수 (None이면 모든 키 시도)
+            generation_config: 생성 설정 (temperature, top_p, top_k 등)
+            safety_settings: 안전 설정 (HarmCategory별 차단 레벨)
             
         Returns:
             Gemini API 응답 객체
@@ -192,10 +196,36 @@ class GeminiClientPool:
             try:
                 print(f"[GeminiClientPool] API 키 {attempt + 1}/{max_retries} 사용 중 (키 인덱스: {key_index})")
                 # 동기 호출을 비동기로 실행 (별도 스레드에서 실행되어 블로킹되지 않음)
+                # google-genai 패키지는 GenerateContentConfig 객체를 config 파라미터로 받음
+                call_kwargs = {
+                    "model": model,
+                    "contents": contents
+                }
+                
+                # generation_config가 GenerateContentConfig 객체인 경우 config 파라미터로 전달
+                if generation_config is not None:
+                    # GenerateContentConfig 객체인지 확인 (temperature 속성 또는 safety_settings 속성 존재 여부)
+                    if hasattr(generation_config, 'temperature') or hasattr(generation_config, 'safety_settings'):
+                        call_kwargs["config"] = generation_config
+                        print(f"[GeminiClientPool] ✅ GenerateContentConfig 객체를 config 파라미터로 전달")
+                        if hasattr(generation_config, 'temperature'):
+                            print(f"[GeminiClientPool]   - temperature: {generation_config.temperature}")
+                        if hasattr(generation_config, 'safety_settings'):
+                            print(f"[GeminiClientPool]   - safety_settings: {len(generation_config.safety_settings) if generation_config.safety_settings else 0}개 설정")
+                    else:
+                        # 딕셔너리인 경우 (Fallback - 사용하지 않음)
+                        print(f"[GeminiClientPool] ⚠️ generation_config가 딕셔너리 형태입니다 (객체 변환 필요)")
+                        # 딕셔너리는 전달하지 않음 (에러 방지)
+                else:
+                    print(f"[GeminiClientPool] ⚠️ generation_config가 None입니다 (기본값 사용)")
+                
+                # safety_settings는 generation_config에 포함되어 있으므로 별도로 전달하지 않음
+                if safety_settings is not None:
+                    print(f"[GeminiClientPool] ⚠️ safety_settings가 별도로 전달되었지만, GenerateContentConfig에 포함되어야 합니다")
+                
                 response = await asyncio.to_thread(
                     client.models.generate_content,
-                    model=model,
-                    contents=contents
+                    **call_kwargs
                 )
                 print(f"[GeminiClientPool] API 호출 성공 (키 인덱스: {key_index})")
                 consecutive_503_count = 0  # 성공 시 카운터 리셋

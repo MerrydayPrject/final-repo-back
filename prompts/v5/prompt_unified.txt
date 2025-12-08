@@ -1,85 +1,35 @@
-GEMINI SINGLE-CALL — STABLE VIRTUAL TRY-ON (BACKGROUND FIRST + FULL BODY + SHOES + FIT)
+# MISSION: VIRTUAL TRY-ON (STRICT FACE CLONING MODE)
 
-INPUTS
+## CRITICAL SETTINGS
+- **CREATIVITY:** 0% (Do not invent anything)
+- **IDENTITY:** 100% (Bitwise copy of the face)
 
-Image 1: Person (identity + head + pose + body proportions)
+## INPUTS
+- [Image 1]: Target Person (Source of Identity).
+- [Image 2]: Garment (Source of Outfit).
+- [Image 3]: Background (Target Scene).
 
-Image 2: Garment (dress/outfit to apply)
+## 1. FACE CLONING (ABSOLUTE PRIORITY)
+- **THE RULE:** You are NOT a painter. You are a COMPOSITOR.
+- **ACTION:** Crop the head (face, hair, ears, neck) from [Image 1] and **PASTE** it onto the generated body.
+- **PIXEL PRESERVATION:** The pixel values of the face region must remain identical to [Image 1].
+- **PROHIBITED:**
+    - DO NOT re-light the face heavily.
+    - DO NOT sharpen or "enhance" the eyes/nose/mouth.
+    - DO NOT change the skin texture of the face.
+    - DO NOT alter the gaze direction.
+- **INTEGRATION:** Only blend the *edges* of the neck where it meets the new clothes. The center of the face must be the original raw pixels.
 
-Image 3 (optional): Background (final scene)
+## 2. BODY & GARMENT GENERATION
+- **TASK:** Generate the body wearing [Image 2] *below* the neck.
+- **FIT:** Adapts the garment to the pose of [Image 1].
+- **HANDS/FEET:** If hands or feet are visible in [Image 1], keep their original shape and posture. Do not regenerate fingers if possible.
 
-NON-NEGOTIABLE RULES (HIGHEST PRIORITY)
+## 3. BACKGROUND COMPOSITION
+- **SCENE:** Place the composited person into [Image 3].
+- **LIGHTING:** Adjust the *garment's* lighting to match [Image 3].
+- **FACE LIGHTING EXCEPTION:** Keep the face lighting NEUTRAL or consistent with [Image 1]. Do not force the background's strong lighting onto the face if it distorts the identity.
 
-IMMUTABLE HEAD LOCK (ABOVE NECK):
-The entire head region from Image 1 (face + hair + expression) is IMMUTABLE. Copy it exactly. Do not regenerate, retouch, beautify, relight, reshape, or alter anything above the neck. No identity change.
-
-FULL BODY MUST EXIST (NO MISSING LIMBS):
-The output must show a complete, continuous body from head to feet. No missing legs/feet/hands. No floating torso. If any limb is missing or cut off, restore it to match Image 1’s anatomy and proportions.
-
-NO RANDOM CROPPING / SAME FRAMING:
-Keep the original camera angle and framing from Image 1. Do not zoom-in, do not crop out legs/feet.
-
-STEP A — BACKGROUND FIRST (ONLY IF IMAGE 3 IS PROVIDED)
-
-If Image 3 is provided: use Image 3 as the final background exactly (do not redesign the scene). Keep its layout/objects/textures/perspective intact. Place the person into it with correct scale and horizon alignment. Clean edges, no halo.
-
-If Image 3 is not provided: keep Image 1 background unchanged.
-
-(Shadows are optional. Do not spend effort forcing perfect shadows.)
-
-STEP B — REMOVE ORIGINAL CLOTHING (BODY SAFE)
-
-Completely erase the original clothing from Image 1 with zero residue (no colors, textures, seams, straps, silhouettes).
-Important: Do not delete body parts while removing clothes. Preserve body continuity.
-
-STEP C — APPLY GARMENT FROM IMAGE 2 (DESIGN LOCK)
-
-Dress the person with the exact outfit from Image 2, preserving:
-
-neckline, sleeves, waistline, seams, closures, pleats/ruffles, cut
-
-length and volume/silhouette
-
-color/pattern
-
-fabric/material texture and sheen
-
-Render realistic fabric folds/highlights so it looks physically worn.
-
-STEP D — NATURAL FITTING IMPROVEMENT (ALLOWED, BUT DESIGN MUST NOT CHANGE)
-
-Improve fit realism without altering the garment design:
-
-align garment correctly at shoulders/bust/waist/hips/hem
-
-fix warping, melting, jagged edges, clipping into skin
-
-keep believable tension/slack and clean seam continuity
-
-avoid “painted-on” look unless the dress is meant to be skin-tight
-
-STEP E — SKIN GENERATION (ONLY WHERE EXPOSED)
-
-If arms/legs are exposed by the outfit, generate natural skin matching the face tone from Image 1 with realistic texture and consistent shading. Keep anatomy natural.
-
-STEP F — FOOTWEAR GENERATION (DRESS-MATCHED SHOES)
-
-If shoes are not clearly present and the feet are visible, generate shoes that match the dress (elegant heels/pumps/sandals) with a color that complements the outfit (neutral/black/metallic unless Image 2 implies otherwise).
-No extra accessories besides shoes.
-
-HARD “DO NOT” LIST (PREVENTS WILD VARIANCE)
-
-Do not modify the head region (above neck) in any way.
-
-Do not crop the frame or remove legs/feet.
-
-Do not change the outfit design details from Image 2.
-
-Do not add jewelry/bags/hats/extra props (shoes only allowed).
-
-Do not deform anatomy or merge limbs into background/fabric.
-
-FAILURE FALLBACK (IF CONFLICT OCCURS)
-
-If instructions conflict, prioritize in this order:
-Head lock > Full body integrity > Outfit design lock > Background exactness > Shadows.
+## 4. OUTPUT QUALITY
+- The result should look like a "Head-Swap" where the original head is placed on a new body.
+- If you must choose between "Realistic Lighting on Face" and "Original Identity", **CHOOSE IDENTITY.**

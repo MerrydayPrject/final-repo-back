@@ -382,10 +382,9 @@ async def compare_v4v5(
         # V4V5일반 비교 실행
         result = await run_v4v5_compare(person_img, garment_img, background_img)
         
-        if result["success"]:
-            return JSONResponse(result)
-        else:
-            return JSONResponse(result, status_code=500)
+        # 비교 작업은 완료되었으므로 성공 여부와 관계없이 200 반환
+        # (실제 성공 여부는 result["success"]와 각 result의 success 필드로 확인)
+        return JSONResponse(result)
             
     except Exception as e:
         import traceback
