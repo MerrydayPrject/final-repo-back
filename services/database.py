@@ -18,6 +18,9 @@ def get_db_connection():
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor
         )
+        # 한국시간(Asia/Seoul, UTC+9)으로 타임존 설정
+        with connection.cursor() as cursor:
+            cursor.execute("SET time_zone = '+09:00'")
         return connection
     except pymysql.Error as e:
         error_msg = str(e)
