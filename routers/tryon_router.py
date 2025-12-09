@@ -356,6 +356,7 @@ async def compare_v4v5(
     garment_image: UploadFile = File(..., description="의상 이미지 파일"),
     background_image: UploadFile = File(..., description="배경 이미지 파일"),
     profile_front: Optional[str] = Form(None, description="프론트엔드 프로파일링 데이터 (JSON 문자열)"),
+    dress_id: Optional[int] = Form(None, description="드레스 ID (피팅 로그 기록용)"),
 ):
     """
     V4V5일반 비교 엔드포인트: V5 파이프라인을 두 번 병렬 실행하고 두 결과를 반환
@@ -448,6 +449,19 @@ async def compare_v4v5(
                         print("[일반 피팅] ⚠️ 합성 카운트 증가 실패 (DB 연결 또는 쿼리 오류)")
                 except Exception as e:
                     print(f"[일반 피팅] ❌ 합성 카운트 증가 예외 발생: {e}")
+                
+                # 드레스 피팅 로그 기록 (dress_id가 있는 경우)
+                if dress_id:
+                    from services.dress_fitting_log_service import log_dress_fitting
+                    print(f"[일반 피팅] 드레스 피팅 로그 기록 시작 - dress_id: {dress_id}")
+                    try:
+                        log_success = log_dress_fitting(dress_id)
+                        if log_success:
+                            print(f"[일반 피팅] ✅ 드레스 피팅 로그 기록 성공 - dress_id: {dress_id}")
+                        else:
+                            print(f"[일반 피팅] ⚠️ 드레스 피팅 로그 기록 실패 - dress_id: {dress_id}")
+                    except Exception as e:
+                        print(f"[일반 피팅] ❌ 드레스 피팅 로그 기록 예외 발생: {e}")
         
         # 프로파일링 저장
         save_tryon_profile(

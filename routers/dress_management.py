@@ -51,11 +51,18 @@ async def get_dresses(
                 # 오프셋 계산
                 offset = (page - 1) * limit
                 
-                # 페이징된 데이터 조회
+                # 페이징된 데이터 조회 (피팅 카운트 포함)
                 cursor.execute("""
-                    SELECT idx as id, file_name as image_name, style, url
-                    FROM dresses
-                    ORDER BY idx DESC
+                    SELECT 
+                        d.idx as id, 
+                        d.file_name as image_name, 
+                        d.style, 
+                        d.url,
+                        COALESCE(COUNT(l.id), 0) as fitting_count
+                    FROM dresses d
+                    LEFT JOIN dress_fitting_logs l ON d.idx = l.dress_id
+                    GROUP BY d.idx, d.file_name, d.style, d.url
+                    ORDER BY d.idx DESC
                     LIMIT %s OFFSET %s
                 """, (limit, offset))
                 dresses = cursor.fetchall()

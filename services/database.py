@@ -325,6 +325,20 @@ def init_database():
             cursor.execute(create_tryon_profile_summary_table)
             connection.commit()
             print("DB 테이블 생성 완료: tryon_profile_summary")
+            
+            # dress_fitting_logs 테이블 생성
+            create_dress_fitting_logs_table = """
+            CREATE TABLE IF NOT EXISTS dress_fitting_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                dress_id INT NOT NULL COMMENT '드레스 ID (dresses.idx 참조)',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '피팅 시각',
+                INDEX idx_dress_id (dress_id),
+                INDEX idx_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='드레스 피팅 로그';
+            """
+            cursor.execute(create_dress_fitting_logs_table)
+            connection.commit()
+            print("DB 테이블 생성 완료: dress_fitting_logs")
     except Exception as e:
         print(f"테이블 생성 오류: {e}")
     finally:

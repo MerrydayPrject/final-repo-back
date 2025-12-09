@@ -46,6 +46,10 @@
                             style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
                             ⏱️ 피팅 프로파일링
                         </button>
+                        <button id="tabDressFitting" class="tab-button"
+                            style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                            👗 드레스 피팅 로그
+                        </button>
                         </div>
                         <div class="logs-header-right" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
                             <div class="logs-count">
@@ -280,6 +284,75 @@
                 <!-- 페이지네이션 -->
                 <div class="pagination" id="profile-logs-pagination">
                     <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+
+            <!-- 드레스 피팅 로그 목록 -->
+            <div id="dress-fitting-logs-section" style="display: none;">
+                <!-- 뷰 전환 버튼 -->
+                <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
+                    <label style="font-weight: bold;">뷰:</label>
+                    <button id="dress-fitting-view-logs" class="profile-filter-btn active" onclick="switchDressFittingView('logs')">
+                        개별 로그
+                    </button>
+                    <button id="dress-fitting-view-counts" class="profile-filter-btn" onclick="switchDressFittingView('counts')">
+                        드레스별 카운트
+                    </button>
+                </div>
+                
+                <!-- 개별 로그 뷰 -->
+                <div id="dress-fitting-logs-view" style="display: block;">
+                    <div class="table-container">
+                        <table class="logs-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>드레스 ID</th>
+                                    <th>드레스 이미지</th>
+                                    <th>스타일</th>
+                                    <th>피팅 시각</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dress-fitting-logs-tbody">
+                                <tr>
+                                    <td colspan="5" class="loading">데이터를 불러오는 중...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 페이지네이션 -->
+                    <div class="pagination" id="dress-fitting-pagination">
+                        <!-- 동적으로 생성됨 -->
+                    </div>
+                </div>
+                
+                <!-- 드레스별 카운트 뷰 -->
+                <div id="dress-fitting-counts-view" style="display: none;">
+                    <div class="table-container">
+                        <table class="logs-table">
+                            <thead>
+                                <tr>
+                                    <th>드레스 ID</th>
+                                    <th>드레스 이미지</th>
+                                    <th>드레스명</th>
+                                    <th>스타일</th>
+                                    <th>피팅 횟수</th>
+                                    <th>최근 피팅 시각</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dress-fitting-counts-tbody">
+                                <tr>
+                                    <td colspan="6" class="loading">데이터를 불러오는 중...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 페이지네이션 -->
+                    <div class="pagination" id="dress-fitting-counts-pagination">
+                        <!-- 동적으로 생성됨 -->
+                    </div>
                 </div>
             </div>
         </section>

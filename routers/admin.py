@@ -1139,3 +1139,286 @@ async def get_tryon_profile_log_detail(request: Request, log_id: int):
             "message": f"프로파일링 로그 상세 조회 중 오류 발생: {str(e)}"
         }, status_code=500)
 
+
+@router.get("/api/admin/dress-fitting-logs", tags=["관리자"])
+async def get_dress_fitting_logs(request: Request, page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=1000), date: Optional[str] = Query(None)):
+    """
+    드레스 피팅 로그 조회 (날짜별 필터링 지원)
+    
+    dress_fitting_logs 테이블에서 피팅 로그를 조회합니다.
+    """
+    # 인증 확인
+    await require_admin(request)
+    
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 날짜 필터 조건
+                where_clause = ""
+                params = []
+                
+                if date:
+                    where_clause = "WHERE DATE(l.created_at) = %s"
+                    params.append(date)
+                
+                try:
+                    # 전체 건수 조회
+                    count_query = f"""
+                        SELECT COUNT(*) as total 
+                        FROM dress_fitting_logs l
+                        {where_clause}
+                    """
+                    if params:
+                        cursor.execute(count_query, tuple(params))
+                    else:
+                        cursor.execute(count_query)
+                    count_result = cursor.fetchone()
+                    total = count_result['total'] if count_result else 0
+                except Exception as table_error:
+                    # 테이블이 없으면 빈 결과 반환
+                    error_str = str(table_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        return JSONResponse({
+                            "success": True,
+                            "data": [],
+                            "pagination": {
+                                "page": page,
+                                "limit": limit,
+                                "total": 0,
+                                "total_pages": 0
+                            },
+                            "message": "테이블이 아직 생성되지 않았습니다."
+                        })
+                    raise
+                
+                # 총 페이지 수 계산
+                total_pages = (total + limit - 1) // limit if total > 0 else 0
+                
+                # 오프셋 계산
+                offset = (page - 1) * limit
+                
+                # 드레스 피팅 로그 목록 조회 (dresses 테이블과 조인)
+                try:
+                    query = f"""
+                        SELECT 
+                            l.id,
+                            l.dress_id,
+                            d.dress_name,
+                            d.style,
+                            d.url,
+                            l.created_at
+                        FROM dress_fitting_logs l
+                        LEFT JOIN dresses d ON l.dress_id = d.idx
+                        {where_clause}
+                        ORDER BY l.created_at DESC
+                        LIMIT %s OFFSET %s
+                    """
+                    query_params = params + [limit, offset]
+                    cursor.execute(query, tuple(query_params))
+                    logs = cursor.fetchall() or []
+                except Exception as query_error:
+                    # 쿼리 실행 실패 시 빈 결과 반환
+                    error_str = str(query_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        logs = []
+                    else:
+                        raise
+                
+                # 날짜 형식 변환 (JSON 직렬화 가능하도록)
+                formatted_logs = []
+                for log in logs:
+                    created_at = log.get('created_at')
+                    # datetime 객체를 문자열로 변환
+                    created_at_str = None
+                    if created_at:
+                        if hasattr(created_at, 'isoformat'):
+                            created_at_str = created_at.isoformat()
+                        else:
+                            created_at_str = str(created_at)
+                    
+                    formatted_log = {
+                        'id': log.get('id'),
+                        'dress_id': log.get('dress_id'),
+                        'dress_name': log.get('dress_name'),
+                        'style': log.get('style'),
+                        'url': log.get('url'),
+                        'created_at': created_at_str
+                    }
+                    formatted_logs.append(formatted_log)
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": formatted_logs,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total,
+                        "total_pages": total_pages
+                    },
+                    "message": f"{len(formatted_logs)}개의 드레스 피팅 로그를 찾았습니다."
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"드레스 피팅 로그 조회 오류: {e}")
+        print(error_detail)
+        
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"드레스 피팅 로그 조회 중 오류가 발생했습니다: {str(e)}"
+        }, status_code=500)
+
+
+@router.get("/api/admin/dress-fitting-counts", tags=["관리자"])
+async def get_dress_fitting_counts(request: Request, page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=1000), date: Optional[str] = Query(None)):
+    """
+    드레스별 피팅 카운트 조회 (날짜별 필터링 지원)
+    
+    dress_fitting_logs 테이블에서 드레스별로 그룹화하여 피팅 횟수를 집계합니다.
+    """
+    # 인증 확인
+    await require_admin(request)
+    
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 날짜 필터 조건
+                date_filter = ""
+                params = []
+                
+                if date:
+                    date_filter = "WHERE DATE(l.created_at) = %s"
+                    params.append(date)
+                
+                try:
+                    # 전체 건수 조회 (드레스별로 그룹화된 개수)
+                    count_query = f"""
+                        SELECT COUNT(DISTINCT l.dress_id) as total 
+                        FROM dress_fitting_logs l
+                        {date_filter}
+                    """
+                    if params:
+                        cursor.execute(count_query, tuple(params))
+                    else:
+                        cursor.execute(count_query)
+                    count_result = cursor.fetchone()
+                    total = count_result['total'] if count_result else 0
+                except Exception as table_error:
+                    # 테이블이 없으면 빈 결과 반환
+                    error_str = str(table_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        return JSONResponse({
+                            "success": True,
+                            "data": [],
+                            "pagination": {
+                                "page": page,
+                                "limit": limit,
+                                "total": 0,
+                                "total_pages": 0
+                            },
+                            "message": "테이블이 아직 생성되지 않았습니다."
+                        })
+                    raise
+                
+                # 총 페이지 수 계산
+                total_pages = (total + limit - 1) // limit if total > 0 else 0
+                
+                # 오프셋 계산
+                offset = (page - 1) * limit
+                
+                # 드레스별 카운트 조회 (dresses 테이블과 조인)
+                try:
+                    query = f"""
+                        SELECT 
+                            l.dress_id,
+                            d.dress_name,
+                            d.style,
+                            d.url,
+                            COUNT(l.id) as fitting_count,
+                            MAX(l.created_at) as last_fitting_at
+                        FROM dress_fitting_logs l
+                        LEFT JOIN dresses d ON l.dress_id = d.idx
+                        {date_filter}
+                        GROUP BY l.dress_id, d.dress_name, d.style, d.url
+                        ORDER BY fitting_count DESC, last_fitting_at DESC
+                        LIMIT %s OFFSET %s
+                    """
+                    query_params = params + [limit, offset]
+                    cursor.execute(query, tuple(query_params))
+                    counts = cursor.fetchall() or []
+                except Exception as query_error:
+                    # 쿼리 실행 실패 시 빈 결과 반환
+                    error_str = str(query_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        counts = []
+                    else:
+                        raise
+                
+                # 날짜 형식 변환 (JSON 직렬화 가능하도록)
+                formatted_counts = []
+                for count in counts:
+                    last_fitting_at = count.get('last_fitting_at')
+                    # datetime 객체를 문자열로 변환
+                    last_fitting_at_str = None
+                    if last_fitting_at:
+                        if hasattr(last_fitting_at, 'isoformat'):
+                            last_fitting_at_str = last_fitting_at.isoformat()
+                        else:
+                            last_fitting_at_str = str(last_fitting_at)
+                    
+                    formatted_count = {
+                        'dress_id': count.get('dress_id'),
+                        'dress_name': count.get('dress_name'),
+                        'style': count.get('style'),
+                        'url': count.get('url'),
+                        'fitting_count': count.get('fitting_count', 0),
+                        'last_fitting_at': last_fitting_at_str
+                    }
+                    formatted_counts.append(formatted_count)
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": formatted_counts,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total,
+                        "total_pages": total_pages
+                    },
+                    "message": f"{len(formatted_counts)}개의 드레스별 카운트를 찾았습니다."
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"드레스별 카운트 조회 오류: {e}")
+        print(error_detail)
+        
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"드레스별 카운트 조회 중 오류가 발생했습니다: {str(e)}"
+        }, status_code=500)
+
