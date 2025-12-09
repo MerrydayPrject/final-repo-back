@@ -1,18 +1,18 @@
-# 시스템 시퀀스 다이어그램
+알겠습니다! `v4` 관련된 부분을 제거하고, `v5`를 중심으로 수정된 다이어그램을 한글로 정리한 내용입니다. 아래는 수정된 내용입니다.
 
-이 문서는 백엔드와 프론트엔드 간의 주요 기능별 상세 시퀀스 다이어그램을 포함합니다.
+---
 
-## 1. 일반 피팅 (General Fitting)
+## 1. 인증 (Authentication)
 
-### 1.1 드레스 목록 조회
+**엔드포인트**: `/api/auth/login`, `/api/auth/logout`, `/api/auth/verify`
 
 ```mermaid
 sequenceDiagram
-    participant User as 사용자
-    participant Frontend as 프론트엔드<br/>(GeneralFitting.jsx)
-    participant API as API 유틸<br/>(api.js)
-    participant Backend as 백엔드<br/>(dress_management.py)
-    participant DB as 데이터베이스
+    actor User
+    participant FE as Frontend (App.jsx)
+    participant API as API Utility (api.js)
+    participant BE as Backend (auth_router)
+    participant DB as Database
 
     User->>Frontend: 페이지 로드
     Frontend->>API: getDresses()
@@ -302,7 +302,9 @@ sequenceDiagram
     end
 ```
 
-## 3. 체형 분석 (Body Analysis)
+---
+
+### 2.2 Custom Match V5V5
 
 ### 3.1 체형 분석 전체 플로우 (로깅 포함)
 
@@ -424,264 +426,185 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant User as 사용자
-    participant Frontend as 프론트엔드<br/>(CustomFitting.jsx)
-    participant API as API 유틸<br/>(api.js)
-    participant Backend as 백엔드<br/>(dress_management.py)
-    participant DressService as 드레스 체크 서비스
-    participant OpenAI as OpenAI API<br/>(GPT-4o-mini)
+    actor User
+    participant Page as GeneralFitting.jsx
+    participant API as api.js
+    participant BE as Backend (body_analysis)
+    participant S as BodyAnalysisService
+    participant MP as MediaPipe
+    participant AI as Gemini
 
-    User->>Frontend: 드레스 이미지 업로드
-    Frontend->>API: checkDress(imageFile, model='gpt-4o-mini', mode='fast')
-    API->>Backend: POST /api/dress/check<br/>(FormData: file, model, mode)
+    User->>Page: 이미지 업로드 (유효성 검사)
+    Page->>Page: setIsValidatingPerson(true)
+    Page->>API: validatePerson(image)
+    API->>BE: POST /api/validate-person
+    BE->>S: extract_landmarks()
+    S->>MP: 포즈 랜드마크 추출
+    MP-->>S: 랜드마크
+    BE->>BE: 전체 몸 확인
     
-    Backend->>DressService: 드레스 체크 시작
-    DressService->>DressService: 이미지를 base64로 인코딩
-    
-    alt mode == 'fast'
-        DressService->>OpenAI: Vision API 호출<br/>(GPT-4o-mini, 간단한 프롬프트)
-    else mode == 'accurate'
-        DressService->>OpenAI: Vision API 호출<br/>(GPT-4o, 상세 프롬프트)
+    alt 유효한 인물
+        BE-->>API: { success: true, is_person: true }
+        API-->>Page: 유효성 검사 성공
+        Page->>Page: handleImageUpload(image)
+    else 동물 / 잘못된 인물
+        BE-->>API: { is_animal: true, message: "동물 감지됨" }
+        API-->>Page: 유효성 검사 실패
+        Page->>Page: setValidationMessage(msg)
+        Page->>Page: setValidationModalOpen(true)
+    else 오류
+        BE-->>API: 500 오류
+        API-->>Page: 오류 발생
+        Page->>Page: setValidationMessage("오류")
+        Page->>Page: setValidationModalOpen(true)
     end
-    
-    OpenAI-->>DressService: 분석 결과 (드레스 여부 판단)
-    DressService->>Backend: {success: true, result: {dress: true/false}}
-    Backend-->>API: 드레스 체크 결과
-    API-->>Frontend: {success: true, result: {dress: true/false}}
-    
-    alt 드레스가 아닌 경우
-        Frontend->>Frontend: 에러 모달 표시
-        Frontend-->>User: "드레스 사진을 넣어주세요"
-    else 드레스인 경우
-        Frontend->>Frontend: 드레스 이미지 미리보기 표시
-        Frontend-->>User: 드레스 이미지 표시
-    end
+    Page->>Page: setIsValidatingPerson(false)
+
+    User->>Page: 전체 몸 + 키/체중 업로드 (분석 페이지)
+    Page->>API: analyzeBody(image, h, w)
+    API->>BE: POST /api/analyze-body
+    BE->>S: extract_landmarks()
+    S->>MP: 포즈 랜드마크 추출
+    MP-->>S: 랜드마크
+    S->>S: 측정값 계산
+    S->>AI: classify_body_line_with_gemini()
+    AI-->>S: 체형 유형
+    S->>AI: analyze_body_with_gemini()
+    AI-->>S: 상세 분석
+    S-->>BE: 분석 결과
+    BE-->>API: JSON 응답
+    API-->>Page: 분석 데이터
+    Page-->>User: 분석 결과 표시
 ```
 
-## 5. 리뷰 시스템
+---
 
-### 5.1 리뷰 제출
+## 4. 관리자 및 관리 (Admin & Management)
+
+**엔드포인트**: `/api/admin/dresses`, `/api/admin/stats`, `/api/admin/logs`
+**프론트엔드**: `AdminPage.jsx` (예시)
 
 ```mermaid
 sequenceDiagram
-    participant User as 사용자
-    participant Frontend as 프론트엔드<br/>(ReviewModal.jsx)
-    participant API as API 유틸<br/>(api.js)
-    participant Backend as 백엔드<br/>(review.py)
-    participant DB as 데이터베이스
+    actor Admin
+    participant Page as AdminPage.jsx
+    participant API as api.js
+    participant BE as Backend (admin_router)
+    participant DB as Database
 
-    User->>Frontend: 리뷰 모달에서 별점 및 내용 입력
-    User->>Frontend: 리뷰 제출 버튼 클릭
-    
-    Frontend->>Frontend: 쿠키 확인<br/>(isReviewCompleted)
-    
-    alt 이미 리뷰를 제출한 경우
-        Frontend-->>User: 리뷰 모달 표시 안 함
-    else 리뷰를 제출하지 않은 경우
-        Frontend->>API: submitReview({category, rating, content})
-        API->>Backend: POST /api/reviews<br/>(JSON: {category, rating, content})
-        
-        Backend->>Backend: 카테고리 유효성 검사<br/>(general, custom, analysis)
-        
-        Backend->>DB: INSERT INTO reviews<br/>(rating, content, category)
-        DB-->>Backend: review_id 반환
-        
-        Backend->>Frontend: {success: true, review_id}
-        Frontend->>Frontend: 쿠키에 리뷰 제출 기록 저장
-        Frontend-->>User: 리뷰 제출 완료 메시지
-    end
+    Admin->>Page: 대시보드 보기
+    Page->>API: getAdminStats()
+    API->>BE: GET /api/admin/stats
+    BE->>DB: 방문자/합성 통계 조회
+    DB-->>BE: 통계 데이터
+    BE-->>API: 통계 JSON
+    API-->>Page: 대시보드 업데이트
+
+    Admin->>Page: 드레스 업로드
+    Page->>API: uploadDress(file, meta)
+    API->>BE: POST /api/admin/dresses (Multipart)
+    BE->>BE: 이미지 저장 (Static/S3)
+    BE->>DB: 드레스 메타 데이터
 ```
 
-### 5.2 리뷰 조회
+
+삽입
+DB-->>BE: 드레스 ID
+BE-->>API: 성공 응답
+API-->>Page: 성공 토스트 표시
+
+```
+Admin->>Page: 체형 분석 로그 보기
+Page->>API: getBodyAnalysisLogs()
+API->>BE: GET /api/admin/body-logs
+BE->>DB: 로그 조회
+DB-->>BE: 로그 목록
+BE-->>API: 로그 JSON
+API-->>Page: 로그 테이블 렌더링
+```
+
+````
+
+---
+
+## 5. 드레스 관리 (Dress Management)
+**엔드포인트**: `/api/dress/check`
+**프론트엔드**: `CustomFitting.jsx`, `api.js`
 
 ```mermaid
 sequenceDiagram
-    participant Admin as 관리자
-    participant Frontend as 프론트엔드<br/>(관리자 페이지)
-    participant API as API 유틸
-    participant Backend as 백엔드<br/>(review.py)
-    participant DB as 데이터베이스
+    actor User
+    participant Page as CustomFitting.jsx
+    participant API as api.js
+    participant BE as Backend (dress_management)
+    participant AI as External AI (GPT-4o-mini)
 
-    Admin->>Frontend: 리뷰 목록 조회
-    Frontend->>API: GET /api/reviews?category=general&limit=100&offset=0
-    API->>Backend: GET /api/reviews?category=general&limit=100&offset=0
+    User->>Page: 드레스 이미지 업로드
+    Page->>Page: handleDressFile()
+    Page->>Page: setIsCheckingDress(true)
+    Page->>API: checkDress(image)
+    API->>BE: POST /api/dress/check
+    BE->>AI: 이미지 분석 (드레스 여부 확인)
+    AI-->>BE: 분석 결과
+    BE-->>API: JSON 응답 (is_dress)
+    API-->>Page: 결과 확인
     
-    Backend->>DB: SELECT COUNT(*) FROM reviews WHERE category = 'general'
-    DB-->>Backend: total count
-    
-    Backend->>DB: SELECT * FROM reviews<br/>WHERE category = 'general'<br/>ORDER BY created_at DESC<br/>LIMIT 100 OFFSET 0
-    DB-->>Backend: 리뷰 목록
-    
-    Backend->>DB: SELECT AVG(rating) FROM reviews
-    DB-->>Backend: 평균 별점
-    
-    Backend-->>API: {success: true, total, average_rating, reviews: [...]}
-    API-->>Frontend: 리뷰 목록 및 통계
-    Frontend-->>Admin: 리뷰 목록 표시
-```
+    alt 드레스
+        Page->>Page: setDressCheckResult(true)
+    else 드레스 아님
+        Page->>Page: setErrorMessage("드레스 아님")
+        Page->>Page: setErrorModalOpen(true)
+    end
+    Page->>Page: setIsCheckingDress(false)
+````
 
-## 6. 인증 시스템
+---
 
-### 6.1 관리자 로그인
+## 6. 리뷰 시스템 (Review System)
+
+**엔드포인트**: `/api/reviews`
+**프론트엔드**: `ReviewModal.jsx`
 
 ```mermaid
 sequenceDiagram
-    participant Admin as 관리자
-    participant Frontend as 프론트엔드<br/>(관리자 페이지)
-    participant API as API 유틸
-    participant Backend as 백엔드<br/>(auth.py)
-    participant SessionService as 세션 서비스
-    participant DB as 데이터베이스
+    actor User
+    participant Modal as ReviewModal.jsx
+    participant API as api.js
+    participant BE as Backend (review_router)
+    participant DB as Database
 
-    Admin->>Frontend: 로그인 페이지 접속
-    Admin->>Frontend: 아이디/비밀번호 입력
-    Admin->>Frontend: 로그인 버튼 클릭
-    
-    Frontend->>API: POST /api/auth/login<br/>(JSON: {username, password})
-    API->>Backend: POST /api/auth/login
-    
-    Backend->>Backend: 비밀번호 해시 검증
-    Backend->>DB: 사용자 정보 조회
-    
-    alt 인증 실패
-        DB-->>Backend: 사용자 없음 또는 비밀번호 불일치
-        Backend-->>API: {success: false, message: "인증 실패"}
-        API-->>Frontend: 에러 응답
-        Frontend-->>Admin: 로그인 실패 메시지
-    else 인증 성공
-        DB-->>Backend: 사용자 정보
-        Backend->>SessionService: 세션 생성
-        SessionService-->>Backend: session_id
-        Backend->>Backend: 세션 쿠키 설정
-        Backend-->>API: {success: true, session_id}
-        API-->>Frontend: 로그인 성공
-        Frontend->>Frontend: 세션 쿠키 저장
-        Frontend-->>Admin: 관리자 페이지로 리다이렉트
-    end
+    User->>Modal: 리뷰 제출 (평점, 내용)
+    Modal->>API: submitReview(data)
+    API->>BE: POST /api/reviews
+    BE->>DB: 리뷰 삽입
+    DB-->>BE: 성공
+    BE-->>API: 200 OK
+    API-->>Modal: 성공
+    Modal->>Modal: 모달 닫고 쿠키 설정
+
+    User->>Modal: 리뷰 보기
+    Modal->>API: getReviews()
+    API->>BE: GET /api/reviews
+    BE->>DB: 리뷰 조회
+    DB-->>BE: 리뷰 목록
+    BE-->>API: 리뷰 JSON
+    API-->>Modal: 리뷰 렌더링
 ```
 
-### 6.2 인증 검증
+---
+
+## 7. 방문자 추적 (Visitor Tracking)
+
+**엔드포인트**: `/visitor/visit`, `/visitor/today`
+**프론트엔드**: `App.jsx`, `api.js`
 
 ```mermaid
 sequenceDiagram
-    participant Admin as 관리자
-    participant Frontend as 프론트엔드<br/>(관리자 페이지)
-    participant API as API 유틸
-    participant Backend as 백엔드<br/>(auth.py)
-    participant SessionService as 세션 서비스
-    participant AuthMiddleware as 인증 미들웨어
-
-    Admin->>Frontend: 관리자 페이지 접속
-    Frontend->>API: GET /api/auth/verify<br/>(Cookie: session_id)
-    API->>Backend: GET /api/auth/verify
-    
-    Backend->>AuthMiddleware: 세션 검증
-    AuthMiddleware->>SessionService: 세션 유효성 확인
-    SessionService-->>AuthMiddleware: 세션 유효 여부
-    
-    alt 세션 만료 또는 무효
-        AuthMiddleware-->>Backend: 인증 실패
-        Backend-->>API: {success: false, authenticated: false}
-        API-->>Frontend: 인증 실패
-        Frontend-->>Admin: 로그인 페이지로 리다이렉트
-    else 세션 유효
-        AuthMiddleware-->>Backend: 인증 성공
-        Backend-->>API: {success: true, authenticated: true, user: {...}}
-        API-->>Frontend: 인증 성공
-        Frontend-->>Admin: 관리자 페이지 표시
-    end
-```
-
-## 7. 이미지 처리
-
-### 7.1 이미지 프록시 (CORS 해결)
-
-```mermaid
-sequenceDiagram
-    participant Frontend as 프론트엔드
-    participant Backend as 백엔드<br/>(proxy.py)
-    participant S3 as S3 Storage
-    participant ExternalAPI as 외부 API
-
-    Frontend->>Backend: GET /api/proxy-image?url={s3_url}
-    Backend->>Backend: URL 파싱 및 검증
-    
-    alt S3 URL인 경우
-        Backend->>S3: 이미지 다운로드 요청
-        S3-->>Backend: 이미지 바이너리
-        Backend->>Backend: 이미지 반환<br/>(Content-Type: image/jpeg)
-        Backend-->>Frontend: 이미지 응답
-    else 외부 URL인 경우
-        Backend->>ExternalAPI: HTTP GET 요청
-        ExternalAPI-->>Backend: 이미지 바이너리
-        Backend->>Backend: 이미지 반환
-        Backend-->>Frontend: 이미지 응답
-    end
-    
-    Frontend->>Frontend: 이미지 표시
-```
-
-### 7.2 이미지 필터 적용
-
-```mermaid
-sequenceDiagram
-    participant User as 사용자
-    participant Frontend as 프론트엔드
-    participant API as API 유틸<br/>(api.js)
-    participant Backend as 백엔드<br/>(image_processing.py)
-    participant ImageService as 이미지 처리 서비스
-    participant PIL as PIL/Pillow
-
-    User->>Frontend: 필터 선택 (grayscale, vintage, warm, cool, high_contrast)
-    Frontend->>API: applyImageFilter(image, filterPreset)
-    
-    alt 이미지가 File 객체인 경우
-        API->>Backend: POST /api/apply-image-filters<br/>(FormData: file, filter_preset)
-    else 이미지가 Data URL인 경우
-        API->>API: Data URL을 File 객체로 변환
-        API->>Backend: POST /api/apply-image-filters<br/>(FormData: file, filter_preset)
-    else 이미지가 URL인 경우
-        API->>Backend: GET /api/proxy-image?url={image_url}
-        Backend-->>API: 이미지 바이너리
-        API->>API: 이미지를 File 객체로 변환
-        API->>Backend: POST /api/apply-image-filters<br/>(FormData: file, filter_preset)
-    end
-    
-    Backend->>ImageService: 필터 적용 처리
-    ImageService->>PIL: 이미지 로드
-    PIL-->>ImageService: PIL Image 객체
-    
-    alt filterPreset == 'grayscale'
-        ImageService->>PIL: convert('L') - 그레이스케일 변환
-    else filterPreset == 'vintage'
-        ImageService->>PIL: 색상 조정 (세피아 톤)
-    else filterPreset == 'warm'
-        ImageService->>PIL: 색상 조정 (따뜻한 톤)
-    else filterPreset == 'cool'
-        ImageService->>PIL: 색상 조정 (차가운 톤)
-    else filterPreset == 'high_contrast'
-        ImageService->>PIL: 대비 조정
-    end
-    
-    PIL-->>ImageService: 필터 적용된 이미지
-    ImageService->>ImageService: base64 인코딩
-    ImageService-->>Backend: {result_image: "data:image/..."}
-    Backend-->>API: {success: true, result_image: "data:image/..."}
-    API-->>Frontend: 필터 적용된 이미지
-    Frontend-->>User: 필터 적용된 결과 표시
-```
-
-## 8. 접속자 통계
-
-### 8.1 접속자 카운팅
-
-```mermaid
-sequenceDiagram
-    participant User as 사용자
-    participant Frontend as 프론트엔드<br/>(App.jsx)
-    participant API as API 유틸<br/>(api.js)
-    participant Backend as 백엔드<br/>(visitor_router.py)
-    participant DB as 데이터베이스
+    actor User
+    participant App as App.jsx
+    participant API as api.js
+    participant BE as Backend (visitor_router)
+    participant DB as Database
 
     User->>Frontend: 메인 페이지 접속
     Frontend->>Frontend: useEffect에서 자동 호출
