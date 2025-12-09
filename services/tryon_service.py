@@ -2524,12 +2524,19 @@ async def generate_unified_tryon_v5(
         print("\n[이미지 리사이징] API 호출 전 이미지 최적화 시작...")
         print(f"[이미지 리사이징] 원본 크기 - person: {person_img.size[0]}x{person_img.size[1]}, garment: {garment_img.size[0]}x{garment_img.size[1]}, background: {background_img.size[0]}x{background_img.size[1]}")
         
+        # 리사이징 시간 측정 시작
+        resize_start_time = time.time()
+        
         # 긴 변을 무조건 1024px로 강제 리사이징 (속도 최적화)
         person_img_resized = force_resize_to_1024(person_img)
         garment_img_resized = force_resize_to_1024(garment_img)
         background_img_resized = force_resize_to_1024(background_img)
         
+        # 리사이징 시간 측정 완료
+        resize_ms = round((time.time() - resize_start_time) * 1000, 2)
+        
         print(f"[이미지 리사이징] 리사이징 완료 - person: {person_img_resized.size[0]}x{person_img_resized.size[1]}, garment: {garment_img_resized.size[0]}x{garment_img_resized.size[1]}, background: {background_img_resized.size[0]}x{background_img_resized.size[1]}")
+        print(f"[이미지 리사이징] 리사이징 시간: {resize_ms}ms")
         
         # 배경 이미지 처리
         background_img_processed = background_img_resized
@@ -2787,7 +2794,8 @@ async def generate_unified_tryon_v5(
             "result_image": f"data:image/png;base64,{result_image_base64}",
             "message": "통합 트라이온 파이프라인 V5가 성공적으로 완료되었습니다.",
             "llm": GEMINI_3_FLASH_MODEL,
-            "gemini_call_ms": round(gemini_latency * 1000, 2)  # 초를 ms로 변환
+            "gemini_call_ms": round(gemini_latency * 1000, 2),  # 초를 ms로 변환
+            "resize_ms": resize_ms  # 리사이징 시간
         }
         
     except Exception as e:

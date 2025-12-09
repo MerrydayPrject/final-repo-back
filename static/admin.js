@@ -1801,12 +1801,20 @@ function updateProfileLogsTableHeader(endpoint) {
 }
 
 // 프로파일링 로그에서 duration_ms 데이터 수집 및 요약 계산
-function calculateProfileSummary(log) {
+function calculateProfileSummary(log, endpoint) {
     const frontProfile = log.front_profile || {};
     const serverTotalMs = log.server_total_ms;
     
     // 모든 duration_ms 데이터 수집
     const durations = [];
+    
+    // 백엔드 프로파일링 데이터 (리사이징)
+    if (log.resize_ms !== null && log.resize_ms !== undefined && typeof log.resize_ms === 'number' && log.resize_ms > 0) {
+        durations.push({
+            name: '리사이징',
+            value: log.resize_ms
+        });
+    }
     
     // 프론트엔드 프로파일링 데이터
     const frontProfileKeys = [
@@ -1862,16 +1870,29 @@ function calculateProfileSummary(log) {
     const otherTotal = otherItems.reduce((sum, item) => sum + item.value, 0);
     const otherPercent = otherTotal > 0 ? ((otherTotal / serverTotalMs) * 100).toFixed(1) : 0;
     
-    // 요약 문자열 생성 (초 단위로 변환)
+    // 일반 피팅일 때는 퍼센트만 표시, 커스텀 피팅일 때는 초 단위와 퍼센트 모두 표시
+    const isGeneralFitting = endpoint === '/tryon/compare';
+    
+    // 요약 문자열 생성
     const summaryParts = topItems.map(item => {
         const percent = ((item.value / serverTotalMs) * 100).toFixed(1);
-        const valueInSeconds = (item.value / 1000).toFixed(2);
-        return `${item.name} ${valueInSeconds}s (${percent}%)`;
+        if (isGeneralFitting) {
+            // 일반 피팅: 퍼센트만
+            return `${item.name} ${percent}%`;
+        } else {
+            // 커스텀 피팅: 초 단위와 퍼센트
+            const valueInSeconds = (item.value / 1000).toFixed(2);
+            return `${item.name} ${valueInSeconds}s (${percent}%)`;
+        }
     });
     
     if (otherTotal > 0) {
-        const otherTotalSeconds = (otherTotal / 1000).toFixed(2);
-        summaryParts.push(`기타 ${otherTotalSeconds}s (${otherPercent}%)`);
+        if (isGeneralFitting) {
+            summaryParts.push(`기타 ${otherPercent}%`);
+        } else {
+            const otherTotalSeconds = (otherTotal / 1000).toFixed(2);
+            summaryParts.push(`기타 ${otherTotalSeconds}s (${otherPercent}%)`);
+        }
     }
     
     return summaryParts.join(', ');
@@ -1890,7 +1911,8 @@ function getDurationName(key) {
         'compose_click_to_response_ms': '합성 처리',
         'result_image_load_ms': '결과 이미지 로드',
         'gemini_call_ms': 'Gemini 호출',
-        'cutout_ms': '누끼 처리'
+        'cutout_ms': '누끼 처리',
+        'resize_ms': '리사이징'
     };
     return nameMap[key] || key;
 }
@@ -1916,7 +1938,7 @@ function renderProfileLogs(logs) {
             (typeof log.server_total_ms === 'number' ? (log.server_total_ms / 1000).toFixed(2) + ' s' : log.server_total_ms) : '-';
         
         // 시간 분포 요약 계산
-        const timeSummary = calculateProfileSummary(log);
+        const timeSummary = calculateProfileSummary(log, endpoint);
         
         return `
             <tr>
@@ -2058,40 +2080,69 @@ function renderProfileDetailModal(log) {
     const frontProfile = log.front_profile || {};
     const category = log.endpoint === '/tryon/compare' ? '일반 피팅' : log.endpoint === '/tryon/compare/custom' ? '커스텀 피팅' : log.endpoint;
     const serverTotalMs = log.server_total_ms;
+    const isCustomFitting = category === '커스텀 피팅';
     
-    // 모든 duration_ms 데이터 수집
+    // 모든 duration_ms 데이터 수집 (커스텀 피팅의 경우 모든 항목 포함)
     const durations = [];
     
-    // 프론트엔드 프로파일링 데이터
-    const frontProfileKeys = [
-        'bg_select_ms', 'person_upload_ms', 'person_validate_ms', 
-        'dress_upload_ms', 'dress_validate_ms', 'dress_cutout_ms',
-        'dress_drop_ms', 'compose_click_to_response_ms', 'result_image_load_ms'
-    ];
-    
-    frontProfileKeys.forEach(key => {
-        const value = frontProfile[key];
-        if (value !== null && value !== undefined && typeof value === 'number' && value > 0) {
-            durations.push({
-                name: getDurationName(key),
-                value: value
-            });
-        }
-    });
-    
-    // 백엔드 프로파일링 데이터
-    if (log.gemini_call_ms !== null && log.gemini_call_ms !== undefined && typeof log.gemini_call_ms === 'number' && log.gemini_call_ms > 0) {
+    // 백엔드 프로파일링 데이터 (리사이징) - 항상 포함
+    if (log.resize_ms !== null && log.resize_ms !== undefined && typeof log.resize_ms === 'number') {
         durations.push({
-            name: 'Gemini 호출',
-            value: log.gemini_call_ms
+            name: '리사이징',
+            value: log.resize_ms || 0
         });
     }
     
-    if (log.cutout_ms !== null && log.cutout_ms !== undefined && typeof log.cutout_ms === 'number' && log.cutout_ms > 0) {
+    // 프론트엔드 프로파일링 데이터 - 공통 항목
+    const frontProfileKeys = [
+        'bg_select_ms', 
+        'person_upload_ms', 
+        'person_validate_ms'
+    ];
+    
+    // 커스텀 피팅 전용 항목
+    if (isCustomFitting) {
+        frontProfileKeys.push(
+            'dress_upload_ms', 
+            'dress_validate_ms', 
+            'dress_cutout_ms'
+        );
+    }
+    
+    // 공통 항목 추가
+    frontProfileKeys.push(
+        'dress_drop_ms', 
+        'compose_click_to_response_ms', 
+        'result_image_load_ms'
+    );
+    
+    // 모든 피팅 타입에서 값이 없어도 0으로 표시
+    frontProfileKeys.forEach(key => {
+        const value = frontProfile[key];
+        // 값이 없거나 null이어도 0으로 표시
+        const displayValue = (value !== null && value !== undefined && typeof value === 'number') ? value : 0;
         durations.push({
-            name: '누끼 처리',
-            value: log.cutout_ms
+            name: getDurationName(key),
+            value: displayValue
         });
+    });
+    
+    // 백엔드 프로파일링 데이터 - 항상 포함
+    if (log.gemini_call_ms !== null && log.gemini_call_ms !== undefined && typeof log.gemini_call_ms === 'number') {
+        durations.push({
+            name: 'Gemini 호출',
+            value: log.gemini_call_ms || 0
+        });
+    }
+    
+    // 커스텀 피팅 전용: 누끼 처리
+    if (isCustomFitting) {
+        if (log.cutout_ms !== null && log.cutout_ms !== undefined && typeof log.cutout_ms === 'number') {
+            durations.push({
+                name: '누끼 처리',
+                value: log.cutout_ms || 0
+            });
+        }
     }
     
     // 기본 정보
@@ -2110,54 +2161,45 @@ function renderProfileDetailModal(log) {
         </div>
     `;
     
-    // 시간 분포 요약 표시
+    // 시간 분포 상세 표시 (리사이징부터 이미지 결과까지 모든 데이터)
     if (serverTotalMs && typeof serverTotalMs === 'number' && serverTotalMs > 0 && durations.length > 0) {
-        // 내림차순 정렬
-        durations.sort((a, b) => b.value - a.value);
+        // 퍼센트 계산 및 정렬 (퍼센트 내림차순)
+        const durationsWithPercent = durations.map(item => {
+            const percent = (item.value / serverTotalMs) * 100;
+            return {
+                ...item,
+                percent: percent
+            };
+        });
         
-        // 상위 3개 항목 선택
-        const topN = 3;
-        const topItems = durations.slice(0, topN);
-        const otherItems = durations.slice(topN);
+        // 퍼센트 내림차순 정렬
+        durationsWithPercent.sort((a, b) => b.percent - a.percent);
         
-        // 기타 항목 합계 계산
-        const otherTotal = otherItems.reduce((sum, item) => sum + item.value, 0);
-        const otherPercent = otherTotal > 0 ? ((otherTotal / serverTotalMs) * 100).toFixed(1) : 0;
+        // 시간 분포 상세 HTML 생성
+        let timeDetailHtml = '<div style="margin-top: 10px;">';
         
-        // 시간 분포 요약 HTML 생성
-        let timeSummaryHtml = '<div style="margin-top: 10px;">';
-        
-        topItems.forEach(item => {
-            const percent = ((item.value / serverTotalMs) * 100).toFixed(1);
+        durationsWithPercent.forEach(item => {
+            const percent = item.percent.toFixed(2);
             const displayValue = (item.value / 1000).toFixed(2);
-            timeSummaryHtml += `
+            timeDetailHtml += `
                 <div style="margin-bottom: 8px;">
-                    <strong>${item.name}:</strong> ${displayValue} s (${percent}%)
+                    <strong>${item.name}:</strong> ${percent}% (${displayValue} s)
                 </div>
             `;
         });
         
-        if (otherTotal > 0) {
-            const otherTotalSeconds = (otherTotal / 1000).toFixed(2);
-            timeSummaryHtml += `
-                <div style="margin-bottom: 8px; color: #666;">
-                    <strong>기타:</strong> ${otherTotalSeconds} s (${otherPercent}%)
-                </div>
-            `;
-        }
-        
-        timeSummaryHtml += '</div>';
+        timeDetailHtml += '</div>';
         
         detailItems += `
         <div class="detail-item" style="grid-column: 1 / -1;">
-            <div class="detail-label">시간 분포 요약</div>
-            <div class="detail-value">${timeSummaryHtml}</div>
+            <div class="detail-label">시간 분포 상세</div>
+            <div class="detail-value">${timeDetailHtml}</div>
         </div>
         `;
     } else {
         detailItems += `
         <div class="detail-item">
-            <div class="detail-label">시간 분포 요약</div>
+            <div class="detail-label">시간 분포 상세</div>
             <div class="detail-value">데이터 없음</div>
         </div>
         `;

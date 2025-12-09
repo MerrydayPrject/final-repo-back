@@ -82,15 +82,18 @@ class V4V5CustomOrchestrator:
         
         total_time = time.time() - start_time
         
-        # cutout_ms, gemini_call_ms 수집 (v5_result에서 가져오기, 없으면 v4_result에서)
+        # cutout_ms, gemini_call_ms, resize_ms 수집 (v5_result에서 가져오기, 없으면 v4_result에서)
         cutout_ms = None
         gemini_call_ms = None
+        resize_ms = None
         if isinstance(v5_result, dict) and not isinstance(v5_result, Exception):
             cutout_ms = v5_result.get("cutout_ms")
             gemini_call_ms = v5_result.get("gemini_call_ms")
+            resize_ms = v5_result.get("resize_ms")
         elif isinstance(v4_result, dict) and not isinstance(v4_result, Exception):
             cutout_ms = v4_result.get("cutout_ms")
             gemini_call_ms = v4_result.get("gemini_call_ms")
+            resize_ms = v4_result.get("resize_ms")
         
         # 커스텀 피팅 로그 저장 (created_at, run_time, dress_url만 저장)
         if enable_logging and garment_s3_url:
@@ -252,7 +255,8 @@ class V4V5CustomOrchestrator:
             "total_time": round(total_time, 2),
             "message": "V4V5커스텀 비교가 완료되었습니다.",
             "cutout_ms": cutout_ms,
-            "gemini_call_ms": gemini_call_ms
+            "gemini_call_ms": gemini_call_ms,
+            "resize_ms": resize_ms
         }
 
 

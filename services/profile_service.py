@@ -19,6 +19,7 @@ def ensure_table_exists():
                 endpoint VARCHAR(255) NOT NULL COMMENT '엔드포인트 경로 (/tryon/compare 또는 /tryon/compare/custom)',
                 front_profile_json JSON COMMENT '프론트엔드 측정 구간 시간 (ms)',
                 server_total_ms FLOAT COMMENT '서버 전체 처리 시간 (ms)',
+                resize_ms FLOAT DEFAULT NULL COMMENT '이미지 리사이징 시간 (ms)',
                 gemini_call_ms FLOAT COMMENT 'Gemini API 호출 시간 (ms)',
                 cutout_ms FLOAT DEFAULT NULL COMMENT '의상 누끼 처리 시간 (ms, 커스텀만)',
                 status VARCHAR(50) NOT NULL COMMENT '성공 여부 (success/fail)',
@@ -32,6 +33,32 @@ def ensure_table_exists():
             """
             cursor.execute(create_table_sql)
             connection.commit()
+            
+            # resize_ms 컬럼이 존재하는지 확인하고 없으면 추가
+            try:
+                cursor.execute("""
+                    SELECT COUNT(*) as cnt 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_SCHEMA = DATABASE() 
+                    AND TABLE_NAME = 'tryon_profile_summary' 
+                    AND COLUMN_NAME = 'resize_ms'
+                """)
+                result = cursor.fetchone()
+                column_exists = result and result.get('cnt', 0) > 0
+                
+                if not column_exists:
+                    cursor.execute("ALTER TABLE tryon_profile_summary ADD COLUMN resize_ms FLOAT DEFAULT NULL COMMENT '이미지 리사이징 시간 (ms)' AFTER server_total_ms")
+                    connection.commit()
+                    print("[프로파일링] resize_ms 컬럼 추가 완료")
+                # 컬럼이 이미 존재하는 경우는 정상이므로 로그 출력하지 않음
+            except Exception as e:
+                # 컬럼 추가 실패 시 오류 출력 (중요한 오류이므로 무시하지 않음)
+                print(f"[프로파일링] resize_ms 컬럼 추가 실패: {e}")
+                # 컬럼이 이미 존재하는 경우는 무시
+                if "Duplicate column name" not in str(e) and "already exists" not in str(e).lower():
+                    # 다른 오류인 경우 재시도하지 않고 계속 진행
+                    pass
+            
             return True
     except Exception as e:
         print(f"[프로파일링] 테이블 생성 실패: {e}")
@@ -45,6 +72,7 @@ def save_tryon_profile(
     endpoint: str,
     front_profile_json: Optional[Dict] = None,
     server_total_ms: Optional[float] = None,
+    resize_ms: Optional[float] = None,
     gemini_call_ms: Optional[float] = None,
     cutout_ms: Optional[float] = None,
     status: str = "success",
@@ -58,6 +86,7 @@ def save_tryon_profile(
         endpoint: 엔드포인트 경로
         front_profile_json: 프론트엔드 측정 구간 시간 (dict)
         server_total_ms: 서버 전체 처리 시간 (ms)
+        resize_ms: 이미지 리사이징 시간 (ms)
         gemini_call_ms: Gemini API 호출 시간 (ms)
         cutout_ms: 의상 누끼 처리 시간 (ms, 커스텀만)
         status: 성공 여부 (success/fail)
@@ -89,12 +118,13 @@ def save_tryon_profile(
             
             insert_sql = """
             INSERT INTO tryon_profile_summary 
-            (trace_id, endpoint, front_profile_json, server_total_ms, gemini_call_ms, cutout_ms, status, error_stage)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (trace_id, endpoint, front_profile_json, server_total_ms, resize_ms, gemini_call_ms, cutout_ms, status, error_stage)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 endpoint = VALUES(endpoint),
                 front_profile_json = VALUES(front_profile_json),
                 server_total_ms = VALUES(server_total_ms),
+                resize_ms = VALUES(resize_ms),
                 gemini_call_ms = VALUES(gemini_call_ms),
                 cutout_ms = VALUES(cutout_ms),
                 status = VALUES(status),
@@ -108,6 +138,7 @@ def save_tryon_profile(
                     endpoint,
                     front_profile_str,
                     server_total_ms,
+                    resize_ms,
                     gemini_call_ms,
                     cutout_ms,
                     status,
