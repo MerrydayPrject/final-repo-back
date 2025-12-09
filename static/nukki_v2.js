@@ -1,12 +1,11 @@
 /**
  * 누끼V2 - Ghost Mannequin
- * Gemini3 + GPT-image-1 동시 처리
+ * Gemini3만 사용
  */
 
 // 전역 변수
 let uploadedFile = null;
 let geminiResultImage = null;
-let openaiResultImage = null;
 
 // DOM 요소
 const fileInput = document.getElementById('fileInput');
@@ -100,7 +99,6 @@ async function processImage() {
     
     // 상태 초기화
     updateModelStatus('gemini', 'processing', '처리 중');
-    updateModelStatus('openai', 'processing', '처리 중');
     
     try {
         const formData = new FormData();
@@ -127,11 +125,6 @@ async function processImage() {
         displayResults({
             success: false,
             gemini3: {
-                success: false,
-                error: error.message,
-                message: '네트워크 오류'
-            },
-            openai: {
                 success: false,
                 error: error.message,
                 message: '네트워크 오류'
@@ -178,32 +171,6 @@ function displayResults(result) {
         document.getElementById('geminiErrorMsg').textContent = 
             gemini.message || gemini.error || '알 수 없는 오류';
     }
-    
-    // OpenAI 결과
-    const openai = result.openai || {};
-    if (openai.success && openai.result_image) {
-        openaiResultImage = openai.result_image;
-        updateModelStatus('openai', 'success', '완료');
-        
-        document.getElementById('openaiImageWrapper').innerHTML = 
-            `<img src="${openai.result_image}" alt="GPT-image-1 결과">`;
-        
-        document.getElementById('openaiTime').textContent = 
-            `처리 시간: ${(openai.run_time || 0).toFixed(2)}초`;
-        
-        document.getElementById('openaiFooter').style.display = 'flex';
-        document.getElementById('openaiError').style.display = 'none';
-    } else {
-        updateModelStatus('openai', 'error', '실패');
-        
-        document.getElementById('openaiImageWrapper').innerHTML = 
-            `<div class="placeholder"><span>처리 실패</span></div>`;
-        
-        document.getElementById('openaiFooter').style.display = 'none';
-        document.getElementById('openaiError').style.display = 'block';
-        document.getElementById('openaiErrorMsg').textContent = 
-            openai.message || openai.error || '알 수 없는 오류';
-    }
 }
 
 /**
@@ -231,15 +198,13 @@ function updateModelStatus(model, status, text) {
  * 이미지 다운로드
  */
 function downloadImage(model) {
-    let imageData, filename;
-    
-    if (model === 'gemini') {
-        imageData = geminiResultImage;
-        filename = 'ghost_mannequin_gemini3.png';
-    } else {
-        imageData = openaiResultImage;
-        filename = 'ghost_mannequin_dalle3.png';
+    if (model !== 'gemini') {
+        alert('Gemini 결과만 다운로드할 수 있습니다.');
+        return;
     }
+    
+    const imageData = geminiResultImage;
+    const filename = 'ghost_mannequin_gemini3.png';
     
     if (!imageData) {
         alert('다운로드할 이미지가 없습니다.');
@@ -264,13 +229,17 @@ async function retryModel(model) {
         return;
     }
     
-    // 해당 모델 상태 업데이트
-    const modelKey = model === 'gemini3' ? 'gemini' : 'openai';
-    updateModelStatus(modelKey, 'processing', '재시도 중');
+    if (model !== 'gemini3') {
+        alert('Gemini3만 재시도할 수 있습니다.');
+        return;
+    }
+    
+    // Gemini 상태 업데이트
+    updateModelStatus('gemini', 'processing', '재시도 중');
     
     // 에러 섹션 숨기기
-    document.getElementById(`${modelKey}Error`).style.display = 'none';
-    document.getElementById(`${modelKey}ImageWrapper`).innerHTML = 
+    document.getElementById('geminiError').style.display = 'none';
+    document.getElementById('geminiImageWrapper').innerHTML = 
         `<div class="model-loading"><div class="spinner"></div><span>재시도 중...</span></div>`;
     
     try {
@@ -285,42 +254,38 @@ async function retryModel(model) {
         const result = await response.json();
         
         if (result.success && result.result_image) {
-            if (modelKey === 'gemini') {
-                geminiResultImage = result.result_image;
-            } else {
-                openaiResultImage = result.result_image;
-            }
+            geminiResultImage = result.result_image;
             
-            updateModelStatus(modelKey, 'success', '완료');
+            updateModelStatus('gemini', 'success', '완료');
             
-            document.getElementById(`${modelKey}ImageWrapper`).innerHTML = 
-                `<img src="${result.result_image}" alt="${model} 결과">`;
+            document.getElementById('geminiImageWrapper').innerHTML = 
+                `<img src="${result.result_image}" alt="Gemini3 결과">`;
             
-            document.getElementById(`${modelKey}Time`).textContent = 
+            document.getElementById('geminiTime').textContent = 
                 `처리 시간: ${(result.run_time || 0).toFixed(2)}초`;
             
-            document.getElementById(`${modelKey}Footer`).style.display = 'flex';
+            document.getElementById('geminiFooter').style.display = 'flex';
         } else {
-            updateModelStatus(modelKey, 'error', '실패');
+            updateModelStatus('gemini', 'error', '실패');
             
-            document.getElementById(`${modelKey}ImageWrapper`).innerHTML = 
+            document.getElementById('geminiImageWrapper').innerHTML = 
                 `<div class="placeholder"><span>처리 실패</span></div>`;
             
-            document.getElementById(`${modelKey}Error`).style.display = 'block';
-            document.getElementById(`${modelKey}ErrorMsg`).textContent = 
+            document.getElementById('geminiError').style.display = 'block';
+            document.getElementById('geminiErrorMsg').textContent = 
                 result.message || result.error || '알 수 없는 오류';
         }
         
     } catch (error) {
         console.error('재시도 오류:', error);
         
-        updateModelStatus(modelKey, 'error', '실패');
+        updateModelStatus('gemini', 'error', '실패');
         
-        document.getElementById(`${modelKey}ImageWrapper`).innerHTML = 
+        document.getElementById('geminiImageWrapper').innerHTML = 
             `<div class="placeholder"><span>처리 실패</span></div>`;
         
-        document.getElementById(`${modelKey}Error`).style.display = 'block';
-        document.getElementById(`${modelKey}ErrorMsg`).textContent = 
+        document.getElementById('geminiError').style.display = 'block';
+        document.getElementById('geminiErrorMsg').textContent = 
             '네트워크 오류: ' + error.message;
     }
 }
@@ -333,7 +298,6 @@ function resetAll() {
     uploadedFile = null;
     fileInput.value = '';
     geminiResultImage = null;
-    openaiResultImage = null;
     
     // UI 초기화
     previewSection.style.display = 'none';
@@ -343,13 +307,11 @@ function resetAll() {
     resultSection.style.display = 'none';
     
     // 결과 카드 초기화
-    ['gemini', 'openai'].forEach(model => {
-        document.getElementById(`${model}Status`).className = 'status-badge waiting';
-        document.getElementById(`${model}Status`).textContent = '대기';
-        document.getElementById(`${model}ImageWrapper`).innerHTML = 
-            `<div class="placeholder"><span>결과 대기 중</span></div>`;
-        document.getElementById(`${model}Footer`).style.display = 'none';
-        document.getElementById(`${model}Error`).style.display = 'none';
-    });
+    document.getElementById('geminiStatus').className = 'status-badge waiting';
+    document.getElementById('geminiStatus').textContent = '대기';
+    document.getElementById('geminiImageWrapper').innerHTML = 
+        `<div class="placeholder"><span>결과 대기 중</span></div>`;
+    document.getElementById('geminiFooter').style.display = 'none';
+    document.getElementById('geminiError').style.display = 'none';
 }
 

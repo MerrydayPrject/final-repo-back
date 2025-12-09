@@ -64,10 +64,15 @@ async def compose_v5v5_custom(
             # 날짜별 합성 카운트 증가 (v5_result가 성공한 경우에만)
             if v5_result.get("success", False):
                 from services.synthesis_stats_service import increment_synthesis_count
+                print("[커스텀 피팅] 합성 성공 - 카운팅 시작")
                 try:
-                    increment_synthesis_count()
+                    count_success = increment_synthesis_count()
+                    if count_success:
+                        print("[커스텀 피팅] ✅ 합성 카운트 증가 성공")
+                    else:
+                        print("[커스텀 피팅] ⚠️ 합성 카운트 증가 실패 (DB 연결 또는 쿼리 오류)")
                 except Exception as e:
-                    print(f"합성 카운트 증가 실패 (계속 진행): {e}")
+                    print(f"[커스텀 피팅] ❌ 합성 카운트 증가 예외 발생: {e}")
             
             return JSONResponse({
                 "success": v5_result.get("success", False),

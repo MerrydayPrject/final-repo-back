@@ -1,4 +1,4 @@
-"""누끼V2 라우터 - Gemini3 + OpenAI Ghost Mannequin"""
+"""누끼V2 라우터 - Gemini3만 사용"""
 from fastapi import APIRouter, File, UploadFile, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -24,12 +24,10 @@ async def process_nukki_v2_api(
     """
     누끼V2 처리 API
     
-    Gemini3와 OpenAI DALL-E-3 두 모델을 동시에 실행하여
-    Ghost Mannequin 이미지를 생성합니다.
+    Gemini3 모델을 사용하여 Ghost Mannequin 이미지를 생성합니다.
     
     - 입력 이미지와 결과 이미지는 S3에 자동 저장됩니다.
     - 처리 결과는 MySQL에 자동 로깅됩니다.
-    - 한 모델이 실패해도 다른 모델 결과는 반환됩니다.
     
     Args:
         file: 드레스 이미지 파일
@@ -38,15 +36,6 @@ async def process_nukki_v2_api(
         {
             "success": bool,
             "gemini3": {
-                "success": bool,
-                "result_image": str (base64 data URL),
-                "model": str,
-                "run_time": float,
-                "message": str,
-                "error": str | null,
-                "result_url": str (S3 URL)
-            },
-            "openai": {
                 "success": bool,
                 "result_image": str (base64 data URL),
                 "model": str,
@@ -87,14 +76,6 @@ async def process_nukki_v2_api(
                 "message": f"처리 오류: {str(e)}",
                 "error": str(e)
             },
-            "openai": {
-                "success": False,
-                "result_image": None,
-                "model": "dall-e-3",
-                "run_time": 0,
-                "message": f"처리 오류: {str(e)}",
-                "error": str(e)
-            },
             "input_url": None,
             "message": f"처리 중 오류 발생: {str(e)}"
         }, status_code=500)
@@ -108,19 +89,17 @@ async def process_nukki_v2_single(
     """
     누끼V2 단일 모델 재시도 API
     
-    특정 모델만 다시 실행합니다. (재시도용)
+    Gemini3 모델만 다시 실행합니다. (재시도용)
     
     Args:
-        model: 모델 이름 ("gemini3" 또는 "openai")
+        model: 모델 이름 ("gemini3"만 허용)
         file: 드레스 이미지 파일
     
     Returns:
-        해당 모델의 처리 결과
+        Gemini3 모델의 처리 결과
     """
     from services.nukki_v2_service import (
-        process_with_gemini3, 
-        process_with_openai,
-        load_prompt_from_file,
+        process_with_gemini3,
         base64_to_bytes
     )
     from core.s3_client import upload_log_to_s3
@@ -134,19 +113,15 @@ async def process_nukki_v2_single(
         
         print(f"[NukkiV2 Router] 단일 모델 처리 시작 - 모델: {model}")
         
-        prompt = load_prompt_from_file()
-        
-        if model.lower() == "gemini3":
-            result = await process_with_gemini3(image, prompt)
-            model_id = "gemini-3"
-        elif model.lower() == "openai":
-            result = await process_with_openai(image)
-            model_id = "dall-e-3"
-        else:
+        if model.lower() != "gemini3":
             return JSONResponse({
                 "success": False,
-                "message": f"알 수 없는 모델: {model}. 'gemini3' 또는 'openai'를 사용하세요."
+                "message": f"알 수 없는 모델: {model}. 'gemini3'만 사용할 수 있습니다."
             }, status_code=400)
+        
+        prompt = load_prompt_from_file()
+        result = await process_with_gemini3(image, prompt)
+        model_id = "gemini-3"
         
         # 결과 S3 저장 및 DB 로깅
         if result.get("success") and result.get("result_image"):
