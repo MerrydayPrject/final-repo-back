@@ -39,7 +39,7 @@ MarryDay는 사용자가 전신 또는 얼굴 이미지를 업로드하면 AI가
 ### 백엔드 프레임워크
 - **FastAPI** 0.104.1: 고성능 비동기 웹 프레임워크
 - **Uvicorn** 0.24.0: ASGI 서버
-- **Python** 3.9+
+- **Python** 3.11+
 
 ### AI 모델 및 서비스
 - **SegFormer B2**: 의상 분할 및 배경 제거 (HuggingFace Inference API 사용)
@@ -49,7 +49,7 @@ MarryDay는 사용자가 전신 또는 얼굴 이미지를 업로드하면 AI가
 - **InsightFace**: 얼굴 분석 (HuggingFace Inference Endpoint 사용)
 
 ### 데이터베이스 및 스토리지
-- **MySQL 5.7+** / **MariaDB 10.2+**: 메인 데이터베이스
+- **MySQL 8.x**: 메인 데이터베이스
 - **AWS S3**: 이미지 및 파일 스토리지
 - **Supabase**: 추가 데이터베이스 서비스
 
@@ -135,8 +135,8 @@ final-repo-back/
 
 ### 사전 요구사항
 
-- Python 3.9 이상
-- MySQL 5.7+ 또는 MariaDB 10.2+
+- Python 3.11 이상
+- MySQL 8.x
 - AWS S3 계정 (이미지 스토리지용)
 - API 키:
   - Google Gemini API 키
@@ -245,7 +245,7 @@ INSIGHTFACE_API_KEY=your_insightface_api_key
 
 ### 데이터베이스 생성
 
-MySQL 또는 MariaDB에서 다음 SQL을 실행하여 데이터베이스를 생성하세요:
+MySQL 8.x에서 다음 SQL을 실행하여 데이터베이스를 생성하세요:
 
 ```sql
 CREATE DATABASE IF NOT EXISTS marryday 
