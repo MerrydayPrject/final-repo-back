@@ -869,6 +869,10 @@ async def get_tryon_profile_logs(
     await require_admin(request)
     
     try:
+        # 테이블 및 컬럼 확인 및 생성
+        from services.profile_service import ensure_table_exists
+        ensure_table_exists()
+        
         connection = get_db_connection()
         if not connection:
             return JSONResponse({
@@ -928,6 +932,7 @@ async def get_tryon_profile_logs(
                             endpoint,
                             front_profile_json,
                             server_total_ms,
+                            resize_ms,
                             gemini_call_ms,
                             cutout_ms,
                             status,
@@ -943,7 +948,21 @@ async def get_tryon_profile_logs(
                     logs = cursor.fetchall() or []
                 except Exception as query_error:
                     error_str = str(query_error).lower()
-                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                    # 컬럼이 없는 경우 컬럼 추가 후 재시도
+                    if "unknown column" in error_str and "resize_ms" in error_str:
+                        try:
+                            cursor.execute("ALTER TABLE tryon_profile_summary ADD COLUMN resize_ms FLOAT DEFAULT NULL COMMENT '이미지 리사이징 시간 (ms)' AFTER server_total_ms")
+                            connection.commit()
+                            print("[프로파일링] resize_ms 컬럼 추가 완료 (조회 중)")
+                            # 재시도
+                            cursor.execute(query, tuple(query_params))
+                            logs = cursor.fetchall() or []
+                        except Exception as alter_error:
+                            # 컬럼 추가 실패 시 빈 결과 반환
+                            if "Duplicate column name" not in str(alter_error):
+                                print(f"[프로파일링] resize_ms 컬럼 추가 실패: {alter_error}")
+                            logs = []
+                    elif any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
                         logs = []
                     else:
                         raise
@@ -1045,6 +1064,10 @@ async def get_tryon_profile_log_detail(request: Request, log_id: int):
     await require_admin(request)
     
     try:
+        # 테이블 및 컬럼 확인 및 생성
+        from services.profile_service import ensure_table_exists
+        ensure_table_exists()
+        
         connection = get_db_connection()
         if not connection:
             return JSONResponse({
@@ -1055,23 +1078,58 @@ async def get_tryon_profile_log_detail(request: Request, log_id: int):
         
         try:
             with connection.cursor() as cursor:
-                cursor.execute("""
-                    SELECT 
-                        idx,
-                        trace_id,
-                        endpoint,
-                        front_profile_json,
-                        server_total_ms,
-                        gemini_call_ms,
-                        cutout_ms,
-                        status,
-                        error_stage,
-                        created_at
-                    FROM tryon_profile_summary
-                    WHERE idx = %s
-                """, (log_id,))
-                
-                log = cursor.fetchone()
+                try:
+                    cursor.execute("""
+                        SELECT 
+                            idx,
+                            trace_id,
+                            endpoint,
+                            front_profile_json,
+                            server_total_ms,
+                            resize_ms,
+                            gemini_call_ms,
+                            cutout_ms,
+                            status,
+                            error_stage,
+                            created_at
+                        FROM tryon_profile_summary
+                        WHERE idx = %s
+                    """, (log_id,))
+                    
+                    log = cursor.fetchone()
+                except Exception as query_error:
+                    error_str = str(query_error).lower()
+                    # 컬럼이 없는 경우 컬럼 추가 후 재시도
+                    if "unknown column" in error_str and "resize_ms" in error_str:
+                        try:
+                            cursor.execute("ALTER TABLE tryon_profile_summary ADD COLUMN resize_ms FLOAT DEFAULT NULL COMMENT '이미지 리사이징 시간 (ms)' AFTER server_total_ms")
+                            connection.commit()
+                            print("[프로파일링] resize_ms 컬럼 추가 완료 (상세 조회 중)")
+                            # 재시도
+                            cursor.execute("""
+                                SELECT 
+                                    idx,
+                                    trace_id,
+                                    endpoint,
+                                    front_profile_json,
+                                    server_total_ms,
+                                    resize_ms,
+                                    gemini_call_ms,
+                                    cutout_ms,
+                                    status,
+                                    error_stage,
+                                    created_at
+                                FROM tryon_profile_summary
+                                WHERE idx = %s
+                            """, (log_id,))
+                            log = cursor.fetchone()
+                        except Exception as alter_error:
+                            # 컬럼 추가 실패 시 오류 반환
+                            if "Duplicate column name" not in str(alter_error):
+                                print(f"[프로파일링] resize_ms 컬럼 추가 실패: {alter_error}")
+                            raise query_error
+                    else:
+                        raise
                 
                 if not log:
                     return JSONResponse({
@@ -1118,6 +1176,7 @@ async def get_tryon_profile_log_detail(request: Request, log_id: int):
                         "endpoint": log.get('endpoint'),
                         "front_profile": front_profile,
                         "server_total_ms": log.get('server_total_ms'),
+                        "resize_ms": log.get('resize_ms'),
                         "gemini_call_ms": log.get('gemini_call_ms'),
                         "cutout_ms": log.get('cutout_ms'),
                         "status": log.get('status'),

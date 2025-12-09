@@ -166,6 +166,7 @@ async def compare_v4v5_custom(
                 endpoint="/tryon/compare/custom",
                 front_profile_json=front_profile_json,
                 server_total_ms=server_total_ms,
+                resize_ms=None,
                 gemini_call_ms=None,
                 cutout_ms=None,
                 status="fail",
@@ -194,9 +195,10 @@ async def compare_v4v5_custom(
         # 서버 전체 처리 시간 측정
         server_total_ms = round((time.time() - server_start_time) * 1000, 2)
         
-        # cutout_ms, gemini_call_ms 추출
+        # cutout_ms, gemini_call_ms, resize_ms 추출
         cutout_ms = result.get("cutout_ms")
         gemini_call_ms = result.get("gemini_call_ms")
+        resize_ms = result.get("resize_ms")
         
         # 성공 여부 판단
         status = "success" if result.get("success") else "fail"
@@ -225,6 +227,7 @@ async def compare_v4v5_custom(
             endpoint="/tryon/compare/custom",
             front_profile_json=front_profile_json,
             server_total_ms=server_total_ms,
+            resize_ms=resize_ms,
             gemini_call_ms=gemini_call_ms,
             cutout_ms=cutout_ms,
             status=status,
@@ -250,6 +253,7 @@ async def compare_v4v5_custom(
             endpoint="/tryon/compare/custom",
             front_profile_json=front_profile_json,
             server_total_ms=server_total_ms,
+            resize_ms=None,
             gemini_call_ms=None,
             cutout_ms=None,
             status="fail",
