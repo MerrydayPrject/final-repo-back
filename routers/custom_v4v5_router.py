@@ -155,6 +155,21 @@ async def compare_v4v5_custom(
         # V4V5커스텀 비교 실행
         result = await run_v4v5_custom_compare(person_img, garment_img, background_img)
         
+        # 날짜별 합성 카운트 증가 (v5_result가 성공한 경우에만)
+        if result.get("success") and result.get("v5_result"):
+            v5_result = result["v5_result"]
+            if v5_result.get("success", False):
+                from services.synthesis_stats_service import increment_synthesis_count
+                print("[커스텀 피팅] 합성 성공 - 카운팅 시작")
+                try:
+                    count_success = increment_synthesis_count()
+                    if count_success:
+                        print("[커스텀 피팅] ✅ 합성 카운트 증가 성공")
+                    else:
+                        print("[커스텀 피팅] ⚠️ 합성 카운트 증가 실패 (DB 연결 또는 쿼리 오류)")
+                except Exception as e:
+                    print(f"[커스텀 피팅] ❌ 합성 카운트 증가 예외 발생: {e}")
+        
         if result["success"]:
             return JSONResponse(result)
         else:
