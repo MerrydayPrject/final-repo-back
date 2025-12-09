@@ -170,7 +170,9 @@ async def generate_unified_tryon_custom_v5(
         print("="*80)
         
         print("\n[Stage 0] 의상 이미지 누끼 처리 시작 (HuggingFace API)...")
+        cutout_start_time = time.time()
         parsing_result = await parse_garment_image_v4(garment_img)
+        cutout_ms = round((time.time() - cutout_start_time) * 1000, 2)  # 초를 ms로 변환
         
         if not parsing_result.get("success"):
             error_msg = parsing_result.get("message", "의상 이미지 누끼 처리에 실패했습니다.")
@@ -186,6 +188,7 @@ async def generate_unified_tryon_custom_v5(
             else:
                 print("[Stage 0] 의상 이미지 누끼 처리 완료")
                 print(f"[Stage 0] 누끼 처리된 이미지 크기: {garment_nukki_rgb.size[0]}x{garment_nukki_rgb.size[1]}, 모드: {garment_nukki_rgb.mode}")
+        print(f"[Stage 0] 누끼 처리 시간: {cutout_ms}ms")
         
         # ============================================================
         # Stage 1 준비: 이미지 리사이징 (속도 최적화: 긴 변을 무조건 1024px로 강제 리사이징)
@@ -321,13 +324,16 @@ async def generate_unified_tryon_custom_v5(
             
             print(f"[Stage 1] Gemini API 호출 실패: {exc}")
             traceback.print_exc()
+            stage1_latency = time.time() - stage1_start_time
             return {
                 "success": False,
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": f"Stage 1 Gemini 호출에 실패했습니다: {str(exc)}",
                 "llm": GEMINI_3_FLASH_MODEL,
-                "error": "stage1_gemini_call_failed"
+                "error": "stage1_gemini_call_failed",
+                "cutout_ms": cutout_ms,
+                "gemini_call_ms": round(stage1_latency * 1000, 2)  # 초를 ms로 변환
             }
         
         stage1_latency = time.time() - stage1_start_time
@@ -458,7 +464,9 @@ async def generate_unified_tryon_custom_v5(
             "result_image": f"data:image/png;base64,{result_image_base64}",
             "message": "CustomV5 파이프라인이 성공적으로 완료되었습니다.",
             "llm": GEMINI_3_FLASH_MODEL,
-            "error": None
+            "error": None,
+            "cutout_ms": cutout_ms,
+            "gemini_call_ms": round(stage1_latency * 1000, 2)  # 초를 ms로 변환
         }
         
     except Exception as e:
@@ -473,6 +481,8 @@ async def generate_unified_tryon_custom_v5(
             "result_image": "",
             "message": f"CustomV5 파이프라인 처리 중 오류가 발생했습니다: {str(e)}",
             "llm": GEMINI_3_FLASH_MODEL,
-            "error": "custom_v5_pipeline_error"
+            "error": "custom_v5_pipeline_error",
+            "cutout_ms": None,  # 에러 발생 시 측정 불가
+            "gemini_call_ms": None  # 에러 발생 시 측정 불가
         }
 

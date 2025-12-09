@@ -14,38 +14,48 @@
         <section class="logs-section">
             <div class="logs-header">
                 <div class="logs-header-top">
-                    <div class="tab-buttons" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-                        <!-- 로그 탭 그룹 -->
-                        <button id="tabSynthesis" class="tab-button active"
-                            style="padding: 10px 20px; border: 1px solid #ddd; background: #007bff; color: #fff; cursor: pointer; border-radius: 5px;">
-                            📋 합성 로그
-                        </button>
-                        <button id="tabBodyAnalysis" class="tab-button"
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+                        <div class="tab-buttons" style="display: flex; gap: 10px; flex-wrap: wrap; flex: 1;">
+                            <!-- 로그 탭 그룹 -->
+                            <button id="tabSynthesis" class="tab-button active"
+                                style="padding: 10px 20px; border: 1px solid #ddd; background: #007bff; color: #fff; cursor: pointer; border-radius: 5px;">
+                                📋 합성 로그
+                            </button>
+                            <button id="tabBodyAnalysis" class="tab-button"
+                                style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                                📊 분석 로그
+                            </button>
+                            <button id="tabReviews" class="tab-button"
+                                style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                                ⭐ 리뷰 로그
+                            </button>
+                            <!-- 통계 탭 그룹 -->
+                            <button id="tabSynthesisStats" class="tab-button"
+                                style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                                📈 합성 통계
+                            </button>
+                            <button id="tabVisitorStats" class="tab-button"
+                                style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                                👥 조회수 통계
+                            </button>
+                            <button id="tabCustomFitting" class="tab-button"
+                                style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                                👔 커스텀피팅로그
+                            </button>
+                        <button id="tabProfileLogs" class="tab-button"
                             style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
-                            📊 분석 로그
+                            ⏱️ 피팅 프로파일링
                         </button>
-                        <button id="tabReviews" class="tab-button"
-                            style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
-                            ⭐ 리뷰 로그
-                        </button>
-                        <!-- 통계 탭 그룹 -->
-                        <button id="tabSynthesisStats" class="tab-button"
-                            style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
-                            📈 합성 통계
-                        </button>
-                        <button id="tabVisitorStats" class="tab-button"
-                            style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
-                            👥 조회수 통계
-                        </button>
+                        </div>
+                        <div class="logs-header-right" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                            <div class="logs-count">
+                                <span class="logs-count-label" id="logs-count-label">전체 합성:</span>
+                                <span class="logs-count-value" id="logs-count">0</span>
+                            </div>
+                            <a href="/" class="btn-home">홈으로</a>
+                        </div>
                     </div>
                     <h2 id="section-title">📋 합성 로그 목록</h2>
-                    <div class="logs-header-right">
-                        <div class="logs-count">
-                            <span class="logs-count-label" id="logs-count-label">전체 합성:</span>
-                            <span class="logs-count-value" id="logs-count">0</span>
-                        </div>
-                        <a href="/" class="btn-home">홈으로</a>
-                    </div>
                 </div>
                 <!-- 검색 컨테이너 (합성 로그용) -->
                 <div class="search-container" id="search-container-text">
@@ -204,6 +214,71 @@
 
                 <!-- 페이지네이션 -->
                 <div class="pagination" id="visitor-stats-pagination">
+                    <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+
+            <!-- 커스텀 피팅 로그 목록 -->
+            <div id="custom-fitting-logs-section" style="display: none;">
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>생성일시</th>
+                                <th>처리시간</th>
+                                <th>의상 이미지</th>
+                            </tr>
+                        </thead>
+                        <tbody id="custom-fitting-logs-tbody">
+                            <tr>
+                                <td colspan="4" class="loading">데이터를 불러오는 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 페이지네이션 -->
+                <div class="pagination" id="custom-fitting-pagination">
+                    <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+
+            <!-- 피팅 프로파일링 로그 목록 -->
+            <div id="profile-logs-section" style="display: none;">
+                <!-- 카테고리 필터 -->
+                <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
+                    <label style="font-weight: bold;">카테고리:</label>
+                    <button id="profile-filter-general" class="profile-filter-btn active" onclick="filterProfileLogs('/tryon/compare')">
+                        일반 피팅
+                    </button>
+                    <button id="profile-filter-custom" class="profile-filter-btn" onclick="filterProfileLogs('/tryon/compare/custom')">
+                        커스텀 피팅
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead id="profile-logs-thead">
+                            <tr>
+                                <th>ID</th>
+                                <th>카테고리</th>
+                                <th>생성일시</th>
+                                <th>서버 총 시간 (ms)</th>
+                                <th>인물 예외처리 (ms)</th>
+                                <th>Gemini 호출 (ms)</th>
+                                <th>상세보기</th>
+                            </tr>
+                        </thead>
+                        <tbody id="profile-logs-tbody">
+                            <tr>
+                                <td colspan="7" class="loading">데이터를 불러오는 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 페이지네이션 -->
+                <div class="pagination" id="profile-logs-pagination">
                     <!-- 동적으로 생성됨 -->
                 </div>
             </div>

@@ -302,6 +302,29 @@ def init_database():
             cursor.execute(create_daily_synthesis_count_table)
             connection.commit()
             print("DB 테이블 생성 완료: daily_synthesis_count")
+            
+            # tryon_profile_summary 테이블 생성
+            create_tryon_profile_summary_table = """
+            CREATE TABLE IF NOT EXISTS tryon_profile_summary (
+                idx INT AUTO_INCREMENT PRIMARY KEY,
+                trace_id VARCHAR(255) NOT NULL UNIQUE COMMENT '프론트엔드에서 생성한 추적 ID',
+                endpoint VARCHAR(255) NOT NULL COMMENT '엔드포인트 경로 (/tryon/compare 또는 /tryon/compare/custom)',
+                front_profile_json JSON COMMENT '프론트엔드 측정 구간 시간 (ms)',
+                server_total_ms FLOAT COMMENT '서버 전체 처리 시간 (ms)',
+                gemini_call_ms FLOAT COMMENT 'Gemini API 호출 시간 (ms)',
+                cutout_ms FLOAT DEFAULT NULL COMMENT '의상 누끼 처리 시간 (ms, 커스텀만)',
+                status VARCHAR(50) NOT NULL COMMENT '성공 여부 (success/fail)',
+                error_stage VARCHAR(255) DEFAULT NULL COMMENT '에러 발생 단계 (선택사항)',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_trace_id (trace_id),
+                INDEX idx_endpoint (endpoint),
+                INDEX idx_created_at (created_at),
+                INDEX idx_status (status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='피팅 프로파일링 요약 테이블';
+            """
+            cursor.execute(create_tryon_profile_summary_table)
+            connection.commit()
+            print("DB 테이블 생성 완료: tryon_profile_summary")
     except Exception as e:
         print(f"테이블 생성 오류: {e}")
     finally:

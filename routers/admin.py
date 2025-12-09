@@ -730,3 +730,412 @@ async def get_daily_visitor_stats(
             "message": f"날짜별 조회수 통계 조회 중 오류 발생: {str(e)}"
         }, status_code=500)
 
+
+@router.get("/api/admin/custom-fitting-logs", tags=["관리자"])
+async def get_custom_fitting_logs(
+    request: Request,
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수")
+):
+    """
+    커스텀 피팅 로그 목록 조회
+    
+    result_logs 테이블에서 dress_url이 있는 항목만 조회합니다.
+    created_at, run_time, dress_url 필드를 반환합니다.
+    """
+    # 인증 확인
+    await require_admin(request)
+    
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # dress_url이 NULL이 아닌 항목만 필터링
+                where_clause = "WHERE dress_url IS NOT NULL"
+                
+                # 전체 건수 조회
+                count_query = f"SELECT COUNT(*) as total FROM result_logs {where_clause}"
+                cursor.execute(count_query)
+                total = cursor.fetchone()['total']
+                
+                # 총 페이지 수 계산
+                total_pages = (total + limit - 1) // limit if total > 0 else 0
+                
+                # 오프셋 계산
+                offset = (page - 1) * limit
+                
+                # 로그 목록 조회
+                query = f"""
+                    SELECT 
+                        idx as id,
+                        created_at,
+                        run_time,
+                        dress_url
+                    FROM result_logs
+                    {where_clause}
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s
+                """
+                cursor.execute(query, (limit, offset))
+                
+                logs = cursor.fetchall()
+                
+                # 데이터 형식 변환 (created_at을 문자열로 변환)
+                from datetime import datetime
+                formatted_logs = []
+                for log in logs:
+                    created_at = log.get('created_at')
+                    # created_at을 ISO 형식 문자열로 변환
+                    if created_at:
+                        try:
+                            # datetime 객체인 경우
+                            if isinstance(created_at, datetime):
+                                created_at = created_at.isoformat()
+                            elif hasattr(created_at, 'isoformat'):
+                                created_at = created_at.isoformat()
+                            elif hasattr(created_at, 'strftime'):
+                                # date 객체인 경우
+                                created_at = created_at.strftime('%Y-%m-%dT%H:%M:%S')
+                            elif isinstance(created_at, str):
+                                # 이미 문자열인 경우, MySQL datetime 형식인지 확인
+                                # YYYY-MM-DD HH:MM:SS 형식을 ISO 형식으로 변환
+                                if ' ' in created_at and 'T' not in created_at:
+                                    created_at = created_at.replace(' ', 'T')
+                                # 타임존 정보가 없으면 추가하지 않음 (프론트엔드에서 처리)
+                            else:
+                                # 다른 형식인 경우 문자열로 변환
+                                created_at = str(created_at)
+                        except Exception as e:
+                            # 변환 실패 시 문자열로 변환
+                            print(f"created_at 변환 오류: {e}, 값: {created_at}")
+                            created_at = str(created_at) if created_at else None
+                    else:
+                        created_at = None
+                    
+                    formatted_log = {
+                        'id': log.get('id'),
+                        'created_at': created_at,
+                        'run_time': log.get('run_time'),
+                        'dress_url': log.get('dress_url')
+                    }
+                    formatted_logs.append(formatted_log)
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": formatted_logs,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total,
+                        "total_pages": total_pages
+                    }
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"커스텀 피팅 로그 조회 오류: {error_detail}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "error_detail": error_detail,
+            "message": f"커스텀 피팅 로그 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.get("/api/admin/tryon-profile-logs", tags=["관리자"])
+async def get_tryon_profile_logs(
+    request: Request,
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수"),
+    endpoint: Optional[str] = Query(None, description="엔드포인트 필터 (/tryon/compare 또는 /tryon/compare/custom)")
+):
+    """
+    피팅 프로파일링 로그 목록 조회
+    
+    tryon_profile_summary 테이블에서 프로파일링 로그 목록을 조회합니다.
+    endpoint 파라미터로 일반 피팅(/tryon/compare) 또는 커스텀 피팅(/tryon/compare/custom)을 필터링할 수 있습니다.
+    """
+    # 인증 확인
+    await require_admin(request)
+    
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 엔드포인트 필터 조건
+                where_clause = ""
+                params = []
+                
+                if endpoint:
+                    where_clause = "WHERE endpoint = %s"
+                    params.append(endpoint)
+                
+                # 전체 건수 조회
+                try:
+                    count_query = f"SELECT COUNT(*) as total FROM tryon_profile_summary {where_clause}"
+                    if params:
+                        cursor.execute(count_query, tuple(params))
+                    else:
+                        cursor.execute(count_query)
+                    count_result = cursor.fetchone()
+                    total = count_result['total'] if count_result else 0
+                except Exception as table_error:
+                    # 테이블이 없으면 빈 결과 반환
+                    error_str = str(table_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        return JSONResponse({
+                            "success": True,
+                            "data": [],
+                            "pagination": {
+                                "page": page,
+                                "limit": limit,
+                                "total": 0,
+                                "total_pages": 0
+                            },
+                            "message": "테이블이 아직 생성되지 않았습니다. 피팅을 실행하면 자동으로 생성됩니다."
+                        })
+                    raise
+                
+                # 총 페이지 수 계산
+                total_pages = (total + limit - 1) // limit if total > 0 else 0
+                
+                # 오프셋 계산
+                offset = (page - 1) * limit
+                
+                # 프로파일링 로그 목록 조회
+                try:
+                    query = f"""
+                        SELECT 
+                            idx,
+                            trace_id,
+                            endpoint,
+                            front_profile_json,
+                            server_total_ms,
+                            gemini_call_ms,
+                            cutout_ms,
+                            status,
+                            error_stage,
+                            created_at
+                        FROM tryon_profile_summary
+                        {where_clause}
+                        ORDER BY created_at DESC
+                        LIMIT %s OFFSET %s
+                    """
+                    query_params = params + [limit, offset]
+                    cursor.execute(query, tuple(query_params))
+                    logs = cursor.fetchall() or []
+                except Exception as query_error:
+                    error_str = str(query_error).lower()
+                    if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                        logs = []
+                    else:
+                        raise
+                
+                # 데이터 형식 변환
+                from datetime import datetime
+                formatted_logs = []
+                for log in logs:
+                    created_at = log.get('created_at')
+                    if created_at:
+                        try:
+                            if isinstance(created_at, datetime):
+                                created_at = created_at.isoformat()
+                            elif hasattr(created_at, 'isoformat'):
+                                created_at = created_at.isoformat()
+                            elif hasattr(created_at, 'strftime'):
+                                created_at = created_at.strftime('%Y-%m-%dT%H:%M:%S')
+                            elif isinstance(created_at, str) and ' ' in created_at and 'T' not in created_at:
+                                created_at = created_at.replace(' ', 'T')
+                            else:
+                                created_at = str(created_at)
+                        except Exception as e:
+                            created_at = str(created_at) if created_at else None
+                    else:
+                        created_at = None
+                    
+                    # front_profile_json 파싱
+                    front_profile = None
+                    front_profile_str = log.get('front_profile_json')
+                    if front_profile_str:
+                        try:
+                            import json
+                            front_profile = json.loads(front_profile_str) if isinstance(front_profile_str, str) else front_profile_str
+                        except:
+                            front_profile = None
+                    
+                    formatted_log = {
+                        'id': log.get('idx'),
+                        'trace_id': log.get('trace_id'),
+                        'endpoint': log.get('endpoint'),
+                        'front_profile': front_profile,
+                        'server_total_ms': log.get('server_total_ms'),
+                        'gemini_call_ms': log.get('gemini_call_ms'),
+                        'cutout_ms': log.get('cutout_ms'),
+                        'status': log.get('status'),
+                        'error_stage': log.get('error_stage'),
+                        'created_at': created_at
+                    }
+                    formatted_logs.append(formatted_log)
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": formatted_logs,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total,
+                        "total_pages": total_pages
+                    }
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"프로파일링 로그 조회 오류: {error_detail}")
+        
+        error_str = str(e).lower()
+        if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+            return JSONResponse({
+                "success": True,
+                "data": [],
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": 0,
+                    "total_pages": 0
+                },
+                "message": "테이블이 아직 생성되지 않았습니다. 피팅을 실행하면 자동으로 생성됩니다."
+            })
+        
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "error_detail": error_detail,
+            "message": f"프로파일링 로그 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.get("/api/admin/tryon-profile-logs/{log_id}", tags=["관리자"])
+async def get_tryon_profile_log_detail(request: Request, log_id: int):
+    """
+    피팅 프로파일링 로그 상세 정보 조회
+    
+    특정 프로파일링 로그의 상세 정보를 조회합니다.
+    """
+    # 인증 확인
+    await require_admin(request)
+    
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT 
+                        idx,
+                        trace_id,
+                        endpoint,
+                        front_profile_json,
+                        server_total_ms,
+                        gemini_call_ms,
+                        cutout_ms,
+                        status,
+                        error_stage,
+                        created_at
+                    FROM tryon_profile_summary
+                    WHERE idx = %s
+                """, (log_id,))
+                
+                log = cursor.fetchone()
+                
+                if not log:
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Log not found",
+                        "message": f"로그 ID {log_id}를 찾을 수 없습니다."
+                    }, status_code=404)
+                
+                # created_at 변환
+                created_at = log.get('created_at')
+                if created_at:
+                    try:
+                        from datetime import datetime
+                        if isinstance(created_at, datetime):
+                            created_at = created_at.isoformat()
+                        elif hasattr(created_at, 'isoformat'):
+                            created_at = created_at.isoformat()
+                        elif hasattr(created_at, 'strftime'):
+                            created_at = created_at.strftime('%Y-%m-%dT%H:%M:%S')
+                        elif isinstance(created_at, str) and ' ' in created_at and 'T' not in created_at:
+                            created_at = created_at.replace(' ', 'T')
+                        else:
+                            created_at = str(created_at)
+                    except:
+                        created_at = str(created_at) if created_at else None
+                else:
+                    created_at = None
+                
+                # front_profile_json 파싱
+                front_profile = None
+                front_profile_str = log.get('front_profile_json')
+                if front_profile_str:
+                    try:
+                        import json
+                        front_profile = json.loads(front_profile_str) if isinstance(front_profile_str, str) else front_profile_str
+                    except:
+                        front_profile = None
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": {
+                        "id": log.get('idx'),
+                        "trace_id": log.get('trace_id'),
+                        "endpoint": log.get('endpoint'),
+                        "front_profile": front_profile,
+                        "server_total_ms": log.get('server_total_ms'),
+                        "gemini_call_ms": log.get('gemini_call_ms'),
+                        "cutout_ms": log.get('cutout_ms'),
+                        "status": log.get('status'),
+                        "error_stage": log.get('error_stage'),
+                        "created_at": created_at
+                    }
+                })
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"프로파일링 로그 상세 조회 오류: {error_detail}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "error_detail": error_detail,
+            "message": f"프로파일링 로그 상세 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+

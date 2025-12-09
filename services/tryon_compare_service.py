@@ -90,6 +90,13 @@ class V4V5Orchestrator:
         
         total_time = time.time() - start_time
         
+        # gemini_call_ms 수집 (v5_result에서 가져오기, 없으면 v4_result에서)
+        gemini_call_ms = None
+        if isinstance(v5_result, dict) and not isinstance(v5_result, Exception):
+            gemini_call_ms = v5_result.get("gemini_call_ms")
+        elif isinstance(v4_result, dict) and not isinstance(v4_result, Exception):
+            gemini_call_ms = v4_result.get("gemini_call_ms")
+        
         # 예외 처리
         if isinstance(v4_result, Exception):
             v4_result = {
@@ -237,7 +244,8 @@ class V4V5Orchestrator:
             "v4_result": v4_result,
             "v5_result": v5_result,
             "total_time": round(total_time, 2),
-            "message": "V4V5일반 비교가 완료되었습니다."
+            "message": "V4V5일반 비교가 완료되었습니다.",
+            "gemini_call_ms": gemini_call_ms
         }
 
 

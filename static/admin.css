@@ -242,8 +242,6 @@ body {
     align-items: center;
     gap: 15px;
     flex-wrap: wrap;
-    position: absolute;
-    right: 100px;
 }
 
 .logs-section h2 {
@@ -724,4 +722,29 @@ body {
 
 .modal-body::-webkit-scrollbar-thumb:hover {
     background: #5568d3;
+}
+
+/* 프로파일링 필터 버튼 */
+.profile-filter-btn {
+    padding: 8px 16px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #333;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.profile-filter-btn:hover {
+    border-color: #667eea;
+    color: #667eea;
+    background: #f7fafc;
+}
+
+.profile-filter-btn.active {
+    background: #007bff;
+    color: #fff;
+    border-color: #007bff;
 }

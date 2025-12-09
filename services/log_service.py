@@ -3,6 +3,53 @@ from typing import Optional
 from services.database import get_db_connection
 
 
+def save_custom_fitting_log(
+    dress_url: str,
+    run_time: float
+) -> bool:
+    """
+    커스텀 피팅 로그를 MySQL에 저장 (created_at, run_time, dress_url만 저장)
+    
+    Args:
+        dress_url: 의상 이미지 S3 URL
+        run_time: 실행 시간 (초)
+    
+    Returns:
+        저장 성공 여부 (True/False)
+    """
+    connection = get_db_connection()
+    if not connection:
+        print("DB 연결 실패 - 커스텀 피팅 로그 저장 건너뜀")
+        return False
+    
+    try:
+        with connection.cursor() as cursor:
+            # 필수 필드에는 최소한의 더미 값을 넣고, 실제로 필요한 3가지만 저장
+            # created_at은 데이터베이스에서 자동으로 생성됨 (DEFAULT CURRENT_TIMESTAMP)
+            insert_query = """
+            INSERT INTO result_logs (person_url, dress_url, result_url, model, prompt, success, run_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(insert_query, (
+                "",  # person_url (필수 필드이므로 빈 문자열)
+                dress_url,  # dress_url (실제 저장할 값)
+                "",  # result_url (필수 필드이므로 빈 문자열)
+                "custom-fitting",  # model (필수 필드이므로 기본값)
+                "",  # prompt (필수 필드이므로 빈 문자열)
+                True,  # success (필수 필드이므로 기본값)
+                run_time  # run_time (실제 저장할 값)
+            ))
+            connection.commit()
+            print(f"커스텀 피팅 로그 저장 완료: dress_url={dress_url}, run_time={run_time:.2f}초")
+            return True
+    except Exception as e:
+        print(f"커스텀 피팅 로그 저장 오류: {e}")
+        connection.rollback()
+        return False
+    finally:
+        connection.close()
+
+
 def save_test_log(
     person_url: str,
     result_url: str,

@@ -2,12 +2,15 @@
 let currentPage = 1;
 const itemsPerPage = 20;
 let currentSearchModel = null;
-let currentTab = 'synthesis'; // 'synthesis', 'body', 'reviews', 'synthesis-stats', 'visitor-stats'
+let currentTab = 'synthesis'; // 'synthesis', 'body', 'reviews', 'synthesis-stats', 'visitor-stats', 'custom-fitting', 'profile-logs'
 let currentBodyPage = 1;
 let currentReviewsPage = 1;
 let currentSynthesisStatsPage = 1;
 let currentVisitorStatsPage = 1;
+let currentCustomFittingPage = 1;
+let currentProfileLogsPage = 1;
 let currentSearchDate = null; // 날짜 검색용
+let currentProfileEndpoint = null; // 프로파일링 로그 엔드포인트 필터
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', async () => {
@@ -69,6 +72,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabReviews = document.getElementById('tabReviews');
     const tabSynthesisStats = document.getElementById('tabSynthesisStats');
     const tabVisitorStats = document.getElementById('tabVisitorStats');
+    const tabCustomFitting = document.getElementById('tabCustomFitting');
+    const tabProfileLogs = document.getElementById('tabProfileLogs');
 
     if (tabSynthesis) {
         tabSynthesis.addEventListener('click', () => switchTab('synthesis'));
@@ -84,6 +89,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (tabVisitorStats) {
         tabVisitorStats.addEventListener('click', () => switchTab('visitor-stats'));
+    }
+    if (tabCustomFitting) {
+        tabCustomFitting.addEventListener('click', () => switchTab('custom-fitting'));
+    }
+    if (tabProfileLogs) {
+        tabProfileLogs.addEventListener('click', () => switchTab('profile-logs'));
     }
 
     // 검색 입력 필드에 Enter 키 이벤트 추가
@@ -116,11 +127,15 @@ function switchTab(tab) {
     const reviewsSection = document.getElementById('reviews-logs-section');
     const synthesisStatsSection = document.getElementById('synthesis-stats-section');
     const visitorStatsSection = document.getElementById('visitor-stats-section');
+    const customFittingSection = document.getElementById('custom-fitting-logs-section');
+    const profileLogsSection = document.getElementById('profile-logs-section');
     const tabSynthesis = document.getElementById('tabSynthesis');
     const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
     const tabReviews = document.getElementById('tabReviews');
     const tabSynthesisStats = document.getElementById('tabSynthesisStats');
     const tabVisitorStats = document.getElementById('tabVisitorStats');
+    const tabCustomFitting = document.getElementById('tabCustomFitting');
+    const tabProfileLogs = document.getElementById('tabProfileLogs');
     const sectionTitle = document.getElementById('section-title');
     const logsCountLabel = document.getElementById('logs-count-label');
     const searchContainerText = document.getElementById('search-container-text');
@@ -132,6 +147,8 @@ function switchTab(tab) {
     if (reviewsSection) reviewsSection.style.display = 'none';
     if (synthesisStatsSection) synthesisStatsSection.style.display = 'none';
     if (visitorStatsSection) visitorStatsSection.style.display = 'none';
+    if (customFittingSection) customFittingSection.style.display = 'none';
+    if (profileLogsSection) profileLogsSection.style.display = 'none';
 
     // 모든 탭 버튼 초기화
     if (tabSynthesis) {
@@ -158,6 +175,16 @@ function switchTab(tab) {
         tabVisitorStats.classList.remove('active');
         tabVisitorStats.style.background = '#fff';
         tabVisitorStats.style.color = '#333';
+    }
+    if (tabCustomFitting) {
+        tabCustomFitting.classList.remove('active');
+        tabCustomFitting.style.background = '#fff';
+        tabCustomFitting.style.color = '#333';
+    }
+    if (tabProfileLogs) {
+        tabProfileLogs.classList.remove('active');
+        tabProfileLogs.style.background = '#fff';
+        tabProfileLogs.style.color = '#333';
     }
 
     if (tab === 'synthesis') {
@@ -244,6 +271,37 @@ function switchTab(tab) {
             dateSearchClearButton.style.display = currentSearchDate ? 'inline-block' : 'none';
         }
         loadDailyVisitorStats(currentVisitorStatsPage, currentSearchDate);
+    } else if (tab === 'custom-fitting') {
+        if (customFittingSection) customFittingSection.style.display = 'block';
+        if (tabCustomFitting) {
+            tabCustomFitting.classList.add('active');
+            tabCustomFitting.style.background = '#007bff';
+            tabCustomFitting.style.color = '#fff';
+        }
+        if (sectionTitle) sectionTitle.textContent = '👔 커스텀피팅로그';
+        if (logsCountLabel) logsCountLabel.textContent = '전체 커스텀피팅:';
+        if (searchContainerText) searchContainerText.style.display = 'none';
+        if (searchContainerDate) searchContainerDate.style.display = 'none';
+        // 다른 탭으로 전환 시 날짜 검색 초기화
+        currentSearchDate = null;
+        loadCustomFittingLogs(currentCustomFittingPage);
+    } else if (tab === 'profile-logs') {
+        if (profileLogsSection) profileLogsSection.style.display = 'block';
+        if (tabProfileLogs) {
+            tabProfileLogs.classList.add('active');
+            tabProfileLogs.style.background = '#007bff';
+            tabProfileLogs.style.color = '#fff';
+        }
+        if (sectionTitle) sectionTitle.textContent = '⏱️ 피팅 프로파일링';
+        if (logsCountLabel) logsCountLabel.textContent = '전체 프로파일링:';
+        if (searchContainerText) searchContainerText.style.display = 'none';
+        if (searchContainerDate) searchContainerDate.style.display = 'none';
+        currentSearchDate = null;
+        // 기본값은 일반 피팅
+        if (!currentProfileEndpoint) {
+            currentProfileEndpoint = '/tryon/compare';
+        }
+        loadProfileLogs(currentProfileLogsPage, currentProfileEndpoint);
     }
 }
 
@@ -1367,6 +1425,605 @@ function updateVisitorStatsCount(count) {
     const logsCountElement = document.getElementById('logs-count');
     if (logsCountElement) {
         logsCountElement.textContent = count;
+    }
+}
+
+// 커스텀 피팅 로그 목록 로드
+async function loadCustomFittingLogs(page) {
+    try {
+        const url = `/api/admin/custom-fitting-logs?page=${page}&limit=${itemsPerPage}`;
+
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch(url, {
+            headers: headers
+        });
+
+        // 401 오류 처리
+        if (response.status === 401) {
+            window.location.href = '/';
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            renderCustomFittingLogs(data.data);
+            renderCustomFittingPagination(data.pagination);
+            updateCustomFittingCount(data.pagination.total);
+            currentCustomFittingPage = page;
+        } else {
+            showError(data.message || '커스텀 피팅 로그를 불러오는 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('커스텀 피팅 로그 로드 오류:', error);
+        const tbody = document.getElementById('custom-fitting-logs-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="4" class="loading" style="color: #ef4444;">로그를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        }
+    }
+}
+
+// 커스텀 피팅 로그 테이블 렌더링
+function renderCustomFittingLogs(logs) {
+    const tbody = document.getElementById('custom-fitting-logs-tbody');
+
+    if (!tbody) return;
+
+    if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="loading">로그가 없습니다.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = logs.map(log => {
+        const id = log.id !== undefined ? log.id : '-';
+        
+        // 생성일시 포맷팅 (안전하게 처리)
+        let createdAt = '-';
+        if (log.created_at) {
+            try {
+                let dateStr = String(log.created_at).trim();
+                
+                // 빈 문자열 체크
+                if (!dateStr || dateStr === 'None' || dateStr === 'null') {
+                    createdAt = '-';
+                } else {
+                    // MySQL datetime 형식 (YYYY-MM-DD HH:MM:SS) 처리
+                    // 공백을 T로 변환
+                    if (dateStr.includes(' ') && !dateStr.includes('T')) {
+                        dateStr = dateStr.replace(' ', 'T');
+                    }
+                    
+                    // T가 없으면 추가 (날짜만 있는 경우)
+                    if (!dateStr.includes('T')) {
+                        dateStr = dateStr + 'T00:00:00';
+                    }
+                    
+                    // 타임존 정보가 없으면 UTC로 가정 (Z 추가하지 않음, 로컬 시간으로 표시)
+                    const date = new Date(dateStr);
+                    
+                    if (!isNaN(date.getTime())) {
+                        // 유효한 날짜인 경우 포맷팅
+                        createdAt = formatDateTime(dateStr);
+                    } else {
+                        // 파싱 실패 시 원본 문자열 표시
+                        console.warn('날짜 파싱 실패:', log.created_at);
+                        createdAt = String(log.created_at);
+                    }
+                }
+            } catch (e) {
+                // 에러 발생 시 원본 문자열 표시
+                console.error('날짜 포맷팅 오류:', e, log.created_at);
+                createdAt = String(log.created_at) || '-';
+            }
+        }
+        
+        const runTime = log.run_time !== undefined && log.run_time !== null
+            ? (typeof log.run_time === 'number' ? log.run_time.toFixed(2) + '초' : log.run_time)
+            : '-';
+        const dressUrl = log.dress_url || '';
+
+        // 의상 이미지 표시 (있으면 이미지, 없으면 메시지)
+        // 클릭 시 모달 팝업으로 표시
+        const dressImageHtml = dressUrl
+            ? `<img src="/api/admin/s3-image-proxy?url=${encodeURIComponent(dressUrl)}" alt="의상 이미지" style="max-width: 100px; max-height: 100px; cursor: pointer;" onclick="showDressImageModal('${escapeHtml(dressUrl)}')" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><span style="display: none; color: #999;">이미지 없음</span>`
+            : '<span style="color: #999;">-</span>';
+
+        return `
+        <tr>
+            <td>${id}</td>
+            <td>${createdAt}</td>
+            <td>${runTime}</td>
+            <td>${dressImageHtml}</td>
+        </tr>
+    `;
+    }).join('');
+}
+
+// 커스텀 피팅 로그 페이지네이션 렌더링
+function renderCustomFittingPagination(pagination) {
+    const paginationDiv = document.getElementById('custom-fitting-pagination');
+
+    if (!paginationDiv) return;
+
+    if (pagination.total_pages === 0) {
+        paginationDiv.innerHTML = '';
+        return;
+    }
+
+    const createPageButton = (pageNum, text, disabled = false, active = false) => {
+        if (disabled) {
+            return `<button disabled>${text}</button>`;
+        }
+        const activeClass = active ? ' class="active"' : '';
+        return `<button onclick="loadCustomFittingLogs(${pageNum})"${activeClass}>${text}</button>`;
+    };
+
+    let html = createPageButton(1, '처음', pagination.page === 1);
+
+    if (pagination.page > 1) {
+        html += createPageButton(pagination.page - 1, '이전');
+    }
+
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.total_pages, pagination.page + 2);
+
+    if (startPage > 1) {
+        html += '<button disabled>...</button>';
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        html += createPageButton(i, i.toString(), false, i === pagination.page);
+    }
+
+    if (endPage < pagination.total_pages) {
+        html += '<button disabled>...</button>';
+    }
+
+    if (pagination.page < pagination.total_pages) {
+        html += createPageButton(pagination.page + 1, '다음');
+    }
+
+    html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
+
+    html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
+
+    paginationDiv.innerHTML = html;
+}
+
+// 커스텀 피팅 로그 카운트 업데이트
+function updateCustomFittingCount(count) {
+    const logsCountElement = document.getElementById('logs-count');
+    if (logsCountElement) {
+        logsCountElement.textContent = count;
+    }
+}
+
+// 의상 이미지 모달 표시
+function showDressImageModal(dressUrl) {
+    const modalBody = document.getElementById('modal-body');
+    if (!modalBody) return;
+
+    const dressImageHtml = dressUrl ? `
+        <div class="detail-item" style="grid-column: 1 / -1;">
+            <div class="detail-label">의상 이미지</div>
+            <div class="image-preview-single">
+                <img 
+                    id="dress-image" 
+                    src="/api/admin/s3-image-proxy?url=${encodeURIComponent(dressUrl)}" 
+                    alt="의상 이미지" 
+                    loading="lazy"
+                    onload="handleImageLoad(this);"
+                    onerror="handleImageError(this, '${escapeHtml(dressUrl)}');"
+                    style="opacity: 0; transition: opacity 0.3s; max-width: 100%;"
+                >
+                <div id="image-loading" style="text-align: center; padding: 20px; color: #666;">
+                    ⏳ 이미지를 불러오는 중...
+                </div>
+                <div id="image-error" style="display: none; text-align: center; padding: 20px; color: #ef4444;">
+                    ❌ 이미지를 불러올 수 없습니다
+                    <br><small style="color: #999; word-break: break-all;">${escapeHtml(dressUrl)}</small>
+                </div>
+            </div>
+        </div>
+    ` : `
+        <div class="detail-item">
+            <div class="detail-label">의상 이미지</div>
+            <div class="detail-value" style="color: #ef4444; text-align: center; padding: 20px;">
+                ❌ 의상 이미지가 없습니다
+            </div>
+        </div>
+    `;
+
+    modalBody.innerHTML = `
+        <div class="detail-grid">
+            ${dressImageHtml}
+        </div>
+    `;
+
+    // 이미지 로드 상태 확인
+    if (dressUrl) {
+        setTimeout(() => {
+            const img = document.getElementById('dress-image');
+            const loading = document.getElementById('image-loading');
+
+            if (img) {
+                // 이미지가 이미 로드되어 있으면 loading 숨기기
+                if (img.complete && img.naturalHeight !== 0) {
+                    if (loading) loading.style.display = 'none';
+                    img.style.opacity = '1';
+                } else {
+                    // 이미지 로딩 중 표시
+                    if (loading) loading.style.display = 'block';
+                }
+            }
+        }, 100);
+    }
+
+    // 모달 제목 변경
+    const modalTitle = document.querySelector('#detail-modal .modal-header h3');
+    if (modalTitle) {
+        modalTitle.textContent = '👔 의상 이미지';
+    }
+
+    openModal();
+}
+
+// 프로파일링 로그 로드
+async function loadProfileLogs(page = 1, endpoint = null) {
+    try {
+        currentProfileLogsPage = page;
+        currentProfileEndpoint = endpoint || '/tryon/compare';
+        
+        // 테이블 헤더 업데이트
+        updateProfileLogsTableHeader(currentProfileEndpoint);
+        
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        let url = `/api/admin/tryon-profile-logs?page=${page}&limit=${itemsPerPage}`;
+        if (currentProfileEndpoint) {
+            url += `&endpoint=${encodeURIComponent(currentProfileEndpoint)}`;
+        }
+        
+        const response = await fetch(url, {
+            headers: headers
+        });
+        
+        if (response.status === 401) {
+            window.location.href = '/';
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            renderProfileLogs(data.data);
+            renderProfileLogsPagination(data.pagination);
+            updateLogsCount(data.pagination.total);
+        } else {
+            const tbody = document.getElementById('profile-logs-tbody');
+            const isCustom = currentProfileEndpoint === '/tryon/compare/custom';
+            const colspan = isCustom ? 9 : 7;
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">${data.message || '로그를 불러오는 중 오류가 발생했습니다.'}</td></tr>`;
+            }
+        }
+    } catch (error) {
+        console.error('프로파일링 로그 로드 오류:', error);
+        const tbody = document.getElementById('profile-logs-tbody');
+        const isCustom = currentProfileEndpoint === '/tryon/compare/custom';
+        const colspan = isCustom ? 9 : 7;
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>`;
+        }
+    }
+}
+
+// 프로파일링 로그 테이블 헤더 업데이트
+function updateProfileLogsTableHeader(endpoint) {
+    const thead = document.getElementById('profile-logs-thead');
+    if (!thead) return;
+    
+    const isCustom = endpoint === '/tryon/compare/custom';
+    
+    if (isCustom) {
+        // 커스텀 피팅: ID, 카테고리, 생성일시, 서버 총시간, 인물 예외처리, 드레스 예외처리, 누끼처리, Gemini 호출, 상세보기
+        thead.innerHTML = `
+            <tr>
+                <th>ID</th>
+                <th>카테고리</th>
+                <th>생성일시</th>
+                <th>서버 총 시간 (ms)</th>
+                <th>인물 예외처리 (ms)</th>
+                <th>드레스 예외처리 (ms)</th>
+                <th>누끼 처리 (ms)</th>
+                <th>Gemini 호출 (ms)</th>
+                <th>상세보기</th>
+            </tr>
+        `;
+    } else {
+        // 일반 피팅: ID, 카테고리, 생성일시, 서버 총시간, 인물 예외처리, Gemini 호출, 상세보기
+        thead.innerHTML = `
+            <tr>
+                <th>ID</th>
+                <th>카테고리</th>
+                <th>생성일시</th>
+                <th>서버 총 시간 (ms)</th>
+                <th>인물 예외처리 (ms)</th>
+                <th>Gemini 호출 (ms)</th>
+                <th>상세보기</th>
+            </tr>
+        `;
+    }
+}
+
+// 프로파일링 로그 렌더링
+function renderProfileLogs(logs) {
+    const tbody = document.getElementById('profile-logs-tbody');
+    if (!tbody) return;
+    
+    const isCustom = currentProfileEndpoint === '/tryon/compare/custom';
+    const colspan = isCustom ? 9 : 7;
+    
+    if (logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">로그가 없습니다.</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = logs.map(log => {
+        const id = log.id !== undefined ? log.id : '-';
+        const endpoint = log.endpoint || '-';
+        const category = endpoint === '/tryon/compare' ? '일반 피팅' : endpoint === '/tryon/compare/custom' ? '커스텀 피팅' : endpoint;
+        const createdAt = log.created_at ? new Date(log.created_at).toLocaleString('ko-KR') : '-';
+        const serverTotalMs = log.server_total_ms !== null && log.server_total_ms !== undefined ? 
+            (typeof log.server_total_ms === 'number' ? log.server_total_ms.toFixed(2) : log.server_total_ms) : '-';
+        const geminiCallMs = log.gemini_call_ms !== null && log.gemini_call_ms !== undefined ? 
+            (typeof log.gemini_call_ms === 'number' ? log.gemini_call_ms.toFixed(2) : log.gemini_call_ms) : '-';
+        const cutoutMs = log.cutout_ms !== null && log.cutout_ms !== undefined ? 
+            (typeof log.cutout_ms === 'number' ? log.cutout_ms.toFixed(2) : log.cutout_ms) : '-';
+        
+        // 프론트엔드 프로파일링 데이터에서 추출
+        const frontProfile = log.front_profile || {};
+        const personValidateMs = frontProfile.person_validate_ms !== null && frontProfile.person_validate_ms !== undefined ? 
+            (typeof frontProfile.person_validate_ms === 'number' ? frontProfile.person_validate_ms.toFixed(2) : frontProfile.person_validate_ms) : '-';
+        const dressValidateMs = frontProfile.dress_validate_ms !== null && frontProfile.dress_validate_ms !== undefined ? 
+            (typeof frontProfile.dress_validate_ms === 'number' ? frontProfile.dress_validate_ms.toFixed(2) : frontProfile.dress_validate_ms) : '-';
+        
+        if (isCustom) {
+            // 커스텀 피팅: ID, 카테고리, 생성일시, 서버 총시간, 인물 예외처리, 드레스 예외처리, 누끼처리, Gemini 호출, 상세보기
+            return `
+            <tr>
+                <td>${id}</td>
+                <td>${category}</td>
+                <td>${createdAt}</td>
+                <td>${serverTotalMs}</td>
+                <td>${personValidateMs}</td>
+                <td>${dressValidateMs}</td>
+                <td>${cutoutMs}</td>
+                <td>${geminiCallMs}</td>
+                <td>
+                    <button class="btn-detail-emoji" onclick="showProfileDetail(${id})" title="상세보기">
+                        📋
+                    </button>
+                </td>
+            </tr>
+        `;
+        } else {
+            // 일반 피팅: ID, 카테고리, 생성일시, 서버 총시간, 인물 예외처리, Gemini 호출, 상세보기
+            return `
+            <tr>
+                <td>${id}</td>
+                <td>${category}</td>
+                <td>${createdAt}</td>
+                <td>${serverTotalMs}</td>
+                <td>${personValidateMs}</td>
+                <td>${geminiCallMs}</td>
+                <td>
+                    <button class="btn-detail-emoji" onclick="showProfileDetail(${id})" title="상세보기">
+                        📋
+                    </button>
+                </td>
+            </tr>
+        `;
+        }
+    }).join('');
+}
+
+// 프로파일링 로그 페이지네이션 렌더링
+function renderProfileLogsPagination(pagination) {
+    const paginationDiv = document.getElementById('profile-logs-pagination');
+    if (!paginationDiv) return;
+    
+    if (pagination.total_pages === 0) {
+        paginationDiv.innerHTML = '';
+        return;
+    }
+    
+    const createPageButton = (pageNum, text, disabled = false, active = false) => {
+        if (disabled) {
+            return `<button disabled>${text}</button>`;
+        }
+        const activeClass = active ? ' class="active"' : '';
+        return `<button onclick="loadProfileLogsWithFilter(${pageNum})"${activeClass}>${text}</button>`;
+    };
+    
+    let html = createPageButton(1, '처음', pagination.page === 1);
+    
+    if (pagination.page > 1) {
+        html += createPageButton(pagination.page - 1, '이전');
+    }
+    
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.total_pages, pagination.page + 2);
+    
+    if (startPage > 1) {
+        html += '<button disabled>...</button>';
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += createPageButton(i, i.toString(), false, i === pagination.page);
+    }
+    
+    if (endPage < pagination.total_pages) {
+        html += '<button disabled>...</button>';
+    }
+    
+    if (pagination.page < pagination.total_pages) {
+        html += createPageButton(pagination.page + 1, '다음');
+    }
+    
+    html += createPageButton(pagination.total_pages, '마지막', pagination.page === pagination.total_pages);
+    html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
+    
+    paginationDiv.innerHTML = html;
+}
+
+// 프로파일링 로그 필터링
+function filterProfileLogs(endpoint) {
+    currentProfileEndpoint = endpoint;
+    currentProfileLogsPage = 1;
+    
+    // 필터 버튼 활성화 상태 업데이트
+    const generalBtn = document.getElementById('profile-filter-general');
+    const customBtn = document.getElementById('profile-filter-custom');
+    
+    if (generalBtn) {
+        generalBtn.classList.remove('active');
+        generalBtn.style.background = '#fff';
+        generalBtn.style.color = '#333';
+    }
+    if (customBtn) {
+        customBtn.classList.remove('active');
+        customBtn.style.background = '#fff';
+        customBtn.style.color = '#333';
+    }
+    
+    if (endpoint === '/tryon/compare' && generalBtn) {
+        generalBtn.classList.add('active');
+        generalBtn.style.background = '#007bff';
+        generalBtn.style.color = '#fff';
+    } else if (endpoint === '/tryon/compare/custom' && customBtn) {
+        customBtn.classList.add('active');
+        customBtn.style.background = '#007bff';
+        customBtn.style.color = '#fff';
+    }
+    
+    loadProfileLogs(1, endpoint);
+}
+
+// 프로파일링 로그 필터링 포함 로드
+function loadProfileLogsWithFilter(page) {
+    loadProfileLogs(page, currentProfileEndpoint);
+}
+
+
+// 프로파일링 로그 상세보기
+async function showProfileDetail(logId) {
+    try {
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch(`/api/admin/tryon-profile-logs/${logId}`, {
+            headers: headers
+        });
+        
+        if (response.status === 401) {
+            window.location.href = '/';
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            renderProfileDetailModal(data.data);
+            openModal();
+        } else {
+            alert(data.message || '로그를 불러오는 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('프로파일링 로그 상세 로드 오류:', error);
+        alert('로그를 불러오는 중 오류가 발생했습니다.');
+    }
+}
+
+// 프로파일링 로그 상세 모달 렌더링
+function renderProfileDetailModal(log) {
+    const modalBody = document.getElementById('modal-body');
+    if (!modalBody) return;
+    
+    const frontProfile = log.front_profile || {};
+    const category = log.endpoint === '/tryon/compare' ? '일반 피팅' : log.endpoint === '/tryon/compare/custom' ? '커스텀 피팅' : log.endpoint;
+    const isCustom = category === '커스텀 피팅';
+    
+    // 인물/드레스 예외처리 시간 추출
+    const personValidateMs = frontProfile.person_validate_ms !== null && frontProfile.person_validate_ms !== undefined ? 
+        (typeof frontProfile.person_validate_ms === 'number' ? frontProfile.person_validate_ms.toFixed(2) + ' ms' : frontProfile.person_validate_ms) : '-';
+    const dressValidateMs = frontProfile.dress_validate_ms !== null && frontProfile.dress_validate_ms !== undefined ? 
+        (typeof frontProfile.dress_validate_ms === 'number' ? frontProfile.dress_validate_ms.toFixed(2) + ' ms' : frontProfile.dress_validate_ms) : '-';
+    
+    // 일반 피팅: 카테고리 / 생성일시 / 서버 총시간 / 인물 예외처리 / Gemini 호출
+    // 커스텀 피팅: 카테고리 / 생성일시 / 서버 총시간 / 인물 예외처리 / 드레스 예외처리 / 누끼처리 / Gemini 호출
+    let detailItems = `
+        <div class="detail-item">
+            <div class="detail-label">카테고리</div>
+            <div class="detail-value">${category}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">생성일시</div>
+            <div class="detail-value">${log.created_at ? new Date(log.created_at).toLocaleString('ko-KR') : '-'}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">서버 총 시간</div>
+            <div class="detail-value">${log.server_total_ms !== null && log.server_total_ms !== undefined ? log.server_total_ms.toFixed(2) + ' ms' : '-'}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">인물 예외처리 시간</div>
+            <div class="detail-value">${personValidateMs}</div>
+        </div>
+    `;
+    
+    // 커스텀 피팅만 추가 항목
+    if (isCustom) {
+        detailItems += `
+        <div class="detail-item">
+            <div class="detail-label">드레스 예외처리 시간</div>
+            <div class="detail-value">${dressValidateMs}</div>
+        </div>
+        `;
+        
+        if (log.cutout_ms !== null && log.cutout_ms !== undefined) {
+            detailItems += `
+        <div class="detail-item">
+            <div class="detail-label">누끼 처리 시간</div>
+            <div class="detail-value">${log.cutout_ms.toFixed(2)} ms</div>
+        </div>
+            `;
+        }
+    }
+    
+    detailItems += `
+        <div class="detail-item">
+            <div class="detail-label">Gemini 호출 시간</div>
+            <div class="detail-value">${log.gemini_call_ms !== null && log.gemini_call_ms !== undefined ? log.gemini_call_ms.toFixed(2) + ' ms' : '-'}</div>
+        </div>
+    `;
+    
+    // 에러 단계가 있으면 추가
+    if (log.error_stage) {
+        detailItems += `
+        <div class="detail-item">
+            <div class="detail-label">에러 단계</div>
+            <div class="detail-value" style="color: #ef4444;">${log.error_stage}</div>
+        </div>
+        `;
+    }
+    
+    modalBody.innerHTML = `
+        <div class="detail-grid">
+            ${detailItems}
+        </div>
+    `;
+    
+    // 모달 제목 변경
+    const modalTitle = document.querySelector('#detail-modal .modal-header h3');
+    if (modalTitle) {
+        modalTitle.textContent = '⏱️ 프로파일링 로그 상세';
     }
 }
 
