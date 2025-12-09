@@ -30,6 +30,12 @@ def increment_synthesis_count() -> bool:
         with connection.cursor() as cursor:
             today = get_today_kst()
             
+            # 현재 카운트 조회 (업데이트 전)
+            select_query = "SELECT count FROM daily_synthesis_count WHERE synthesis_date = %s"
+            cursor.execute(select_query, (today,))
+            current_count_result = cursor.fetchone()
+            current_count = current_count_result['count'] if current_count_result else 0
+            
             # UPSERT: 오늘 날짜의 row가 없으면 INSERT, 있으면 UPDATE
             insert_query = """
             INSERT INTO daily_synthesis_count (synthesis_date, count) 
@@ -38,7 +44,13 @@ def increment_synthesis_count() -> bool:
             """
             cursor.execute(insert_query, (today,))
             connection.commit()
-            print(f"합성 카운트 증가 완료: {today}")
+            
+            # 업데이트 후 카운트 조회
+            cursor.execute(select_query, (today,))
+            new_count_result = cursor.fetchone()
+            new_count = new_count_result['count'] if new_count_result else 1
+            
+            print(f"[카운팅] 날짜: {today}, 이전: {current_count} → 현재: {new_count}")
             return True
     except Exception as e:
         print(f"합성 카운트 증가 오류: {e}")

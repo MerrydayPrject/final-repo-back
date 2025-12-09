@@ -15,7 +15,7 @@
             <div class="admin-header-content">
                 <div>
                     <h1>누끼V2 - Ghost Mannequin</h1>
-                    <p class="admin-subtitle">Gemini3 + DALL-E-3 두 모델로 동시 처리</p>
+                    <p class="admin-subtitle">Gemini3로 Ghost Mannequin 생성</p>
                 </div>
                 <a href="/" class="btn-home">홈으로</a>
             </div>
@@ -65,10 +65,6 @@
                             <div class="spinner"></div>
                             <span>Gemini3 처리 중...</span>
                         </div>
-                        <div class="model-loading" id="openaiLoading">
-                            <div class="spinner"></div>
-                            <span>DALL-E-3 처리 중...</span>
-                        </div>
                     </div>
                 </div>
             </section>
@@ -101,29 +97,6 @@
                         <div class="error-section" id="geminiError" style="display: none;">
                             <p class="error-message" id="geminiErrorMsg"></p>
                             <button class="retry-btn" onclick="retryModel('gemini3')">🔄 재시도</button>
-                        </div>
-                    </div>
-
-                    <!-- OpenAI 결과 -->
-                    <div class="result-card" id="openaiResult">
-                        <div class="result-card-header">
-                            <h3>DALL-E-3</h3>
-                            <span class="status-badge" id="openaiStatus">대기</span>
-                        </div>
-                        <div class="result-image-wrapper" id="openaiImageWrapper">
-                            <div class="placeholder">
-                                <span>결과 대기 중</span>
-                            </div>
-                        </div>
-                        <div class="result-card-footer" id="openaiFooter" style="display: none;">
-                            <span class="run-time" id="openaiTime"></span>
-                            <button class="download-btn" id="openaiDownload" onclick="downloadImage('openai')">
-                                💾 다운로드
-                            </button>
-                        </div>
-                        <div class="error-section" id="openaiError" style="display: none;">
-                            <p class="error-message" id="openaiErrorMsg"></p>
-                            <button class="retry-btn" onclick="retryModel('openai')">🔄 재시도</button>
                         </div>
                     </div>
                 </div>
