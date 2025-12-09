@@ -2651,13 +2651,15 @@ async def generate_unified_tryon_v5(
             
             print(f"[V5] Gemini API 호출 실패: {exc}")
             traceback.print_exc()
+            gemini_latency = time.time() - gemini_start_time
             return {
                 "success": False,
                 "prompt": used_prompt,
                 "result_image": "",
                 "message": f"V5 Gemini 호출에 실패했습니다: {str(exc)}",
                 "llm": GEMINI_3_FLASH_MODEL,
-                "error": "gemini_call_failed"
+                "error": "gemini_call_failed",
+                "gemini_call_ms": round(gemini_latency * 1000, 2)  # 초를 ms로 변환
             }
         
         gemini_latency = time.time() - gemini_start_time
@@ -2784,7 +2786,8 @@ async def generate_unified_tryon_v5(
             "prompt": used_prompt,
             "result_image": f"data:image/png;base64,{result_image_base64}",
             "message": "통합 트라이온 파이프라인 V5가 성공적으로 완료되었습니다.",
-            "llm": GEMINI_3_FLASH_MODEL
+            "llm": GEMINI_3_FLASH_MODEL,
+            "gemini_call_ms": round(gemini_latency * 1000, 2)  # 초를 ms로 변환
         }
         
     except Exception as e:
@@ -2800,5 +2803,6 @@ async def generate_unified_tryon_v5(
             "result_image": "",
             "message": f"통합 트라이온 파이프라인 V5 중 오류 발생: {str(e)}",
             "llm": GEMINI_3_FLASH_MODEL,
-            "error": str(e)
+            "error": str(e),
+            "gemini_call_ms": None  # 에러 발생 시 측정 불가
         }

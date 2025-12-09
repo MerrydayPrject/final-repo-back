@@ -7,7 +7,7 @@ from typing import Dict
 from PIL import Image
 
 from services.custom_v5_service import generate_unified_tryon_custom_v5
-from services.log_service import save_test_log
+from services.log_service import save_test_log, save_custom_fitting_log
 from core.s3_client import upload_log_to_s3
 
 
@@ -58,28 +58,20 @@ class V4V5CustomOrchestrator:
             print("[V4V5커스텀] 병렬 파이프라인 시작")
             print("="*80)
         
-        # 입력 이미지 S3 업로드 (로깅 활성화 시에만)
-        person_s3_url = ""
+        # 입력 이미지 S3 업로드 (의상 이미지만 로깅용으로 업로드)
         garment_s3_url = ""
-        background_s3_url = ""
         
         if enable_logging:
-            # S3 업로드 비활성화
-            # try:
-            #     person_buffered = io.BytesIO()
-            #     person_img.save(person_buffered, format="PNG")
-            #     person_s3_url = upload_log_to_s3(person_buffered.getvalue(), model_id, "person") or ""
-            #     
-            #     garment_buffered = io.BytesIO()
-            #     garment_img.save(garment_buffered, format="PNG")
-            #     garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), model_id, "garment") or ""
-            #     
-            #     background_buffered = io.BytesIO()
-            #     background_img.save(background_buffered, format="PNG")
-            #     background_s3_url = upload_log_to_s3(background_buffered.getvalue(), model_id, "background") or ""
-            # except Exception as e:
-            #     print(f"[V4V5커스텀] 입력 이미지 S3 업로드 실패: {e}")
-            pass
+            # 의상 이미지 S3 업로드 (커스텀 피팅 로그용)
+            try:
+                garment_buffered = io.BytesIO()
+                garment_img.save(garment_buffered, format="PNG")
+                garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), "custom-fitting", "garment") or ""
+                if garment_s3_url:
+                    print(f"[V4V5커스텀] 의상 이미지 S3 업로드 완료: {garment_s3_url}")
+            except Exception as e:
+                print(f"[V4V5커스텀] 의상 이미지 S3 업로드 실패: {e}")
+                garment_s3_url = ""
         
         # asyncio.gather로 병렬 실행
         v4_result, v5_result = await asyncio.gather(
@@ -89,6 +81,27 @@ class V4V5CustomOrchestrator:
         )
         
         total_time = time.time() - start_time
+        
+        # cutout_ms, gemini_call_ms 수집 (v5_result에서 가져오기, 없으면 v4_result에서)
+        cutout_ms = None
+        gemini_call_ms = None
+        if isinstance(v5_result, dict) and not isinstance(v5_result, Exception):
+            cutout_ms = v5_result.get("cutout_ms")
+            gemini_call_ms = v5_result.get("gemini_call_ms")
+        elif isinstance(v4_result, dict) and not isinstance(v4_result, Exception):
+            cutout_ms = v4_result.get("cutout_ms")
+            gemini_call_ms = v4_result.get("gemini_call_ms")
+        
+        # 커스텀 피팅 로그 저장 (created_at, run_time, dress_url만 저장)
+        if enable_logging and garment_s3_url:
+            try:
+                save_custom_fitting_log(
+                    dress_url=garment_s3_url,
+                    run_time=total_time
+                )
+                print(f"[V4V5커스텀] 커스텀 피팅 로그 저장 완료: dress_url={garment_s3_url}, run_time={total_time:.2f}초")
+            except Exception as e:
+                print(f"[V4V5커스텀] 커스텀 피팅 로그 저장 실패: {e}")
         
         # 예외 처리
         if isinstance(v4_result, Exception):
@@ -237,7 +250,9 @@ class V4V5CustomOrchestrator:
             "v4_result": v4_result,
             "v5_result": v5_result,
             "total_time": round(total_time, 2),
-            "message": "V4V5커스텀 비교가 완료되었습니다."
+            "message": "V4V5커스텀 비교가 완료되었습니다.",
+            "cutout_ms": cutout_ms,
+            "gemini_call_ms": gemini_call_ms
         }
 
 
