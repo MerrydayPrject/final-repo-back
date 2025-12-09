@@ -1862,14 +1862,16 @@ function calculateProfileSummary(log) {
     const otherTotal = otherItems.reduce((sum, item) => sum + item.value, 0);
     const otherPercent = otherTotal > 0 ? ((otherTotal / serverTotalMs) * 100).toFixed(1) : 0;
     
-    // 요약 문자열 생성
+    // 요약 문자열 생성 (초 단위로 변환)
     const summaryParts = topItems.map(item => {
         const percent = ((item.value / serverTotalMs) * 100).toFixed(1);
-        return `${item.name} ${percent}%`;
+        const valueInSeconds = (item.value / 1000).toFixed(2);
+        return `${item.name} ${valueInSeconds}s (${percent}%)`;
     });
     
     if (otherTotal > 0) {
-        summaryParts.push(`기타 ${otherPercent}%`);
+        const otherTotalSeconds = (otherTotal / 1000).toFixed(2);
+        summaryParts.push(`기타 ${otherTotalSeconds}s (${otherPercent}%)`);
     }
     
     return summaryParts.join(', ');
@@ -1909,8 +1911,9 @@ function renderProfileLogs(logs) {
         const category = endpoint === '/tryon/compare' ? '일반 피팅' : endpoint === '/tryon/compare/custom' ? '커스텀 피팅' : endpoint;
         // 한국시간으로 변환
         const createdAt = log.created_at ? formatDateTime(log.created_at) : '-';
-        const serverTotalMs = log.server_total_ms !== null && log.server_total_ms !== undefined ? 
-            (typeof log.server_total_ms === 'number' ? log.server_total_ms.toFixed(2) : log.server_total_ms) : '-';
+        // 서버 총 시간을 초 단위로 변환
+        const serverTotalS = log.server_total_ms !== null && log.server_total_ms !== undefined ? 
+            (typeof log.server_total_ms === 'number' ? (log.server_total_ms / 1000).toFixed(2) + ' s' : log.server_total_ms) : '-';
         
         // 시간 분포 요약 계산
         const timeSummary = calculateProfileSummary(log);
@@ -1920,7 +1923,7 @@ function renderProfileLogs(logs) {
                 <td>${id}</td>
                 <td>${category}</td>
                 <td>${createdAt}</td>
-                <td>${serverTotalMs}</td>
+                <td>${serverTotalS}</td>
                 <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(timeSummary)}">${escapeHtml(timeSummary)}</td>
                 <td>
                     <button class="btn-detail-emoji" onclick="showProfileDetail(${id})" title="상세보기">
@@ -2103,7 +2106,7 @@ function renderProfileDetailModal(log) {
         </div>
         <div class="detail-item">
             <div class="detail-label">서버 총 시간</div>
-            <div class="detail-value">${serverTotalMs !== null && serverTotalMs !== undefined ? serverTotalMs.toFixed(2) + ' ms' : '-'}</div>
+            <div class="detail-value">${serverTotalMs !== null && serverTotalMs !== undefined ? (serverTotalMs / 1000).toFixed(2) + ' s' : '-'}</div>
         </div>
     `;
     
@@ -2126,18 +2129,19 @@ function renderProfileDetailModal(log) {
         
         topItems.forEach(item => {
             const percent = ((item.value / serverTotalMs) * 100).toFixed(1);
-            const displayValue = item.value.toFixed(2);
+            const displayValue = (item.value / 1000).toFixed(2);
             timeSummaryHtml += `
                 <div style="margin-bottom: 8px;">
-                    <strong>${item.name}:</strong> ${displayValue} ms (${percent}%)
+                    <strong>${item.name}:</strong> ${displayValue} s (${percent}%)
                 </div>
             `;
         });
         
         if (otherTotal > 0) {
+            const otherTotalSeconds = (otherTotal / 1000).toFixed(2);
             timeSummaryHtml += `
                 <div style="margin-bottom: 8px; color: #666;">
-                    <strong>기타:</strong> ${otherTotal.toFixed(2)} ms (${otherPercent}%)
+                    <strong>기타:</strong> ${otherTotalSeconds} s (${otherPercent}%)
                 </div>
             `;
         }
