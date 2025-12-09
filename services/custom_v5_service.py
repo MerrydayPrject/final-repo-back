@@ -198,12 +198,19 @@ async def generate_unified_tryon_custom_v5(
         print("\n[이미지 리사이징] API 호출 전 이미지 최적화 시작...")
         print(f"[이미지 리사이징] 원본 크기 - person: {person_img.size[0]}x{person_img.size[1]}, garment_nukki: {garment_nukki_rgb.size[0]}x{garment_nukki_rgb.size[1]}, background: {background_img.size[0]}x{background_img.size[1]}")
         
+        # 리사이징 시간 측정 시작
+        resize_start_time = time.time()
+        
         # 긴 변을 무조건 1024px로 강제 리사이징 (속도 최적화)
         person_img_resized = force_resize_to_1024(person_img)
         garment_nukki_resized = force_resize_to_1024(garment_nukki_rgb)
         background_img_resized = force_resize_to_1024(background_img)
         
+        # 리사이징 시간 측정 완료
+        resize_ms = round((time.time() - resize_start_time) * 1000, 2)
+        
         print(f"[이미지 리사이징] 리사이징 완료 - person: {person_img_resized.size[0]}x{person_img_resized.size[1]}, garment_nukki: {garment_nukki_resized.size[0]}x{garment_nukki_resized.size[1]}, background: {background_img_resized.size[0]}x{background_img_resized.size[1]}")
+        print(f"[이미지 리사이징] 리사이징 시간: {resize_ms}ms")
         
         # 배경 이미지 처리
         background_img_processed = background_img_resized
@@ -465,6 +472,7 @@ async def generate_unified_tryon_custom_v5(
             "message": "CustomV5 파이프라인이 성공적으로 완료되었습니다.",
             "llm": GEMINI_3_FLASH_MODEL,
             "error": None,
+            "resize_ms": resize_ms,  # 리사이징 시간
             "cutout_ms": cutout_ms,
             "gemini_call_ms": round(stage1_latency * 1000, 2)  # 초를 ms로 변환
         }

@@ -98,7 +98,6 @@ def is_admin_user(user_data: Dict[str, Any]) -> bool:
         admin 여부
     """
     if not user_data:
-        print(f"[DEBUG is_admin_user] user_data가 None")
         return False
     
     user_id = user_data.get("id")
@@ -106,16 +105,12 @@ def is_admin_user(user_data: Dict[str, Any]) -> bool:
     
     # 1. app_metadata에서 role 확인
     app_metadata = user_data.get("app_metadata", {})
-    print(f"[DEBUG is_admin_user] app_metadata: {app_metadata}, type: {type(app_metadata)}")
     if app_metadata and app_metadata.get("role") == "admin":
-        print(f"[DEBUG is_admin_user] app_metadata에서 admin 확인됨")
         return True
     
     # 2. user_metadata에서 role 확인
     user_metadata = user_data.get("user_metadata", {})
-    print(f"[DEBUG is_admin_user] user_metadata: {user_metadata}, type: {type(user_metadata)}")
     if user_metadata and user_metadata.get("role") == "admin":
-        print(f"[DEBUG is_admin_user] user_metadata에서 admin 확인됨")
         return True
     
     # 3. public.profiles 테이블에서 role 확인
@@ -127,9 +122,7 @@ def is_admin_user(user_data: Dict[str, Any]) -> bool:
                 response = admin_client.table('profiles').select('role').eq('id', user_id).execute()
                 if response.data and len(response.data) > 0:
                     profile_role = response.data[0].get('role')
-                    print(f"[DEBUG is_admin_user] profiles 테이블 (user_id로 조회) role: {profile_role}")
                     if profile_role == "admin":
-                        print(f"[DEBUG is_admin_user] profiles 테이블에서 admin 확인됨 (user_id)")
                         return True
             
             # email로 조회 시도
@@ -137,13 +130,11 @@ def is_admin_user(user_data: Dict[str, Any]) -> bool:
                 response = admin_client.table('profiles').select('role').eq('email', email).execute()
                 if response.data and len(response.data) > 0:
                     profile_role = response.data[0].get('role')
-                    print(f"[DEBUG is_admin_user] profiles 테이블 (email로 조회) role: {profile_role}")
                     if profile_role == "admin":
-                        print(f"[DEBUG is_admin_user] profiles 테이블에서 admin 확인됨 (email)")
                         return True
         except Exception as e:
-            print(f"[DEBUG is_admin_user] profiles 테이블 조회 오류: {e}")
+            # profiles 테이블 조회 오류는 조용히 처리 (로그 출력하지 않음)
+            pass
     
-    print(f"[DEBUG is_admin_user] admin 권한 없음")
     return False
 
