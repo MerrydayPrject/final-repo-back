@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>라인 퀴즈 통계 - Marryday</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .overall-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .stat-card-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .stat-card-label {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .line-stats-section {
+            margin-bottom: 40px;
+        }
+
+        .line-stats-header {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .line-stats-header h2 {
+            color: #333;
+            font-size: 1.8em;
+        }
+
+        .line-accuracy {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .wrong-images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .wrong-image-card {
+            background: white;
+            border: 2px solid #f44336;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .wrong-image-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .wrong-image-info {
+            padding: 15px;
+        }
+
+        .wrong-image-info .correct-line {
+            color: #4caf50;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .wrong-image-info .wrong-answer {
+            color: #f44336;
+            margin-top: 5px;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 1.2em;
+        }
+
+        .participant-card {
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+
+        .participant-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .participant-id {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.2em;
+        }
+
+        .participant-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .participant-stat {
+            text-align: center;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+
+        .participant-stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .participant-stat-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/line-quiz" class="back-btn">← 퀴즈로 돌아가기</a>
+            <h1>라인 퀴즈 통계</h1>
+            <p>종합적인 통계를 확인하세요</p>
+        </div>
+
+        <div class="content">
+            <!-- 전체 통계 -->
+            <div class="overall-stats" id="overallStats">
+                <div class="stat-card">
+                    <div class="stat-card-value" id="totalAnswered">0</div>
+                    <div class="stat-card-label">전체 문제</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" id="totalCorrect">0</div>
+                    <div class="stat-card-label">정답</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" id="totalWrong">0</div>
+                    <div class="stat-card-label">오답</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" id="overallAccuracy">0%</div>
+                    <div class="stat-card-label">전체 정답률</div>
+                </div>
+            </div>
+
+            <!-- 라인별 통계 -->
+            <div id="lineStatsContainer"></div>
+
+            <!-- 참여자 통계 -->
+            <div class="line-stats-section">
+                <div class="line-stats-header">
+                    <h2>참여자 통계</h2>
+                </div>
+                <div id="participantStats" style="padding: 20px;">
+                    <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const LINE_TYPES = ['A라인', 'H라인', 'O라인', 'X라인'];
+
+        // 통계 데이터 로드 및 분석
+        function loadAndAnalyzeStats() {
+            const answers = JSON.parse(localStorage.getItem('lineQuizAnswers') || '[]');
+            
+            if (answers.length === 0) {
+                document.getElementById('overallStats').innerHTML = 
+                    '<div class="no-data" style="grid-column: 1/-1;">아직 퀴즈를 풀지 않았습니다.</div>';
+                document.getElementById('lineStatsContainer').innerHTML = 
+                    '<div class="no-data">통계 데이터가 없습니다.</div>';
+                document.getElementById('participantStats').innerHTML = 
+                    '<div class="no-data">참여자 데이터가 없습니다.</div>';
+                return;
+            }
+
+            // 전체 통계 계산 (모든 참여자 누적)
+            const totalAnswered = answers.length;
+            const totalCorrect = answers.filter(a => a.is_correct).length;
+            const totalWrong = totalAnswered - totalCorrect;
+            const overallAccuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+
+            // 전체 통계 표시
+            document.getElementById('totalAnswered').textContent = totalAnswered;
+            document.getElementById('totalCorrect').textContent = totalCorrect;
+            document.getElementById('totalWrong').textContent = totalWrong;
+            document.getElementById('overallAccuracy').textContent = overallAccuracy + '%';
+
+            // 라인별 통계 계산 (모든 참여자 누적)
+            const lineStats = {};
+            LINE_TYPES.forEach(line => {
+                lineStats[line] = {
+                    total: 0,
+                    correct: 0,
+                    wrong: [],
+                    accuracy: 0
+                };
+            });
+
+            answers.forEach(answer => {
+                const correctLine = answer.correct_answer;
+                if (lineStats[correctLine]) {
+                    lineStats[correctLine].total++;
+                    if (answer.is_correct) {
+                        lineStats[correctLine].correct++;
+                    } else {
+                        // 이미지 URL 생성
+                        const imagePathParts = answer.image_path.split('/');
+                        const filename = imagePathParts[imagePathParts.length - 1];
+                        const imageUrl = `/test_images/${correctLine}/${filename}`;
+                        
+                        lineStats[correctLine].wrong.push({
+                            image_path: answer.image_path,
+                            image_url: imageUrl,
+                            filename: filename,
+                            user_answer: answer.user_answer,
+                            correct_answer: answer.correct_answer,
+                            user_id: answer.user_id || 'unknown'
+                        });
+                    }
+                }
+            });
+
+            // 정확도 계산
+            LINE_TYPES.forEach(line => {
+                if (lineStats[line].total > 0) {
+                    lineStats[line].accuracy = Math.round((lineStats[line].correct / lineStats[line].total) * 100);
+                }
+            });
+
+            // 라인별 통계 표시
+            displayLineStats(lineStats);
+            
+            // 참여자별 통계 표시
+            displayParticipantStats(answers);
+        }
+
+        // 라인별 통계 표시
+        function displayLineStats(lineStats) {
+            const container = document.getElementById('lineStatsContainer');
+            container.innerHTML = '';
+
+            LINE_TYPES.forEach(line => {
+                const stats = lineStats[line];
+                const section = document.createElement('div');
+                section.className = 'line-stats-section';
+
+                section.innerHTML = `
+                    <div class="line-stats-header">
+                        <h2>${line} 통계</h2>
+                        <div class="line-accuracy">${stats.accuracy}%</div>
+                    </div>
+                    <div style="margin-bottom: 15px; padding: 0 20px;">
+                        <p><strong>총 문제:</strong> ${stats.total}개 | <strong>정답:</strong> ${stats.correct}개 | <strong>오답:</strong> ${stats.wrong.length}개</p>
+                    </div>
+                `;
+
+                // 오답 사진들 표시
+                if (stats.wrong.length > 0) {
+                    const wrongGrid = document.createElement('div');
+                    wrongGrid.className = 'wrong-images-grid';
+                    
+                    stats.wrong.forEach(wrong => {
+                        const card = document.createElement('div');
+                        card.className = 'wrong-image-card';
+                        card.innerHTML = `
+                            <img src="${wrong.image_url}" alt="${wrong.image_path}" onerror="this.src='/static/no-image.png'">
+                            <div class="wrong-image-info">
+                                <div class="correct-line">정답: ${wrong.correct_answer}</div>
+                                <div class="wrong-answer">내 답: ${wrong.user_answer}</div>
+                            </div>
+                        `;
+                        wrongGrid.appendChild(card);
+                    });
+                    
+                    section.appendChild(wrongGrid);
+                } else {
+                    const noWrong = document.createElement('div');
+                    noWrong.className = 'no-data';
+                    noWrong.textContent = `${line}에서는 모든 문제를 맞추셨습니다! 🎉`;
+                    section.appendChild(noWrong);
+                }
+
+                container.appendChild(section);
+            });
+        }
+
+        // 참여자별 통계 표시
+        function displayParticipantStats(answers) {
+            const container = document.getElementById('participantStats');
+            
+            // 참여자별로 그룹화
+            const participantMap = {};
+            answers.forEach(answer => {
+                const userId = answer.user_id || 'unknown';
+                if (!participantMap[userId]) {
+                    participantMap[userId] = {
+                        userId: userId,
+                        answers: [],
+                        total: 0,
+                        correct: 0,
+                        wrong: 0
+                    };
+                }
+                participantMap[userId].answers.push(answer);
+                participantMap[userId].total++;
+                if (answer.is_correct) {
+                    participantMap[userId].correct++;
+                } else {
+                    participantMap[userId].wrong++;
+                }
+            });
+
+            // 참여자별 카드 생성
+            const participants = Object.values(participantMap);
+            participants.sort((a, b) => b.total - a.total); // 문제 수 많은 순으로 정렬
+
+            if (participants.length === 0) {
+                container.innerHTML = '<div class="no-data">참여자 데이터가 없습니다.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            participants.forEach((participant, index) => {
+                const accuracy = participant.total > 0 
+                    ? Math.round((participant.correct / participant.total) * 100) 
+                    : 0;
+                
+                const card = document.createElement('div');
+                card.className = 'participant-card';
+                card.innerHTML = `
+                    <div class="participant-header">
+                        <div class="participant-id">참여자 #${index + 1}</div>
+                        <div style="color: #666; font-size: 0.9em;">ID: ${participant.userId.substring(0, 20)}...</div>
+                    </div>
+                    <div class="participant-summary">
+                        <div class="participant-stat">
+                            <div class="participant-stat-value">${participant.total}</div>
+                            <div class="participant-stat-label">전체 문제</div>
+                        </div>
+                        <div class="participant-stat">
+                            <div class="participant-stat-value">${participant.correct}</div>
+                            <div class="participant-stat-label">정답</div>
+                        </div>
+                        <div class="participant-stat">
+                            <div class="participant-stat-value">${participant.wrong}</div>
+                            <div class="participant-stat-label">오답</div>
+                        </div>
+                        <div class="participant-stat">
+                            <div class="participant-stat-value">${accuracy}%</div>
+                            <div class="participant-stat-label">정답률</div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            // 총 참여자 수 표시
+            const summary = document.createElement('div');
+            summary.style.cssText = 'text-align: center; margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 10px;';
+            summary.innerHTML = `<strong>총 ${participants.length}명의 참여자가 테스트를 완료했습니다.</strong>`;
+            container.appendChild(summary);
+        }
+
+        // 초기화
+        loadAndAnalyzeStats();
+    </script>
+</body>
+
+</html>

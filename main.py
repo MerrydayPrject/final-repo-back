@@ -43,6 +43,9 @@ app.mount(
     StaticFiles(directory="static"),
     name="body_analysis_static"
 )
+# test_images를 별도로 마운트 (라인 퀴즈용)
+Path("test_images").mkdir(exist_ok=True)
+app.mount("/test_images", StaticFiles(directory="test_images"), name="test_images")
 templates = Jinja2Templates(directory="templates")
 
 # 라우터 등록
@@ -51,7 +54,8 @@ from routers import (
     body_analysis, admin, dress_management, image_processing,
     proxy, models, tryon_router, body_generation, fitting_router,
     custom_v3_router, custom_v4_router, custom_v5_router, custom_v4v5_router,
-    review, auth, visitor_router, nukki_v2_router, prompt_test_router
+    review, auth, visitor_router, nukki_v2_router, prompt_test_router,
+    line_quiz_router
 )
 
 app.include_router(info.router)
@@ -77,6 +81,7 @@ app.include_router(review.router)
 app.include_router(visitor_router.router)
 app.include_router(nukki_v2_router.router)
 app.include_router(prompt_test_router.router)
+app.include_router(line_quiz_router.router)
 
 # Startup 이벤트
 @app.on_event("startup")
