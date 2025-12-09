@@ -345,13 +345,13 @@ python utils/check_db.py
        └─> 병렬 실행 (asyncio.gather)
            ├─> V5Adapter.run() (인스턴스 1)
            │   └─> tryon_service.py::generate_unified_tryon_v5()
-           │       ├─> Gemini 프롬프트 생성
+           │       ├─> 정적 통합 프롬프트 로드 (prompts/v5/unified_prompt.txt)
            │       ├─> Gemini 이미지 합성 요청
            │       └─> Base64 인코딩
            │
            └─> V5Adapter.run() (인스턴스 2)
                └─> tryon_service.py::generate_unified_tryon_v5()
-                   ├─> Gemini 프롬프트 생성
+                   ├─> 정적 통합 프롬프트 로드
                    ├─> Gemini 이미지 합성 요청
                    └─> Base64 인코딩
 
