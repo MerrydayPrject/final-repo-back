@@ -96,7 +96,6 @@ final-repo-back/
 │   ├── tryon_router.py   # 트라이온 기능
 │   ├── fitting_router.py # 피팅 기능
 │   ├── body_analysis.py  # 체형 분석
-│   ├── body_generation.py # 체형 생성
 │   ├── dress_management.py # 드레스 관리
 │   ├── image_processing.py # 이미지 처리
 │   ├── prompt.py         # 프롬프트 생성

@@ -801,15 +801,25 @@ document.addEventListener('keydown', (e) => {
 
 // 유틸리티 함수들
 function formatDateTime(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
+    if (!dateString) return '-';
+    
+    try {
+        const date = new Date(dateString);
+        
+        // 한국시간(Asia/Seoul, UTC+9)으로 명시적으로 변환
+        return date.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            timeZone: 'Asia/Seoul'
+        });
+    } catch (e) {
+        console.error('날짜 포맷팅 오류:', e, dateString);
+        return String(dateString);
+    }
 }
 
 function formatTime(dateString) {
@@ -1569,45 +1579,8 @@ function renderCustomFittingLogs(logs) {
     tbody.innerHTML = logs.map(log => {
         const id = log.id !== undefined ? log.id : '-';
         
-        // 생성일시 포맷팅 (안전하게 처리)
-        let createdAt = '-';
-        if (log.created_at) {
-            try {
-                let dateStr = String(log.created_at).trim();
-                
-                // 빈 문자열 체크
-                if (!dateStr || dateStr === 'None' || dateStr === 'null') {
-                    createdAt = '-';
-                } else {
-                    // MySQL datetime 형식 (YYYY-MM-DD HH:MM:SS) 처리
-                    // 공백을 T로 변환
-                    if (dateStr.includes(' ') && !dateStr.includes('T')) {
-                        dateStr = dateStr.replace(' ', 'T');
-                    }
-                    
-                    // T가 없으면 추가 (날짜만 있는 경우)
-                    if (!dateStr.includes('T')) {
-                        dateStr = dateStr + 'T00:00:00';
-                    }
-                    
-                    // 타임존 정보가 없으면 UTC로 가정 (Z 추가하지 않음, 로컬 시간으로 표시)
-                    const date = new Date(dateStr);
-                    
-                    if (!isNaN(date.getTime())) {
-                        // 유효한 날짜인 경우 포맷팅
-                        createdAt = formatDateTime(dateStr);
-                    } else {
-                        // 파싱 실패 시 원본 문자열 표시
-                        console.warn('날짜 파싱 실패:', log.created_at);
-                        createdAt = String(log.created_at);
-                    }
-                }
-            } catch (e) {
-                // 에러 발생 시 원본 문자열 표시
-                console.error('날짜 포맷팅 오류:', e, log.created_at);
-                createdAt = String(log.created_at) || '-';
-            }
-        }
+        // 생성일시 포맷팅 (한국시간으로 변환)
+        const createdAt = log.created_at ? formatDateTime(log.created_at) : '-';
         
         const runTime = log.run_time !== undefined && log.run_time !== null
             ? (typeof log.run_time === 'number' ? log.run_time.toFixed(2) + '초' : log.run_time)
@@ -1814,37 +1787,110 @@ function updateProfileLogsTableHeader(endpoint) {
     const thead = document.getElementById('profile-logs-thead');
     if (!thead) return;
     
-    const isCustom = endpoint === '/tryon/compare/custom';
+    // 요약 형식으로 통일: ID, 카테고리, 생성일시, 서버 총 시간, 시간 분포 요약, 상세보기
+    thead.innerHTML = `
+        <tr>
+            <th>ID</th>
+            <th>카테고리</th>
+            <th>생성일시</th>
+            <th>서버 총 시간 (ms)</th>
+            <th>시간 분포 요약</th>
+            <th>상세보기</th>
+        </tr>
+    `;
+}
+
+// 프로파일링 로그에서 duration_ms 데이터 수집 및 요약 계산
+function calculateProfileSummary(log) {
+    const frontProfile = log.front_profile || {};
+    const serverTotalMs = log.server_total_ms;
     
-    if (isCustom) {
-        // 커스텀 피팅: ID, 카테고리, 생성일시, 서버 총시간, 인물 예외처리, 드레스 예외처리, 누끼처리, Gemini 호출, 상세보기
-        thead.innerHTML = `
-            <tr>
-                <th>ID</th>
-                <th>카테고리</th>
-                <th>생성일시</th>
-                <th>서버 총 시간 (ms)</th>
-                <th>인물 예외처리 (ms)</th>
-                <th>드레스 예외처리 (ms)</th>
-                <th>누끼 처리 (ms)</th>
-                <th>Gemini 호출 (ms)</th>
-                <th>상세보기</th>
-            </tr>
-        `;
-    } else {
-        // 일반 피팅: ID, 카테고리, 생성일시, 서버 총시간, 인물 예외처리, Gemini 호출, 상세보기
-        thead.innerHTML = `
-            <tr>
-                <th>ID</th>
-                <th>카테고리</th>
-                <th>생성일시</th>
-                <th>서버 총 시간 (ms)</th>
-                <th>인물 예외처리 (ms)</th>
-                <th>Gemini 호출 (ms)</th>
-                <th>상세보기</th>
-            </tr>
-        `;
+    // 모든 duration_ms 데이터 수집
+    const durations = [];
+    
+    // 프론트엔드 프로파일링 데이터
+    const frontProfileKeys = [
+        'bg_select_ms', 'person_upload_ms', 'person_validate_ms', 
+        'dress_upload_ms', 'dress_validate_ms', 'dress_cutout_ms',
+        'dress_drop_ms', 'compose_click_to_response_ms', 'result_image_load_ms'
+    ];
+    
+    frontProfileKeys.forEach(key => {
+        const value = frontProfile[key];
+        if (value !== null && value !== undefined && typeof value === 'number' && value > 0) {
+            durations.push({
+                name: getDurationName(key),
+                value: value
+            });
+        }
+    });
+    
+    // 백엔드 프로파일링 데이터
+    if (log.gemini_call_ms !== null && log.gemini_call_ms !== undefined && typeof log.gemini_call_ms === 'number' && log.gemini_call_ms > 0) {
+        durations.push({
+            name: 'Gemini 호출',
+            value: log.gemini_call_ms
+        });
     }
+    
+    if (log.cutout_ms !== null && log.cutout_ms !== undefined && typeof log.cutout_ms === 'number' && log.cutout_ms > 0) {
+        durations.push({
+            name: '누끼 처리',
+            value: log.cutout_ms
+        });
+    }
+    
+    // 서버 총 시간이 없으면 요약 계산 불가
+    if (!serverTotalMs || typeof serverTotalMs !== 'number' || serverTotalMs <= 0) {
+        return '데이터 없음';
+    }
+    
+    // 값이 없으면 요약 없음
+    if (durations.length === 0) {
+        return '데이터 없음';
+    }
+    
+    // 내림차순 정렬
+    durations.sort((a, b) => b.value - a.value);
+    
+    // 상위 3개 항목 선택
+    const topN = 3;
+    const topItems = durations.slice(0, topN);
+    const otherItems = durations.slice(topN);
+    
+    // 기타 항목 합계 계산
+    const otherTotal = otherItems.reduce((sum, item) => sum + item.value, 0);
+    const otherPercent = otherTotal > 0 ? ((otherTotal / serverTotalMs) * 100).toFixed(1) : 0;
+    
+    // 요약 문자열 생성
+    const summaryParts = topItems.map(item => {
+        const percent = ((item.value / serverTotalMs) * 100).toFixed(1);
+        return `${item.name} ${percent}%`;
+    });
+    
+    if (otherTotal > 0) {
+        summaryParts.push(`기타 ${otherPercent}%`);
+    }
+    
+    return summaryParts.join(', ');
+}
+
+// duration_ms 키를 한글 이름으로 변환
+function getDurationName(key) {
+    const nameMap = {
+        'bg_select_ms': '배경 선택',
+        'person_upload_ms': '인물 업로드',
+        'person_validate_ms': '인물 예외처리',
+        'dress_upload_ms': '드레스 업로드',
+        'dress_validate_ms': '드레스 예외처리',
+        'dress_cutout_ms': '드레스 누끼',
+        'dress_drop_ms': '드레스 드롭',
+        'compose_click_to_response_ms': '합성 처리',
+        'result_image_load_ms': '결과 이미지 로드',
+        'gemini_call_ms': 'Gemini 호출',
+        'cutout_ms': '누끼 처리'
+    };
+    return nameMap[key] || key;
 }
 
 // 프로파일링 로그 렌더링
@@ -1852,11 +1898,8 @@ function renderProfileLogs(logs) {
     const tbody = document.getElementById('profile-logs-tbody');
     if (!tbody) return;
     
-    const isCustom = currentProfileEndpoint === '/tryon/compare/custom';
-    const colspan = isCustom ? 9 : 7;
-    
     if (logs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">로그가 없습니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="loading">로그가 없습니다.</td></tr>`;
         return;
     }
     
@@ -1864,33 +1907,21 @@ function renderProfileLogs(logs) {
         const id = log.id !== undefined ? log.id : '-';
         const endpoint = log.endpoint || '-';
         const category = endpoint === '/tryon/compare' ? '일반 피팅' : endpoint === '/tryon/compare/custom' ? '커스텀 피팅' : endpoint;
-        const createdAt = log.created_at ? new Date(log.created_at).toLocaleString('ko-KR') : '-';
+        // 한국시간으로 변환
+        const createdAt = log.created_at ? formatDateTime(log.created_at) : '-';
         const serverTotalMs = log.server_total_ms !== null && log.server_total_ms !== undefined ? 
             (typeof log.server_total_ms === 'number' ? log.server_total_ms.toFixed(2) : log.server_total_ms) : '-';
-        const geminiCallMs = log.gemini_call_ms !== null && log.gemini_call_ms !== undefined ? 
-            (typeof log.gemini_call_ms === 'number' ? log.gemini_call_ms.toFixed(2) : log.gemini_call_ms) : '-';
-        const cutoutMs = log.cutout_ms !== null && log.cutout_ms !== undefined ? 
-            (typeof log.cutout_ms === 'number' ? log.cutout_ms.toFixed(2) : log.cutout_ms) : '-';
         
-        // 프론트엔드 프로파일링 데이터에서 추출
-        const frontProfile = log.front_profile || {};
-        const personValidateMs = frontProfile.person_validate_ms !== null && frontProfile.person_validate_ms !== undefined ? 
-            (typeof frontProfile.person_validate_ms === 'number' ? frontProfile.person_validate_ms.toFixed(2) : frontProfile.person_validate_ms) : '-';
-        const dressValidateMs = frontProfile.dress_validate_ms !== null && frontProfile.dress_validate_ms !== undefined ? 
-            (typeof frontProfile.dress_validate_ms === 'number' ? frontProfile.dress_validate_ms.toFixed(2) : frontProfile.dress_validate_ms) : '-';
+        // 시간 분포 요약 계산
+        const timeSummary = calculateProfileSummary(log);
         
-        if (isCustom) {
-            // 커스텀 피팅: ID, 카테고리, 생성일시, 서버 총시간, 인물 예외처리, 드레스 예외처리, 누끼처리, Gemini 호출, 상세보기
-            return `
+        return `
             <tr>
                 <td>${id}</td>
                 <td>${category}</td>
                 <td>${createdAt}</td>
                 <td>${serverTotalMs}</td>
-                <td>${personValidateMs}</td>
-                <td>${dressValidateMs}</td>
-                <td>${cutoutMs}</td>
-                <td>${geminiCallMs}</td>
+                <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(timeSummary)}">${escapeHtml(timeSummary)}</td>
                 <td>
                     <button class="btn-detail-emoji" onclick="showProfileDetail(${id})" title="상세보기">
                         📋
@@ -1898,24 +1929,6 @@ function renderProfileLogs(logs) {
                 </td>
             </tr>
         `;
-        } else {
-            // 일반 피팅: ID, 카테고리, 생성일시, 서버 총시간, 인물 예외처리, Gemini 호출, 상세보기
-            return `
-            <tr>
-                <td>${id}</td>
-                <td>${category}</td>
-                <td>${createdAt}</td>
-                <td>${serverTotalMs}</td>
-                <td>${personValidateMs}</td>
-                <td>${geminiCallMs}</td>
-                <td>
-                    <button class="btn-detail-emoji" onclick="showProfileDetail(${id})" title="상세보기">
-                        📋
-                    </button>
-                </td>
-            </tr>
-        `;
-        }
     }).join('');
 }
 
@@ -2041,16 +2054,44 @@ function renderProfileDetailModal(log) {
     
     const frontProfile = log.front_profile || {};
     const category = log.endpoint === '/tryon/compare' ? '일반 피팅' : log.endpoint === '/tryon/compare/custom' ? '커스텀 피팅' : log.endpoint;
-    const isCustom = category === '커스텀 피팅';
+    const serverTotalMs = log.server_total_ms;
     
-    // 인물/드레스 예외처리 시간 추출
-    const personValidateMs = frontProfile.person_validate_ms !== null && frontProfile.person_validate_ms !== undefined ? 
-        (typeof frontProfile.person_validate_ms === 'number' ? frontProfile.person_validate_ms.toFixed(2) + ' ms' : frontProfile.person_validate_ms) : '-';
-    const dressValidateMs = frontProfile.dress_validate_ms !== null && frontProfile.dress_validate_ms !== undefined ? 
-        (typeof frontProfile.dress_validate_ms === 'number' ? frontProfile.dress_validate_ms.toFixed(2) + ' ms' : frontProfile.dress_validate_ms) : '-';
+    // 모든 duration_ms 데이터 수집
+    const durations = [];
     
-    // 일반 피팅: 카테고리 / 생성일시 / 서버 총시간 / 인물 예외처리 / Gemini 호출
-    // 커스텀 피팅: 카테고리 / 생성일시 / 서버 총시간 / 인물 예외처리 / 드레스 예외처리 / 누끼처리 / Gemini 호출
+    // 프론트엔드 프로파일링 데이터
+    const frontProfileKeys = [
+        'bg_select_ms', 'person_upload_ms', 'person_validate_ms', 
+        'dress_upload_ms', 'dress_validate_ms', 'dress_cutout_ms',
+        'dress_drop_ms', 'compose_click_to_response_ms', 'result_image_load_ms'
+    ];
+    
+    frontProfileKeys.forEach(key => {
+        const value = frontProfile[key];
+        if (value !== null && value !== undefined && typeof value === 'number' && value > 0) {
+            durations.push({
+                name: getDurationName(key),
+                value: value
+            });
+        }
+    });
+    
+    // 백엔드 프로파일링 데이터
+    if (log.gemini_call_ms !== null && log.gemini_call_ms !== undefined && typeof log.gemini_call_ms === 'number' && log.gemini_call_ms > 0) {
+        durations.push({
+            name: 'Gemini 호출',
+            value: log.gemini_call_ms
+        });
+    }
+    
+    if (log.cutout_ms !== null && log.cutout_ms !== undefined && typeof log.cutout_ms === 'number' && log.cutout_ms > 0) {
+        durations.push({
+            name: '누끼 처리',
+            value: log.cutout_ms
+        });
+    }
+    
+    // 기본 정보
     let detailItems = `
         <div class="detail-item">
             <div class="detail-label">카테고리</div>
@@ -2058,43 +2099,65 @@ function renderProfileDetailModal(log) {
         </div>
         <div class="detail-item">
             <div class="detail-label">생성일시</div>
-            <div class="detail-value">${log.created_at ? new Date(log.created_at).toLocaleString('ko-KR') : '-'}</div>
+            <div class="detail-value">${log.created_at ? formatDateTime(log.created_at) : '-'}</div>
         </div>
         <div class="detail-item">
             <div class="detail-label">서버 총 시간</div>
-            <div class="detail-value">${log.server_total_ms !== null && log.server_total_ms !== undefined ? log.server_total_ms.toFixed(2) + ' ms' : '-'}</div>
-        </div>
-        <div class="detail-item">
-            <div class="detail-label">인물 예외처리 시간</div>
-            <div class="detail-value">${personValidateMs}</div>
+            <div class="detail-value">${serverTotalMs !== null && serverTotalMs !== undefined ? serverTotalMs.toFixed(2) + ' ms' : '-'}</div>
         </div>
     `;
     
-    // 커스텀 피팅만 추가 항목
-    if (isCustom) {
-        detailItems += `
-        <div class="detail-item">
-            <div class="detail-label">드레스 예외처리 시간</div>
-            <div class="detail-value">${dressValidateMs}</div>
-        </div>
-        `;
+    // 시간 분포 요약 표시
+    if (serverTotalMs && typeof serverTotalMs === 'number' && serverTotalMs > 0 && durations.length > 0) {
+        // 내림차순 정렬
+        durations.sort((a, b) => b.value - a.value);
         
-        if (log.cutout_ms !== null && log.cutout_ms !== undefined) {
-            detailItems += `
-        <div class="detail-item">
-            <div class="detail-label">누끼 처리 시간</div>
-            <div class="detail-value">${log.cutout_ms.toFixed(2)} ms</div>
-        </div>
+        // 상위 3개 항목 선택
+        const topN = 3;
+        const topItems = durations.slice(0, topN);
+        const otherItems = durations.slice(topN);
+        
+        // 기타 항목 합계 계산
+        const otherTotal = otherItems.reduce((sum, item) => sum + item.value, 0);
+        const otherPercent = otherTotal > 0 ? ((otherTotal / serverTotalMs) * 100).toFixed(1) : 0;
+        
+        // 시간 분포 요약 HTML 생성
+        let timeSummaryHtml = '<div style="margin-top: 10px;">';
+        
+        topItems.forEach(item => {
+            const percent = ((item.value / serverTotalMs) * 100).toFixed(1);
+            const displayValue = item.value.toFixed(2);
+            timeSummaryHtml += `
+                <div style="margin-bottom: 8px;">
+                    <strong>${item.name}:</strong> ${displayValue} ms (${percent}%)
+                </div>
+            `;
+        });
+        
+        if (otherTotal > 0) {
+            timeSummaryHtml += `
+                <div style="margin-bottom: 8px; color: #666;">
+                    <strong>기타:</strong> ${otherTotal.toFixed(2)} ms (${otherPercent}%)
+                </div>
             `;
         }
-    }
-    
-    detailItems += `
-        <div class="detail-item">
-            <div class="detail-label">Gemini 호출 시간</div>
-            <div class="detail-value">${log.gemini_call_ms !== null && log.gemini_call_ms !== undefined ? log.gemini_call_ms.toFixed(2) + ' ms' : '-'}</div>
+        
+        timeSummaryHtml += '</div>';
+        
+        detailItems += `
+        <div class="detail-item" style="grid-column: 1 / -1;">
+            <div class="detail-label">시간 분포 요약</div>
+            <div class="detail-value">${timeSummaryHtml}</div>
         </div>
-    `;
+        `;
+    } else {
+        detailItems += `
+        <div class="detail-item">
+            <div class="detail-label">시간 분포 요약</div>
+            <div class="detail-value">데이터 없음</div>
+        </div>
+        `;
+    }
     
     // 에러 단계가 있으면 추가
     if (log.error_stage) {
