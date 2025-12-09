@@ -312,6 +312,512 @@ python utils/check_db.py
 
 > 📚 전체 API 문서는 서버 실행 후 `http://localhost:8000/docs`에서 확인할 수 있습니다.
 
+## 🔄 프론트엔드 API 엔드포인트 처리 파이프라인
+
+프론트엔드에서 호출하는 주요 API 엔드포인트의 백엔드 처리 파이프라인을 상세히 설명합니다.
+
+### 1. POST /tryon/compare (일반 피팅)
+
+**프론트엔드 호출**: `autoMatchImageV5V5()`  
+**라우터**: `tryon_router.py::compare_v4v5()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   ├─> FormData 파싱
+   │   ├─> person_image: UploadFile
+   │   ├─> garment_image: UploadFile
+   │   ├─> background_image: UploadFile
+   │   ├─> dress_id: Optional[int] (Form)
+   │   └─> profile_front: Optional[str] (Form, JSON 문자열)
+   │
+   └─> X-Trace-Id 헤더 추출 또는 UUID 생성
+
+2. 이미지 검증 및 변환
+   ├─> 이미지 바이트 읽기
+   ├─> PIL Image로 변환 (RGB)
+   └─> 빈 파일 검증
+
+3. V4V5 비교 서비스 호출
+   └─> tryon_compare_service.py::run_v4v5_compare()
+       ├─> V4V5Orchestrator 생성
+       └─> 병렬 실행 (asyncio.gather)
+           ├─> V5Adapter.run() (인스턴스 1)
+           │   └─> tryon_service.py::generate_unified_tryon_v5()
+           │       ├─> Gemini 프롬프트 생성
+           │       ├─> Gemini 이미지 합성 요청
+           │       └─> Base64 인코딩
+           │
+           └─> V5Adapter.run() (인스턴스 2)
+               └─> tryon_service.py::generate_unified_tryon_v5()
+                   ├─> Gemini 프롬프트 생성
+                   ├─> Gemini 이미지 합성 요청
+                   └─> Base64 인코딩
+
+4. 성공 처리 (v5_result 성공 시)
+   ├─> synthesis_stats_service.py::increment_synthesis_count()
+   │   └─> MySQL: INSERT INTO daily_synthesis_count
+   │       └─> ON DUPLICATE KEY UPDATE count = count + 1
+   │
+   ├─> dress_fitting_log_service.py::log_dress_fitting() (dress_id가 있는 경우)
+   │   └─> MySQL: INSERT INTO dress_fitting_logs (dress_id)
+   │
+   └─> profile_service.py::save_tryon_profile()
+       └─> MySQL: INSERT INTO tryon_profile_summary
+           ├─> trace_id, endpoint, front_profile_json
+           ├─> server_total_ms, gemini_call_ms
+           └─> status, error_stage
+
+5. 응답 생성
+   └─> JSONResponse
+       ├─> v4_result: { success, prompt, result_image, message, llm }
+       ├─> v5_result: { success, prompt, result_image, message, llm }
+       ├─> total_time: float
+       └─> X-Trace-Id 헤더 포함
+```
+
+#### 주요 특징
+- **병렬 처리**: V5 파이프라인을 2번 병렬 실행하여 결과 비교
+- **프로파일링**: 프론트엔드/백엔드 시간 측정 및 저장
+- **자동 로깅**: 합성 카운트 및 드레스 피팅 로그 자동 기록
+
+---
+
+### 2. POST /tryon/compare/custom (커스텀 피팅)
+
+**프론트엔드 호출**: `customV5V5MatchImage()`  
+**라우터**: `custom_v4v5_router.py::compare_v4v5_custom()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   ├─> FormData 파싱
+   │   ├─> person_image: UploadFile
+   │   ├─> garment_image: UploadFile
+   │   ├─> background_image: UploadFile
+   │   └─> profile_front: Optional[str] (Form, JSON 문자열)
+   │
+   └─> X-Trace-Id 헤더 추출 또는 UUID 생성
+
+2. 이미지 검증 및 변환
+   ├─> 이미지 바이트 읽기
+   ├─> PIL Image로 변환 (RGB)
+   └─> 빈 파일 검증
+
+3. V4V5 커스텀 비교 서비스 호출
+   └─> custom_v4v5_compare_service.py::run_v4v5_custom_compare()
+       ├─> V4V5CustomOrchestrator 생성
+       └─> 병렬 실행 (asyncio.gather)
+           ├─> CustomV5Adapter.run() (인스턴스 1)
+           │   └─> custom_v5_service.py::generate_unified_tryon_custom_v5()
+           │       ├─> 의상 누끼 처리
+           │       │   └─> segformer_garment_parser.py::parse_garment_image_v4()
+           │       │       ├─> HuggingFace Inference API 호출
+           │       │       │   └─> SegFormer B2 모델 실행
+           │       │       ├─> 세그멘테이션 마스크 생성
+           │       │       └─> 배경 제거된 의상 이미지 반환 (RGBA)
+           │       ├─> 이미지 전처리
+           │       │   ├─> 의상 이미지 리사이징 (1024px)
+           │       │   └─> 의상 이미지를 인물 이미지 크기로 조정
+           │       ├─> Gemini 프롬프트 생성
+           │       │   └─> prompts/v5/unified_prompt.txt 템플릿 사용
+           │       ├─> Gemini 3 Flash API 호출
+           │       │   └─> 이미지 합성 요청
+           │       └─> Base64 인코딩
+           │
+           └─> CustomV5Adapter.run() (인스턴스 2)
+               └─> custom_v5_service.py::generate_unified_tryon_custom_v5()
+                   ├─> 의상 누끼 처리 (SegFormer)
+                   ├─> 이미지 전처리
+                   ├─> Gemini 프롬프트 생성
+                   ├─> Gemini 3 Flash API 호출
+                   └─> Base64 인코딩
+
+4. 성공 처리 (v5_result 성공 시)
+   └─> synthesis_stats_service.py::increment_synthesis_count()
+       └─> MySQL: INSERT INTO daily_synthesis_count
+
+5. 응답 생성
+   └─> JSONResponse
+       ├─> v4_result: { success, prompt, result_image, message, llm }
+       ├─> v5_result: { success, prompt, result_image, message, llm }
+       ├─> total_time: float
+       └─> X-Trace-Id 헤더 포함
+```
+
+#### 주요 특징
+- **의상 누끼 처리**: SegFormer를 통한 자동 배경 제거
+- **병렬 처리**: CustomV5 파이프라인을 2번 병렬 실행
+- **로깅 비활성화**: S3 업로드 및 커스텀 피팅 로그 저장 비활성화 (프론트엔드 요청 시)
+
+---
+
+### 3. POST /api/validate-person (이미지 유효성 검사)
+
+**프론트엔드 호출**: `validatePerson()`  
+**라우터**: `body_analysis.py::validate_person()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   └─> FormData 파싱
+       └─> file: UploadFile
+
+2. 이미지 처리
+   ├─> 이미지 바이트 읽기
+   ├─> PIL Image로 변환 (RGB)
+   └─> EXIF orientation 자동 적용 (ImageOps.exif_transpose)
+
+3. 이미지 타입 감지
+   └─> face_swap_service.py::detect_image_type()
+       ├─> MediaPipe 포즈 랜드마크 추출
+       ├─> 랜드마크 기반 전신/상체 판별
+       └─> 신뢰도 계산
+
+4. 응답 생성
+   └─> JSONResponse
+       ├─> success: boolean
+       ├─> is_person: boolean
+       ├─> image_type: "full_body" | "upper_body" | "face" | "unknown"
+       ├─> confidence: float
+       └─> message: string
+```
+
+#### 주요 특징
+- **EXIF 처리**: 스마트폰 사진의 방향 자동 보정
+- **타입 감지**: 전신/상체/얼굴 사진 자동 판별
+- **신뢰도 제공**: 판별 결과의 신뢰도 점수 포함
+
+---
+
+### 4. POST /api/analyze-body (체형 분석)
+
+**프론트엔드 호출**: `analyzeBody()`  
+**라우터**: `body_analysis.py::analyze_body()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   └─> FormData 파싱
+       ├─> file: UploadFile
+       ├─> height: Optional[int] (Form)
+       └─> weight: Optional[int] (Form)
+
+2. 이미지 처리
+   ├─> 이미지 바이트 읽기
+   ├─> PIL Image로 변환 (RGB)
+   └─> EXIF orientation 자동 적용
+
+3. 포즈 랜드마크 추출
+   └─> body_analysis_service.py::analyze_body()
+       └─> pose_landmark_service.py::extract_landmarks()
+           └─> MediaPipe API 호출
+               └─> 33개 랜드마크 포인트 반환
+
+4. 이미지 분류
+   └─> image_classifier_service.py::classify_image()
+       └─> 전신/상체 이미지 분류
+
+5. 체형 지표 계산
+   └─> body_service.py::determine_body_features()
+       ├─> 키 추정 (랜드마크 기반)
+       ├─> 몸무게 추정
+       ├─> BMI 계산
+       └─> 체형 특징 분석
+
+6. Gemini AI 분석
+   ├─> body_service.py::analyze_body_with_gemini()
+   │   └─> Gemini API: 상세 체형 분석 프롬프트
+   │       └─> 체형 특징, 비율, 스타일 분석
+   │
+   └─> body_service.py::classify_body_line_with_gemini()
+       └─> Gemini API: 체형 라인 분류 프롬프트
+           └─> A라인, H라인, X라인 등 분류
+
+7. 결과 저장
+   └─> body_analysis_database.py::save_body_analysis_result()
+       └─> MySQL: INSERT INTO body_logs
+           ├─> 키, 몸무게, BMI
+           ├─> 체형 특징, 체형 라인
+           └─> 분석 결과 JSON
+
+8. 응답 생성
+   └─> JSONResponse
+       ├─> success: boolean
+       ├─> body_features: { height, weight, bmi, features }
+       ├─> body_line: string (A라인, H라인 등)
+       ├─> recommendations: [카테고리 목록]
+       └─> analysis: { gemini_analysis, body_line_classification }
+```
+
+#### 주요 특징
+- **정확한 포즈 추정**: MediaPipe 33개 랜드마크 포인트
+- **AI 기반 분석**: Gemini를 통한 상세 체형 분석
+- **드레스 추천**: 체형 라인에 맞는 카테고리 자동 추천
+
+---
+
+### 5. POST /api/apply-image-filters (이미지 필터 적용)
+
+**프론트엔드 호출**: `applyImageFilter()`  
+**라우터**: `image_processing.py::apply_image_filters()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   └─> FormData 파싱
+       ├─> file: UploadFile
+       └─> filter_preset: str (Form)
+
+2. 이미지 처리
+   ├─> 이미지 바이트 읽기
+   ├─> PIL Image로 변환 (RGB)
+   └─> NumPy 배열로 변환
+
+3. 필터 적용
+   └─> image_filter_service.py::apply_filter_preset()
+       ├─> filter_preset에 따른 필터 선택
+       │   ├─> "grayscale": 흑백 변환
+       │   ├─> "vintage": 빈티지 효과
+       │   ├─> "warm": 따뜻한 톤
+       │   ├─> "cool": 차가운 톤
+       │   └─> "high_contrast": 고대비
+       │
+       └─> OpenCV를 통한 이미지 필터링
+           ├─> 색상 공간 변환 (RGB → HSV/LAB)
+           ├─> 채널별 조정
+           └─> 색상 공간 변환 (HSV/LAB → RGB)
+
+4. Base64 인코딩
+   └─> PIL Image → Base64 문자열
+
+5. 응답 생성
+   └─> JSONResponse
+       ├─> success: boolean
+       ├─> result_image: string (base64)
+       ├─> filter_preset: string
+       └─> message: string
+```
+
+#### 주요 특징
+- **다양한 필터**: 5가지 필터 프리셋 제공
+- **OpenCV 기반**: 고성능 이미지 처리
+- **실시간 적용**: 결과 이미지에 즉시 필터 적용
+
+---
+
+### 6. GET /api/admin/dresses (드레스 목록 조회)
+
+**프론트엔드 호출**: `getDresses()`  
+**라우터**: `dress_management.py::get_dresses()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   └─> Query 파라미터
+       ├─> page: int (기본값: 1)
+       └─> limit: int (기본값: 20, 최대: 10000)
+
+2. 데이터베이스 조회
+   └─> MySQL 쿼리 실행
+       ├─> 전체 건수 조회
+       │   └─> SELECT COUNT(*) FROM dresses
+       │
+       └─> 페이징된 데이터 조회
+           └─> SELECT 
+               d.idx as id,
+               d.file_name as image_name,
+               d.style,
+               d.url,
+               COALESCE(COUNT(l.id), 0) as fitting_count
+               FROM dresses d
+               LEFT JOIN dress_fitting_logs l ON d.idx = l.dress_id
+               GROUP BY d.idx, d.file_name, d.style, d.url
+               ORDER BY d.idx DESC
+               LIMIT %s OFFSET %s
+
+3. 응답 생성
+   └─> JSONResponse
+       ├─> success: boolean
+       ├─> data: [드레스 목록]
+       │   └─> 각 드레스: { id, image_name, style, url, fitting_count }
+       ├─> pagination: { page, limit, total, total_pages }
+       └─> message: string
+```
+
+#### 주요 특징
+- **피팅 카운트 포함**: 각 드레스의 피팅 횟수 자동 계산
+- **페이징 지원**: 대량 데이터 처리 최적화
+- **정렬**: 드레스 ID 내림차순 (최신순)
+
+---
+
+### 7. POST /api/reviews (리뷰 제출)
+
+**프론트엔드 호출**: `submitReview()`  
+**라우터**: `review.py::create_review()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   └─> JSON Body 파싱
+       ├─> category: str ("general" | "custom" | "analysis")
+       ├─> rating: int (1-5)
+       └─> content: Optional[str]
+
+2. 유효성 검사
+   ├─> 카테고리 검증
+   └─> 별점 범위 검증
+
+3. 데이터베이스 저장
+   └─> MySQL: INSERT INTO reviews
+       ├─> rating
+       ├─> content (NULL 허용)
+       └─> category
+
+4. 응답 생성
+   └─> JSONResponse
+       ├─> success: boolean
+       ├─> review_id: int
+       └─> message: string
+```
+
+#### 주요 특징
+- **카테고리별 리뷰**: 기능별 리뷰 분리 저장
+- **선택적 내용**: 리뷰 내용은 선택사항
+
+---
+
+### 8. POST /visitor/visit (방문자 카운팅)
+
+**프론트엔드 호출**: `countVisitor()`  
+**라우터**: `visitor_router.py::increment_visitor()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   └─> 빈 Body (POST 요청만으로 카운팅)
+
+2. 날짜 계산
+   └─> 한국 시간대(KST) 기준 오늘 날짜 계산
+       └─> datetime.now(ZoneInfo("Asia/Seoul")).date()
+
+3. 데이터베이스 업데이트
+   └─> MySQL: UPSERT
+       └─> INSERT INTO daily_visitors (visit_date, count) 
+           VALUES (%s, 1)
+           ON DUPLICATE KEY UPDATE count = count + 1
+
+4. 응답 생성
+   └─> JSONResponse
+       ├─> date: string (YYYY-MM-DD)
+       └─> count: int (오늘 방문자 수)
+```
+
+#### 주요 특징
+- **일별 카운팅**: 날짜별 방문자 수 집계
+- **UPSERT**: 중복 방문 시 카운트 증가
+- **한국 시간 기준**: KST(UTC+9) 기준 날짜 계산
+
+---
+
+### 9. POST /api/dress/check (드레스 검증)
+
+**프론트엔드 호출**: `checkDress()`  
+**라우터**: `dress_management.py::check_single_dress()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   └─> FormData 파싱
+       ├─> file: UploadFile
+       ├─> model: str (Form, "gpt-4o-mini" | "gpt-4o")
+       └─> mode: str (Form, "fast" | "accurate")
+
+2. 이미지 검증
+   ├─> 파일 크기 검증 (5MB 제한)
+   ├─> 이미지 형식 검증
+   └─> PIL Image로 변환
+
+3. 이미지 해시 생성
+   └─> MD5 해시 계산 (중복 검사용)
+
+4. 드레스 판별
+   └─> dress_check_service.py::check_dress()
+       ├─> OpenAI GPT-4o API 호출
+       │   ├─> Vision API를 통한 이미지 분석
+       │   └─> 드레스 여부 판별 프롬프트
+       │
+       └─> 응답 파싱
+           ├─> dress: boolean
+           ├─> confidence: float
+           └─> category: string
+
+5. 로그 저장 (선택)
+   └─> MySQL: INSERT INTO dress_check_logs
+       ├─> image_hash
+       ├─> dress (boolean)
+       ├─> confidence
+       └─> model, mode
+
+6. 응답 생성
+   └─> JSONResponse
+       ├─> success: boolean
+       ├─> result: { dress, confidence, category }
+       └─> message: string
+```
+
+#### 주요 특징
+- **AI 기반 판별**: GPT-4o Vision API 사용
+- **모드 선택**: fast/accurate 모드 지원
+- **중복 검사**: 이미지 해시 기반 중복 방지
+
+---
+
+### 10. GET /api/proxy-image (이미지 프록시)
+
+**프론트엔드 호출**: `urlToFile()` 내부 사용  
+**라우터**: `proxy.py::proxy_image_by_url()`
+
+#### 백엔드 처리 파이프라인
+
+```
+1. 요청 수신
+   └─> Query 파라미터
+       └─> url: str (S3 이미지 URL)
+
+2. URL 파싱
+   └─> urlparse(url)
+       └─> 경로에서 파일명 추출
+
+3. S3 이미지 다운로드
+   └─> s3_client.py::get_s3_image()
+       ├─> AWS S3 클라이언트 생성
+       ├─> S3 버킷에서 이미지 다운로드
+       └─> 이미지 바이트 반환
+
+4. 응답 생성
+   └─> Response
+       ├─> content: bytes (이미지 데이터)
+       └─> media_type: "image/png"
+```
+
+#### 주요 특징
+- **CORS 해결**: S3 직접 접근 시 CORS 문제 해결
+- **프록시 역할**: 백엔드를 통한 이미지 전달
+- **캐싱 가능**: 백엔드에서 캐싱 정책 적용 가능
+
+---
+
 ## 📖 개발 가이드
 
 ### 프로젝트 구조 이해
