@@ -2121,80 +2121,72 @@ function renderProfileDetailModal(log) {
     const serverTotalMs = log.server_total_ms;
     const isCustomFitting = category === '커스텀 피팅';
     
-    // 피팅 타입에 따라 표시할 항목만 수집
-    const durations = [];
+    // 서버 시간 수집 (서버에서 측정된 시간만)
+    const serverDurations = [];
     
+    // 리사이징
+    const resizeMs = log.resize_ms || 0;
+    if (resizeMs > 0) {
+        serverDurations.push({
+            name: '리사이징',
+            value: resizeMs
+        });
+    }
+    
+    // Gemini 호출
+    const geminiCallMs = log.gemini_call_ms || 0;
+    if (geminiCallMs > 0) {
+        serverDurations.push({
+            name: 'Gemini 호출',
+            value: geminiCallMs
+        });
+    }
+    
+    // 커스텀 피팅만: 누끼 처리
     if (isCustomFitting) {
-        // 커스텀 피팅: 5개 항목만 표시
-        // 1. 인물 업로드 & 예외처리
-        const personUploadMs = frontProfile.person_upload_ms || 0;
-        const personValidateMs = frontProfile.person_validate_ms || 0;
-        const personTotalMs = personUploadMs + personValidateMs;
-        durations.push({
+        const cutoutMs = log.cutout_ms || 0;
+        if (cutoutMs > 0) {
+            serverDurations.push({
+                name: '누끼 처리',
+                value: cutoutMs
+            });
+        }
+    }
+    
+    // 프론트엔드 시간 수집 (프론트엔드에서 측정된 시간만)
+    const frontendDurations = [];
+    
+    // 인물 업로드 & 예외처리
+    const personUploadMs = frontProfile.person_upload_ms || 0;
+    const personValidateMs = frontProfile.person_validate_ms || 0;
+    const personTotalMs = personUploadMs + personValidateMs;
+    if (personTotalMs > 0) {
+        frontendDurations.push({
             name: '인물 업로드 & 예외처리',
             value: personTotalMs
         });
-        
-        // 2. 드레스 업로드 & 예외처리
+    }
+    
+    if (isCustomFitting) {
+        // 커스텀 피팅: 드레스 업로드 & 예외처리
         const dressUploadMs = frontProfile.dress_upload_ms || 0;
         const dressValidateMs = frontProfile.dress_validate_ms || 0;
         const dressTotalMs = dressUploadMs + dressValidateMs;
-        durations.push({
-            name: '드레스 업로드 & 예외처리',
-            value: dressTotalMs
-        });
-        
-        // 3. 누끼 처리
-        const cutoutMs = log.cutout_ms || 0;
-        durations.push({
-            name: '누끼 처리',
-            value: cutoutMs
-        });
-        
-        // 4. 리사이징
-        const resizeMs = log.resize_ms || 0;
-        durations.push({
-            name: '리사이징',
-            value: resizeMs
-        });
-        
-        // 5. Gemini 호출
-        const geminiCallMs = log.gemini_call_ms || 0;
-        durations.push({
-            name: 'Gemini 호출',
-            value: geminiCallMs
-        });
+        if (dressTotalMs > 0) {
+            frontendDurations.push({
+                name: '드레스 업로드 & 예외처리',
+                value: dressTotalMs
+            });
+        }
     } else {
-        // 일반 피팅: 4개 항목만 표시
-        // 1. Gemini 호출
-        const geminiCallMs = log.gemini_call_ms || 0;
-        durations.push({
-            name: 'Gemini 호출',
-            value: geminiCallMs
-        });
-        
-        // 2. 인물 업로드 & 예외처리
-        const personUploadMs = frontProfile.person_upload_ms || 0;
-        const personValidateMs = frontProfile.person_validate_ms || 0;
-        const personTotalMs = personUploadMs + personValidateMs;
-        durations.push({
-            name: '인물 업로드 & 예외처리',
-            value: personTotalMs
-        });
-        
-        // 3. 드레스 드롭
+        // 일반 피팅: 드레스 드롭
         const dressDropMs = frontProfile.dress_drop_ms || 0;
-        durations.push({
-            name: '드레스 드롭',
-            value: dressDropMs
-        });
-        
-        // 4. 리사이징
-        const resizeMs = log.resize_ms || 0;
-        durations.push({
-            name: '리사이징',
-            value: resizeMs
-        });
+        if (dressDropMs > 0) {
+            frontendDurations.push({
+                name: '드레스 드롭',
+                value: dressDropMs
+            });
+        }
     }
     
     // 기본 정보
@@ -2213,14 +2205,11 @@ function renderProfileDetailModal(log) {
         </div>
     `;
     
-    // 시간 분포 상세 표시 (표시하는 항목들만)
-    if (durations.length > 0) {
-        // 표시하는 항목들의 합계 계산
-        const totalDisplayedMs = durations.reduce((sum, item) => sum + item.value, 0);
-        
-        // 퍼센트 계산 및 정렬 (표시 항목 합계 기준)
-        const durationsWithPercent = durations.map(item => {
-            const percent = totalDisplayedMs > 0 ? (item.value / totalDisplayedMs) * 100 : 0;
+    // 서버 시간 분포 상세 표시 (서버 총 시간 기준 퍼센트)
+    if (serverTotalMs && typeof serverTotalMs === 'number' && serverTotalMs > 0 && serverDurations.length > 0) {
+        // 퍼센트 계산 및 정렬 (서버 총 시간 기준)
+        const serverDurationsWithPercent = serverDurations.map(item => {
+            const percent = (item.value / serverTotalMs) * 100;
             return {
                 ...item,
                 percent: percent
@@ -2228,33 +2217,64 @@ function renderProfileDetailModal(log) {
         });
         
         // 퍼센트 내림차순 정렬
-        durationsWithPercent.sort((a, b) => b.percent - a.percent);
+        serverDurationsWithPercent.sort((a, b) => b.percent - a.percent);
         
-        // 시간 분포 상세 HTML 생성
-        let timeDetailHtml = '<div style="margin-top: 10px;">';
+        // 서버 시간 분포 상세 HTML 생성
+        let serverTimeDetailHtml = '<div style="margin-top: 10px;">';
         
-        durationsWithPercent.forEach(item => {
+        serverDurationsWithPercent.forEach(item => {
             const percent = item.percent.toFixed(2);
             const displayValue = (item.value / 1000).toFixed(2);
-            timeDetailHtml += `
+            serverTimeDetailHtml += `
                 <div style="margin-bottom: 8px;">
                     <strong>${item.name}:</strong> ${percent}% (${displayValue} s)
                 </div>
             `;
         });
         
-        timeDetailHtml += '</div>';
+        serverTimeDetailHtml += '</div>';
         
         detailItems += `
         <div class="detail-item" style="grid-column: 1 / -1;">
-            <div class="detail-label">시간 분포 상세</div>
-            <div class="detail-value">${timeDetailHtml}</div>
+            <div class="detail-label">서버 시간 분포 상세</div>
+            <div class="detail-value">${serverTimeDetailHtml}</div>
         </div>
         `;
     } else {
         detailItems += `
         <div class="detail-item">
-            <div class="detail-label">시간 분포 상세</div>
+            <div class="detail-label">서버 시간 분포 상세</div>
+            <div class="detail-value">데이터 없음</div>
+        </div>
+        `;
+    }
+    
+    // 프론트엔드 시간 분포 표시 (퍼센트 없이 시간만)
+    if (frontendDurations.length > 0) {
+        // 프론트엔드 시간 분포 HTML 생성
+        let frontendTimeDetailHtml = '<div style="margin-top: 10px;">';
+        
+        frontendDurations.forEach(item => {
+            const displayValue = (item.value / 1000).toFixed(2);
+            frontendTimeDetailHtml += `
+                <div style="margin-bottom: 8px;">
+                    <strong>${item.name}:</strong> ${displayValue} s
+                </div>
+            `;
+        });
+        
+        frontendTimeDetailHtml += '</div>';
+        
+        detailItems += `
+        <div class="detail-item" style="grid-column: 1 / -1;">
+            <div class="detail-label">프론트엔드 시간 분포</div>
+            <div class="detail-value">${frontendTimeDetailHtml}</div>
+        </div>
+        `;
+    } else {
+        detailItems += `
+        <div class="detail-item">
+            <div class="detail-label">프론트엔드 시간 분포</div>
             <div class="detail-value">데이터 없음</div>
         </div>
         `;

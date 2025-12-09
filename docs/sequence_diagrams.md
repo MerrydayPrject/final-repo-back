@@ -61,45 +61,63 @@ sequenceDiagram
     Frontend->>API: autoMatchImageV5V5(person, dress, background, traceId, profile)
     Note over Frontend,API: profile에 타이밍 정보 포함<br/>(bg_select_ms, person_upload_ms,<br/>person_validate_ms, dress_drop_ms)
     
-    API->>Backend: POST /tryon/compare<br/>(FormData: person_image, garment_image,<br/>background_image, profile_front,<br/>Headers: X-Trace-Id)
-    Backend->>Backend: traceId 추출<br/>server_start_time 기록
-    Backend->>Backend: front_profile_json 파싱
+    API->>Backend: POST /tryon/compare<br/>(FormData: person_image, garment_image,<br/>background_image, profile_front,<br/>dress_id (선택사항),<br/>Headers: X-Trace-Id)
+    Backend->>Backend: traceId 추출 또는 생성<br/>server_start_time 기록
+    Backend->>Backend: front_profile_json 파싱<br/>dress_id 추출 (Form 파라미터)
     
-    Backend->>TryonService: run_v4v5_compare(person, garment, background, enable_logging=True)
+    alt 입력 검증 실패
+        Backend->>Backend: server_total_ms 계산
+        Backend->>ProfileService: save_tryon_profile(<br/>  status="fail",<br/>  error_stage="input_validation"<br/>)
+        Backend-->>API: 400 에러 응답
+        API-->>Frontend: 에러 메시지
+    else 입력 검증 성공
+        Backend->>TryonService: run_v4v5_compare(person, garment, background, enable_logging=True)
     TryonService->>TryonService: V5 파이프라인 병렬 실행 (2회)
     
     par V5-1 실행
-        TryonService->>Gemini: 프롬프트 생성 요청
-        Gemini-->>TryonService: 프롬프트 반환
-        TryonService->>Gemini: 이미지 합성 요청
+        TryonService->>TryonService: load_v5_unified_prompt()<br/>(prompts/v5/prompt_unified.txt<br/>에서 정적 프롬프트 로드)
+        TryonService->>Gemini: 이미지 합성 요청<br/>(person_img, garment_img, background_img,<br/>정적 프롬프트 포함,<br/>temperature=0.0, safety_settings=BLOCK_NONE)
         Gemini-->>TryonService: 합성 이미지 (base64)<br/>gemini_call_ms 포함
     and V5-2 실행
-        TryonService->>Gemini: 프롬프트 생성 요청
-        Gemini-->>TryonService: 프롬프트 반환
-        TryonService->>Gemini: 이미지 합성 요청
+        TryonService->>TryonService: load_v5_unified_prompt()<br/>(prompts/v5/prompt_unified.txt<br/>에서 정적 프롬프트 로드)
+        TryonService->>Gemini: 이미지 합성 요청<br/>(person_img, garment_img, background_img,<br/>정적 프롬프트 포함,<br/>temperature=0.0, safety_settings=BLOCK_NONE)
         Gemini-->>TryonService: 합성 이미지 (base64)<br/>gemini_call_ms 포함
     end
     
     TryonService->>TryonService: resize_ms, gemini_call_ms 수집
     TryonService-->>Backend: {v4_result: {...}, v5_result: {...},<br/>gemini_call_ms, resize_ms}
     
-    Backend->>Backend: server_total_ms 계산<br/>(time.time() - server_start_time)
-    Backend->>Backend: dress_id 추출 (드레스 URL에서)
+    Backend->>Backend: server_total_ms 계산<br/>(time.time() - server_start_time) * 1000
+    Backend->>Backend: status 판단<br/>(result.success 여부)
     
-    opt dress_id가 있는 경우
-        Backend->>DressLogService: log_dress_fitting(dress_id)
-        DressLogService->>DB: INSERT INTO dress_fitting_logs<br/>(dress_id)
-        DB-->>DressLogService: 저장 완료
-        DressLogService-->>Backend: 성공
+    opt v5_result가 성공한 경우
+        Backend->>Backend: increment_synthesis_count()<br/>(날짜별 합성 카운트 증가)
+        Backend->>DB: INSERT INTO daily_synthesis_count<br/>(synthesis_date, count)<br/>VALUES (오늘날짜, 1)<br/>ON DUPLICATE KEY UPDATE count = count + 1
+        DB-->>Backend: 카운트 증가 완료
+        
+        opt dress_id가 있는 경우
+            Backend->>DressLogService: log_dress_fitting(dress_id)
+            DressLogService->>DB: INSERT INTO dress_fitting_logs<br/>(dress_id)
+            DB-->>DressLogService: 저장 완료
+            DressLogService-->>Backend: 성공
+        end
     end
     
-    Backend->>ProfileService: save_tryon_profile(<br/>  trace_id,<br/>  endpoint="/tryon/compare",<br/>  front_profile_json,<br/>  server_total_ms,<br/>  resize_ms,<br/>  gemini_call_ms,<br/>  status="success"<br/>)
-    ProfileService->>DB: INSERT INTO tryon_profile_summary<br/>(trace_id, endpoint, front_profile_json,<br/>server_total_ms, resize_ms, gemini_call_ms, status)<br/>ON DUPLICATE KEY UPDATE
+    Backend->>ProfileService: save_tryon_profile(<br/>  trace_id,<br/>  endpoint="/tryon/compare",<br/>  front_profile_json,<br/>  server_total_ms,<br/>  resize_ms,<br/>  gemini_call_ms,<br/>  cutout_ms=None,<br/>  status,<br/>  error_stage<br/>)
+    ProfileService->>ProfileService: ensure_table_exists()<br/>(테이블 자동 생성)
+    ProfileService->>DB: INSERT INTO tryon_profile_summary<br/>(trace_id, endpoint, front_profile_json,<br/>server_total_ms, resize_ms, gemini_call_ms,<br/>cutout_ms, status, error_stage)<br/>ON DUPLICATE KEY UPDATE
     DB-->>ProfileService: 저장 완료
     ProfileService-->>Backend: 성공
     
-    Backend-->>API: V4V5CompareResponse<br/>(Headers: X-Trace-Id)
-    API-->>Frontend: 결과 이미지 (v4_result, v5_result)
+    alt 예외 발생
+        Backend->>Backend: server_total_ms 계산
+        Backend->>ProfileService: save_tryon_profile(<br/>  status="fail",<br/>  error_stage="exception"<br/>)
+        Backend-->>API: 500 에러 응답
+        API-->>Frontend: 에러 메시지
+    else 정상 처리
+        Backend-->>API: V4V5CompareResponse<br/>(Headers: X-Trace-Id)
+        API-->>Frontend: 결과 이미지 (v4_result, v5_result)
+    end
     
     Frontend->>Frontend: result_image_load_start = Date.now()
     Frontend->>Frontend: 이미지 선택 모달 표시<br/>(2개 이미지가 있는 경우)
@@ -200,10 +218,16 @@ sequenceDiagram
     Note over Frontend,API: profile에 타이밍 정보 포함<br/>(bg_select_ms, person_upload_ms,<br/>person_validate_ms, dress_upload_ms,<br/>dress_validate_ms)
     
     API->>Backend: POST /tryon/compare/custom<br/>(FormData: person_image, garment_image,<br/>background_image, profile_front,<br/>Headers: X-Trace-Id)
-    Backend->>Backend: traceId 추출<br/>server_start_time 기록
+    Backend->>Backend: traceId 추출 또는 생성<br/>server_start_time 기록
     Backend->>Backend: front_profile_json 파싱
     
-    Backend->>CustomTryonService: run_v4v5_custom_compare(person, garment, background, enable_logging=True)
+    alt 입력 검증 실패
+        Backend->>Backend: server_total_ms 계산
+        Backend->>ProfileService: save_tryon_profile(<br/>  status="fail",<br/>  error_stage="input_validation"<br/>)
+        Backend-->>API: 400 에러 응답
+        API-->>Frontend: 에러 메시지
+    else 입력 검증 성공
+        Backend->>CustomTryonService: run_v4v5_custom_compare(person, garment, background, enable_logging=True)
     CustomTryonService->>CustomTryonService: 의상 이미지 S3 업로드<br/>(로깅용)
     CustomTryonService->>S3: upload_log_to_s3(garment_image, "custom-fitting", "garment")
     S3-->>CustomTryonService: garment_s3_url
@@ -213,16 +237,14 @@ sequenceDiagram
     par CustomV5-1 실행
         CustomTryonService->>SegformerService: 의상 누끼 처리 (배경 제거)
         SegformerService-->>CustomTryonService: 누끼 처리된 의상 이미지<br/>cutout_ms 포함
-        CustomTryonService->>Gemini: 프롬프트 생성 요청
-        Gemini-->>CustomTryonService: 프롬프트 반환
-        CustomTryonService->>Gemini: 이미지 합성 요청
+        CustomTryonService->>CustomTryonService: load_v5_unified_prompt()<br/>(prompts/v5/prompt_unified.txt<br/>에서 정적 프롬프트 로드)
+        CustomTryonService->>Gemini: 이미지 합성 요청<br/>(person_img, garment_nukki_img,<br/>background_img, 정적 프롬프트 포함,<br/>temperature=0.0, safety_settings=BLOCK_NONE)
         Gemini-->>CustomTryonService: 합성 이미지 (base64)<br/>gemini_call_ms 포함
     and CustomV5-2 실행
         CustomTryonService->>SegformerService: 의상 누끼 처리 (배경 제거)
         SegformerService-->>CustomTryonService: 누끼 처리된 의상 이미지<br/>cutout_ms 포함
-        CustomTryonService->>Gemini: 프롬프트 생성 요청
-        Gemini-->>CustomTryonService: 프롬프트 반환
-        CustomTryonService->>Gemini: 이미지 합성 요청
+        CustomTryonService->>CustomTryonService: load_v5_unified_prompt()<br/>(prompts/v5/prompt_unified.txt<br/>에서 정적 프롬프트 로드)
+        CustomTryonService->>Gemini: 이미지 합성 요청<br/>(person_img, garment_nukki_img,<br/>background_img, 정적 프롬프트 포함,<br/>temperature=0.0, safety_settings=BLOCK_NONE)
         Gemini-->>CustomTryonService: 합성 이미지 (base64)<br/>gemini_call_ms 포함
     end
     
@@ -237,15 +259,30 @@ sequenceDiagram
     
     CustomTryonService-->>Backend: {v4_result: {...}, v5_result: {...},<br/>cutout_ms, gemini_call_ms, resize_ms}
     
-    Backend->>Backend: server_total_ms 계산<br/>(time.time() - server_start_time)
+    Backend->>Backend: server_total_ms 계산<br/>(time.time() - server_start_time) * 1000
+    Backend->>Backend: cutout_ms, gemini_call_ms, resize_ms 추출<br/>status 판단
     
-    Backend->>ProfileService: save_tryon_profile(<br/>  trace_id,<br/>  endpoint="/tryon/compare/custom",<br/>  front_profile_json,<br/>  server_total_ms,<br/>  resize_ms,<br/>  gemini_call_ms,<br/>  cutout_ms,<br/>  status="success"<br/>)
-    ProfileService->>DB: INSERT INTO tryon_profile_summary<br/>(trace_id, endpoint, front_profile_json,<br/>server_total_ms, resize_ms, gemini_call_ms,<br/>cutout_ms, status)<br/>ON DUPLICATE KEY UPDATE
+    opt v5_result가 성공한 경우
+        Backend->>Backend: increment_synthesis_count()<br/>(날짜별 합성 카운트 증가)
+        Backend->>DB: INSERT INTO daily_synthesis_count<br/>(synthesis_date, count)<br/>VALUES (오늘날짜, 1)<br/>ON DUPLICATE KEY UPDATE count = count + 1
+        DB-->>Backend: 카운트 증가 완료
+    end
+    
+    Backend->>ProfileService: save_tryon_profile(<br/>  trace_id,<br/>  endpoint="/tryon/compare/custom",<br/>  front_profile_json,<br/>  server_total_ms,<br/>  resize_ms,<br/>  gemini_call_ms,<br/>  cutout_ms,<br/>  status,<br/>  error_stage<br/>)
+    ProfileService->>ProfileService: ensure_table_exists()<br/>(테이블 자동 생성)
+    ProfileService->>DB: INSERT INTO tryon_profile_summary<br/>(trace_id, endpoint, front_profile_json,<br/>server_total_ms, resize_ms, gemini_call_ms,<br/>cutout_ms, status, error_stage)<br/>ON DUPLICATE KEY UPDATE
     DB-->>ProfileService: 저장 완료
     ProfileService-->>Backend: 성공
     
-    Backend-->>API: V4V5CustomCompareResponse<br/>(Headers: X-Trace-Id)
-    API-->>Frontend: 결과 이미지 (v4_result, v5_result)
+    alt 예외 발생
+        Backend->>Backend: server_total_ms 계산
+        Backend->>ProfileService: save_tryon_profile(<br/>  status="fail",<br/>  error_stage="exception"<br/>)
+        Backend-->>API: 500 에러 응답
+        API-->>Frontend: 에러 메시지
+    else 정상 처리
+        Backend-->>API: V4V5CustomCompareResponse<br/>(Headers: X-Trace-Id)
+        API-->>Frontend: 결과 이미지 (v4_result, v5_result)
+    end
     Frontend->>Frontend: compose_click_to_response_ms 측정 완료
     
     Frontend->>Frontend: result_image_load_start = Date.now()
@@ -700,10 +737,10 @@ sequenceDiagram
     Backend->>Backend: 트라이온 처리 실행<br/>(run_v4v5_compare)
     Backend->>Backend: 서버 처리 완료 시간 기록<br/>server_total_ms = (time.time() - server_start_time) * 1000<br/>gemini_call_ms, resize_ms 수집
     
-    Backend->>ProfileService: save_tryon_profile(<br/>  trace_id,<br/>  endpoint="/tryon/compare",<br/>  front_profile_json,<br/>  server_total_ms,<br/>  resize_ms,<br/>  gemini_call_ms,<br/>  cutout_ms=None,<br/>  status="success"<br/>)
+    Backend->>ProfileService: save_tryon_profile(<br/>  trace_id,<br/>  endpoint="/tryon/compare",<br/>  front_profile_json,<br/>  server_total_ms,<br/>  resize_ms,<br/>  gemini_call_ms,<br/>  cutout_ms=None,<br/>  status,<br/>  error_stage<br/>)
     
     ProfileService->>ProfileService: ensure_table_exists()<br/>(테이블 자동 생성)
-    ProfileService->>DB: INSERT INTO tryon_profile_summary<br/>(trace_id, endpoint, front_profile_json,<br/>server_total_ms, resize_ms, gemini_call_ms,<br/>cutout_ms, status)<br/>ON DUPLICATE KEY UPDATE
+    ProfileService->>DB: INSERT INTO tryon_profile_summary<br/>(trace_id, endpoint, front_profile_json,<br/>server_total_ms, resize_ms, gemini_call_ms,<br/>cutout_ms, status, error_stage)<br/>ON DUPLICATE KEY UPDATE
     DB-->>ProfileService: 저장 완료
     ProfileService-->>Backend: 성공
     
@@ -753,21 +790,28 @@ sequenceDiagram
     Frontend->>API: autoMatchImageV5V5(..., traceId, profile)
     API->>Router: POST /tryon/compare<br/>(Headers: X-Trace-Id, FormData: profile_front)
     
-    Router->>Router: traceId 추출<br/>server_start_time 기록
+    Router->>Router: traceId 추출 또는 생성<br/>server_start_time 기록<br/>dress_id 추출 (Form 파라미터)
     Router->>TryonService: run_v4v5_compare(..., enable_logging=True)
-    TryonService->>External: Gemini API 호출 (병렬 2회)
+    TryonService->>TryonService: load_v5_unified_prompt()<br/>(정적 프롬프트 로드)
+    TryonService->>External: Gemini API 호출 (병렬 2회)<br/>(이미지 + 정적 프롬프트 전달)
     External-->>TryonService: 합성 이미지<br/>(gemini_call_ms, resize_ms 포함)
     TryonService-->>Router: {v4_result, v5_result, gemini_call_ms, resize_ms}
     
-    Router->>Router: server_total_ms 계산<br/>dress_id 추출
+    Router->>Router: server_total_ms 계산<br/>status 판단
     
-    opt dress_id 존재
-        Router->>DressLogService: log_dress_fitting(dress_id)
-        DressLogService->>External: INSERT INTO dress_fitting_logs
-        External-->>DressLogService: 저장 완료
+    opt v5_result 성공
+        Router->>External: increment_synthesis_count()<br/>(날짜별 합성 카운트 증가)
+        External->>External: INSERT INTO daily_synthesis_count<br/>(synthesis_date, count)<br/>VALUES (오늘날짜, 1)<br/>ON DUPLICATE KEY UPDATE count = count + 1
+        External-->>Router: 카운트 증가 완료
+        
+        opt dress_id 존재
+            Router->>DressLogService: log_dress_fitting(dress_id)
+            DressLogService->>External: INSERT INTO dress_fitting_logs
+            External-->>DressLogService: 저장 완료
+        end
     end
     
-    Router->>ProfileService: save_tryon_profile(<br/>  trace_id, endpoint, front_profile_json,<br/>  server_total_ms, resize_ms,<br/>  gemini_call_ms, status)
+    Router->>ProfileService: save_tryon_profile(<br/>  trace_id, endpoint, front_profile_json,<br/>  server_total_ms, resize_ms,<br/>  gemini_call_ms, cutout_ms=None,<br/>  status, error_stage)
     ProfileService->>External: INSERT INTO tryon_profile_summary<br/>ON DUPLICATE KEY UPDATE
     External-->>ProfileService: 저장 완료
     ProfileService-->>Router: 성공
