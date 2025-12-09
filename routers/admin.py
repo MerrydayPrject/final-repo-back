@@ -1005,6 +1005,7 @@ async def get_tryon_profile_logs(
                         'endpoint': log.get('endpoint'),
                         'front_profile': front_profile,
                         'server_total_ms': log.get('server_total_ms'),
+                        'resize_ms': log.get('resize_ms'),
                         'gemini_call_ms': log.get('gemini_call_ms'),
                         'cutout_ms': log.get('cutout_ms'),
                         'status': log.get('status'),

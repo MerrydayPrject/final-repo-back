@@ -1765,19 +1765,15 @@ async function loadProfileLogs(page = 1, endpoint = null) {
             updateLogsCount(data.pagination.total);
         } else {
             const tbody = document.getElementById('profile-logs-tbody');
-            const isCustom = currentProfileEndpoint === '/tryon/compare/custom';
-            const colspan = isCustom ? 9 : 7;
             if (tbody) {
-                tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">${data.message || '로그를 불러오는 중 오류가 발생했습니다.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="10" class="loading">${data.message || '로그를 불러오는 중 오류가 발생했습니다.'}</td></tr>`;
             }
         }
     } catch (error) {
         console.error('프로파일링 로그 로드 오류:', error);
         const tbody = document.getElementById('profile-logs-tbody');
-        const isCustom = currentProfileEndpoint === '/tryon/compare/custom';
-        const colspan = isCustom ? 9 : 7;
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" class="loading">로그를 불러오는 중 오류가 발생했습니다.</td></tr>`;
         }
     }
 }
@@ -1787,20 +1783,25 @@ function updateProfileLogsTableHeader(endpoint) {
     const thead = document.getElementById('profile-logs-thead');
     if (!thead) return;
     
-    // 요약 형식으로 통일: ID, 카테고리, 생성일시, 서버 총 시간, 시간 분포 요약, 상세보기
+    // 새로운 컬럼 구조: ID, 카테고리, 생성일시, 인물사진 업로드&예외처리, 드레스 드롭, 리사이징, Gemini 호출, 드레스 업로드 & 예외처리, 누끼 처리, 상세보기
     thead.innerHTML = `
         <tr>
             <th>ID</th>
             <th>카테고리</th>
             <th>생성일시</th>
-            <th>서버 총 시간 (ms)</th>
-            <th>시간 분포 요약</th>
+            <th>인물사진 업로드&예외처리</th>
+            <th>드레스 드롭</th>
+            <th>리사이징</th>
+            <th>Gemini 호출</th>
+            <th>드레스 업로드 & 예외처리</th>
+            <th>누끼 처리</th>
             <th>상세보기</th>
         </tr>
     `;
 }
 
-// 프로파일링 로그에서 duration_ms 데이터 수집 및 요약 계산
+// 프로파일링 로그에서 duration_ms 데이터 수집 및 요약 계산 (더 이상 사용하지 않음 - 주석 처리)
+/*
 function calculateProfileSummary(log, endpoint) {
     const frontProfile = log.front_profile || {};
     const serverTotalMs = log.server_total_ms;
@@ -1897,6 +1898,7 @@ function calculateProfileSummary(log, endpoint) {
     
     return summaryParts.join(', ');
 }
+*/
 
 // duration_ms 키를 한글 이름으로 변환
 function getDurationName(key) {
@@ -1917,13 +1919,21 @@ function getDurationName(key) {
     return nameMap[key] || key;
 }
 
+// ms를 초 단위로 포맷팅하는 헬퍼 함수
+function formatMsToSeconds(ms) {
+    if (ms === null || ms === undefined || typeof ms !== 'number' || ms <= 0) {
+        return '-';
+    }
+    return (ms / 1000).toFixed(2) + 's';
+}
+
 // 프로파일링 로그 렌더링
 function renderProfileLogs(logs) {
     const tbody = document.getElementById('profile-logs-tbody');
     if (!tbody) return;
     
     if (logs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="loading">로그가 없습니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="loading">로그가 없습니다.</td></tr>`;
         return;
     }
     
@@ -1933,20 +1943,49 @@ function renderProfileLogs(logs) {
         const category = endpoint === '/tryon/compare' ? '일반 피팅' : endpoint === '/tryon/compare/custom' ? '커스텀 피팅' : endpoint;
         // 한국시간으로 변환
         const createdAt = log.created_at ? formatDateTime(log.created_at) : '-';
-        // 서버 총 시간을 초 단위로 변환
-        const serverTotalS = log.server_total_ms !== null && log.server_total_ms !== undefined ? 
-            (typeof log.server_total_ms === 'number' ? (log.server_total_ms / 1000).toFixed(2) + ' s' : log.server_total_ms) : '-';
         
-        // 시간 분포 요약 계산
-        const timeSummary = calculateProfileSummary(log, endpoint);
+        // front_profile 데이터 추출
+        const frontProfile = log.front_profile || {};
+        
+        // 인물사진 업로드&예외처리 (person_upload_ms + person_validate_ms)
+        const personUploadMs = frontProfile.person_upload_ms || 0;
+        const personValidateMs = frontProfile.person_validate_ms || 0;
+        const personTotalMs = personUploadMs + personValidateMs;
+        const personTotal = formatMsToSeconds(personTotalMs);
+        
+        // 드레스 드롭
+        const dressDropMs = frontProfile.dress_drop_ms;
+        const dressDrop = formatMsToSeconds(dressDropMs);
+        
+        // 리사이징
+        const resizeMs = log.resize_ms;
+        const resize = formatMsToSeconds(resizeMs);
+        
+        // Gemini 호출
+        const geminiCallMs = log.gemini_call_ms;
+        const geminiCall = formatMsToSeconds(geminiCallMs);
+        
+        // 드레스 업로드 & 예외처리 (dress_upload_ms + dress_validate_ms)
+        const dressUploadMs = frontProfile.dress_upload_ms || 0;
+        const dressValidateMs = frontProfile.dress_validate_ms || 0;
+        const dressTotalMs = dressUploadMs + dressValidateMs;
+        const dressTotal = formatMsToSeconds(dressTotalMs);
+        
+        // 누끼 처리
+        const cutoutMs = log.cutout_ms;
+        const cutout = formatMsToSeconds(cutoutMs);
         
         return `
             <tr>
                 <td>${id}</td>
                 <td>${category}</td>
                 <td>${createdAt}</td>
-                <td>${serverTotalS}</td>
-                <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(timeSummary)}">${escapeHtml(timeSummary)}</td>
+                <td>${personTotal}</td>
+                <td>${dressDrop}</td>
+                <td>${resize}</td>
+                <td>${geminiCall}</td>
+                <td>${dressTotal}</td>
+                <td>${cutout}</td>
                 <td>
                     <button class="btn-detail-emoji" onclick="showProfileDetail(${id})" title="상세보기">
                         📋
@@ -2082,67 +2121,80 @@ function renderProfileDetailModal(log) {
     const serverTotalMs = log.server_total_ms;
     const isCustomFitting = category === '커스텀 피팅';
     
-    // 모든 duration_ms 데이터 수집 (커스텀 피팅의 경우 모든 항목 포함)
+    // 피팅 타입에 따라 표시할 항목만 수집
     const durations = [];
     
-    // 백엔드 프로파일링 데이터 (리사이징) - 항상 포함
-    if (log.resize_ms !== null && log.resize_ms !== undefined && typeof log.resize_ms === 'number') {
+    if (isCustomFitting) {
+        // 커스텀 피팅: 5개 항목만 표시
+        // 1. 인물 업로드 & 예외처리
+        const personUploadMs = frontProfile.person_upload_ms || 0;
+        const personValidateMs = frontProfile.person_validate_ms || 0;
+        const personTotalMs = personUploadMs + personValidateMs;
+        durations.push({
+            name: '인물 업로드 & 예외처리',
+            value: personTotalMs
+        });
+        
+        // 2. 드레스 업로드 & 예외처리
+        const dressUploadMs = frontProfile.dress_upload_ms || 0;
+        const dressValidateMs = frontProfile.dress_validate_ms || 0;
+        const dressTotalMs = dressUploadMs + dressValidateMs;
+        durations.push({
+            name: '드레스 업로드 & 예외처리',
+            value: dressTotalMs
+        });
+        
+        // 3. 누끼 처리
+        const cutoutMs = log.cutout_ms || 0;
+        durations.push({
+            name: '누끼 처리',
+            value: cutoutMs
+        });
+        
+        // 4. 리사이징
+        const resizeMs = log.resize_ms || 0;
         durations.push({
             name: '리사이징',
-            value: log.resize_ms || 0
+            value: resizeMs
         });
-    }
-    
-    // 프론트엔드 프로파일링 데이터 - 공통 항목
-    const frontProfileKeys = [
-        'bg_select_ms', 
-        'person_upload_ms', 
-        'person_validate_ms'
-    ];
-    
-    // 커스텀 피팅 전용 항목
-    if (isCustomFitting) {
-        frontProfileKeys.push(
-            'dress_upload_ms', 
-            'dress_validate_ms', 
-            'dress_cutout_ms'
-        );
-    }
-    
-    // 공통 항목 추가
-    frontProfileKeys.push(
-        'dress_drop_ms', 
-        'compose_click_to_response_ms', 
-        'result_image_load_ms'
-    );
-    
-    // 모든 피팅 타입에서 값이 없어도 0으로 표시
-    frontProfileKeys.forEach(key => {
-        const value = frontProfile[key];
-        // 값이 없거나 null이어도 0으로 표시
-        const displayValue = (value !== null && value !== undefined && typeof value === 'number') ? value : 0;
-        durations.push({
-            name: getDurationName(key),
-            value: displayValue
-        });
-    });
-    
-    // 백엔드 프로파일링 데이터 - 항상 포함
-    if (log.gemini_call_ms !== null && log.gemini_call_ms !== undefined && typeof log.gemini_call_ms === 'number') {
+        
+        // 5. Gemini 호출
+        const geminiCallMs = log.gemini_call_ms || 0;
         durations.push({
             name: 'Gemini 호출',
-            value: log.gemini_call_ms || 0
+            value: geminiCallMs
         });
-    }
-    
-    // 커스텀 피팅 전용: 누끼 처리
-    if (isCustomFitting) {
-        if (log.cutout_ms !== null && log.cutout_ms !== undefined && typeof log.cutout_ms === 'number') {
-            durations.push({
-                name: '누끼 처리',
-                value: log.cutout_ms || 0
-            });
-        }
+    } else {
+        // 일반 피팅: 4개 항목만 표시
+        // 1. Gemini 호출
+        const geminiCallMs = log.gemini_call_ms || 0;
+        durations.push({
+            name: 'Gemini 호출',
+            value: geminiCallMs
+        });
+        
+        // 2. 인물 업로드 & 예외처리
+        const personUploadMs = frontProfile.person_upload_ms || 0;
+        const personValidateMs = frontProfile.person_validate_ms || 0;
+        const personTotalMs = personUploadMs + personValidateMs;
+        durations.push({
+            name: '인물 업로드 & 예외처리',
+            value: personTotalMs
+        });
+        
+        // 3. 드레스 드롭
+        const dressDropMs = frontProfile.dress_drop_ms || 0;
+        durations.push({
+            name: '드레스 드롭',
+            value: dressDropMs
+        });
+        
+        // 4. 리사이징
+        const resizeMs = log.resize_ms || 0;
+        durations.push({
+            name: '리사이징',
+            value: resizeMs
+        });
     }
     
     // 기본 정보
@@ -2161,11 +2213,14 @@ function renderProfileDetailModal(log) {
         </div>
     `;
     
-    // 시간 분포 상세 표시 (리사이징부터 이미지 결과까지 모든 데이터)
-    if (serverTotalMs && typeof serverTotalMs === 'number' && serverTotalMs > 0 && durations.length > 0) {
-        // 퍼센트 계산 및 정렬 (퍼센트 내림차순)
+    // 시간 분포 상세 표시 (표시하는 항목들만)
+    if (durations.length > 0) {
+        // 표시하는 항목들의 합계 계산
+        const totalDisplayedMs = durations.reduce((sum, item) => sum + item.value, 0);
+        
+        // 퍼센트 계산 및 정렬 (표시 항목 합계 기준)
         const durationsWithPercent = durations.map(item => {
-            const percent = (item.value / serverTotalMs) * 100;
+            const percent = totalDisplayedMs > 0 ? (item.value / totalDisplayedMs) * 100 : 0;
             return {
                 ...item,
                 percent: percent
