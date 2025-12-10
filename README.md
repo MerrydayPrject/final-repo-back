@@ -2,6 +2,8 @@
 
 > 맞춤형 웨딩드레스 가상 피팅 플랫폼 백엔드 서버
 
+![Python](https://img.shields.io/badge/Python%203.11+-4B8BBE?style=for-the-badge&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL%208.x-00618A?style=for-the-badge&logo=mysql&logoColor=white) ![AWS](https://img.shields.io/badge/AWS%20S3-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white) ![OpenAI](https://img.shields.io/badge/OpenAI%20GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white) ![Google](https://img.shields.io/badge/Google%20Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white) ![HuggingFace](https://img.shields.io/badge/HuggingFace%20SegFormer-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black) ![MediaPipe](https://img.shields.io/badge/MediaPipe-4285F4?style=for-the-badge&logo=google&logoColor=white) ![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)
+
 MarryDay는 사용자가 전신 또는 얼굴 이미지를 업로드하면 AI가 체형·취향에 맞는 웨딩드레스를 자동 매칭·추천하여 가상 피팅 이미지를 생성하는 서비스입니다.
 
 ## 📋 목차
