@@ -872,4 +872,3 @@ python utils/check_db.py
 ---
 
 **Made with ❤️ for MarryDay**
-

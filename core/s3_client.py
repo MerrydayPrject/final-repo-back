@@ -3,7 +3,8 @@ import os
 import time
 import boto3
 from botocore.exceptions import ClientError
-from typing import Optional
+from typing import Optional, List
+from datetime import timedelta
 
 
 def upload_to_s3(file_content: bytes, file_name: str, content_type: str = "image/png", folder: str = "dresses") -> Optional[str]:
@@ -201,6 +202,129 @@ def get_s3_image(file_name: str) -> Optional[bytes]:
     except Exception as e:
         print(f"S3 이미지 다운로드 중 예상치 못한 오류: {e}")
         return None
+
+
+def check_file_exists_in_s3(file_name: str, folder: str = "dresses") -> bool:
+    """
+    S3에 파일이 존재하는지 확인
+    
+    Args:
+        file_name: 파일명
+        folder: S3 폴더 경로 (기본값: "dresses")
+    
+    Returns:
+        파일 존재 여부 (True/False)
+    """
+    try:
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+        region = os.getenv("AWS_REGION", "ap-northeast-2")
+        
+        if not all([aws_access_key, aws_secret_key, bucket_name]):
+            print("AWS S3 설정이 완료되지 않았습니다.")
+            return False
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name=region
+        )
+        
+        s3_key = f"{folder}/{file_name}"
+        try:
+            s3_client.head_object(Bucket=bucket_name, Key=s3_key)
+            return True
+        except ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                return False
+            else:
+                print(f"S3 파일 존재 확인 오류: {e}")
+                return False
+    except Exception as e:
+        print(f"S3 파일 존재 확인 중 예상치 못한 오류: {e}")
+        return False
+
+
+def list_files_in_s3_folder(folder: str = "dresses", max_keys: int = 1000) -> List[dict]:
+    """
+    S3 폴더에 있는 파일 목록 조회
+    
+    Args:
+        folder: S3 폴더 경로 (기본값: "dresses")
+        max_keys: 최대 조회 개수 (기본값: 1000)
+    
+    Returns:
+        파일 정보 리스트 [{"key": "folder/file.jpg", "size": 12345, "last_modified": "..."}, ...]
+    """
+    try:
+        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+        region = os.getenv("AWS_REGION", "ap-northeast-2")
+        
+        if not all([aws_access_key, aws_secret_key, bucket_name]):
+            print("AWS S3 설정이 완료되지 않았습니다.")
+            return []
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name=region
+        )
+        
+        files = []
+        prefix = f"{folder}/"
+        
+        try:
+            paginator = s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix, MaxKeys=max_keys)
+            
+            for page in pages:
+                if 'Contents' in page:
+                    for obj in page['Contents']:
+                        s3_key = obj['Key']
+                        
+                        # 폴더 자체는 제외 (마지막이 /로 끝나는 경우)
+                        if s3_key.endswith('/'):
+                            continue
+                        
+                        # prefix 제거하여 상대 경로 추출
+                        if s3_key.startswith(prefix):
+                            file_name = s3_key[len(prefix):]
+                        else:
+                            file_name = s3_key
+                        
+                        if file_name:  # 빈 문자열이 아닌 경우만
+                            # Pre-signed URL 생성 (1시간 유효)
+                            try:
+                                presigned_url = s3_client.generate_presigned_url(
+                                    'get_object',
+                                    Params={'Bucket': bucket_name, 'Key': s3_key},
+                                    ExpiresIn=3600  # 1시간
+                                )
+                            except Exception as e:
+                                print(f"[WARN] Pre-signed URL 생성 실패: {s3_key}, 오류: {e}")
+                                # 실패 시 일반 URL 사용
+                                presigned_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{s3_key}"
+                            
+                            files.append({
+                                "key": s3_key,
+                                "file_name": file_name,  # 상대 경로 포함 (예: "A라인/image.jpg")
+                                "size": obj['Size'],
+                                "last_modified": obj['LastModified'].isoformat() if obj.get('LastModified') else None,
+                                "url": presigned_url
+                            })
+            
+            return files
+        except ClientError as e:
+            print(f"S3 파일 목록 조회 오류: {e}")
+            return []
+    except Exception as e:
+        print(f"S3 파일 목록 조회 중 예상치 못한 오류: {e}")
+        return []
 
 
 def get_logs_s3_image(file_name: str) -> Optional[bytes]:

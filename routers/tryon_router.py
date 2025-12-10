@@ -452,6 +452,20 @@ async def compare_v4v5(
                 except Exception as e:
                     print(f"[일반 피팅] ❌ 합성 카운트 증가 예외 발생: {e}")
                 
+                # 일반 피팅 로그 기록 (result_logs에 저장)
+                from services.log_service import save_general_fitting_log
+                print("[일반 피팅] 일반 피팅 로그 기록 시작")
+                try:
+                    # run_time을 초 단위로 변환 (server_total_ms는 밀리초)
+                    run_time_seconds = server_total_ms / 1000.0
+                    log_success = save_general_fitting_log(run_time=run_time_seconds)
+                    if log_success:
+                        print("[일반 피팅] ✅ 일반 피팅 로그 기록 성공")
+                    else:
+                        print("[일반 피팅] ⚠️ 일반 피팅 로그 기록 실패")
+                except Exception as e:
+                    print(f"[일반 피팅] ❌ 일반 피팅 로그 기록 예외 발생: {e}")
+                
                 # 드레스 피팅 로그 기록 (dress_id가 있는 경우)
                 if dress_id:
                     from services.dress_fitting_log_service import log_dress_fitting

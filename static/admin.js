@@ -2,7 +2,7 @@
 let currentPage = 1;
 const itemsPerPage = 20;
 let currentSearchModel = null;
-let currentTab = 'synthesis'; // 'synthesis', 'body', 'reviews', 'synthesis-stats', 'visitor-stats', 'custom-fitting', 'profile-logs', 'dress-fitting'
+let currentTab = 'synthesis'; // 'synthesis', 'body', 'reviews', 'synthesis-stats', 'visitor-stats', 'custom-fitting', 'profile-logs', 'dress-fitting', 'usage-stats'
 let currentBodyPage = 1;
 let currentReviewsPage = 1;
 let currentSynthesisStatsPage = 1;
@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabCustomFitting = document.getElementById('tabCustomFitting');
     const tabProfileLogs = document.getElementById('tabProfileLogs');
     const tabDressFitting = document.getElementById('tabDressFitting');
+    const tabUsageStats = document.getElementById('tabUsageStats');
 
     if (tabSynthesis) {
         tabSynthesis.addEventListener('click', () => switchTab('synthesis'));
@@ -102,6 +103,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (tabDressFitting) {
         tabDressFitting.addEventListener('click', () => switchTab('dress-fitting'));
+    }
+    if (tabUsageStats) {
+        tabUsageStats.addEventListener('click', () => switchTab('usage-stats'));
+    }
+    if (tabUsageStats) {
+        tabUsageStats.addEventListener('click', () => switchTab('usage-stats'));
     }
 
     // 검색 입력 필드에 Enter 키 이벤트 추가
@@ -137,6 +144,7 @@ function switchTab(tab) {
     const customFittingSection = document.getElementById('custom-fitting-logs-section');
     const profileLogsSection = document.getElementById('profile-logs-section');
     const dressFittingSection = document.getElementById('dress-fitting-logs-section');
+    const usageStatsSection = document.getElementById('usage-stats-section');
     const tabSynthesis = document.getElementById('tabSynthesis');
     const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
     const tabReviews = document.getElementById('tabReviews');
@@ -159,6 +167,7 @@ function switchTab(tab) {
     if (customFittingSection) customFittingSection.style.display = 'none';
     if (profileLogsSection) profileLogsSection.style.display = 'none';
     if (dressFittingSection) dressFittingSection.style.display = 'none';
+    if (usageStatsSection) usageStatsSection.style.display = 'none';
 
     // 모든 탭 버튼 초기화
     if (tabSynthesis) {
@@ -200,6 +209,11 @@ function switchTab(tab) {
         tabDressFitting.classList.remove('active');
         tabDressFitting.style.background = '#fff';
         tabDressFitting.style.color = '#333';
+    }
+    if (tabUsageStats) {
+        tabUsageStats.classList.remove('active');
+        tabUsageStats.style.background = '#fff';
+        tabUsageStats.style.color = '#333';
     }
 
     if (tab === 'synthesis') {
@@ -343,6 +357,20 @@ function switchTab(tab) {
         } else {
             loadDressFittingCounts(currentDressFittingCountsPage, currentSearchDate);
         }
+    } else if (tab === 'usage-stats') {
+        if (usageStatsSection) usageStatsSection.style.display = 'block';
+        if (tabUsageStats) {
+            tabUsageStats.classList.add('active');
+            tabUsageStats.style.background = '#007bff';
+            tabUsageStats.style.color = '#fff';
+        }
+        if (sectionTitle) sectionTitle.textContent = '📊 기능별 사용횟수';
+        if (logsCountLabel) logsCountLabel.textContent = '전체 사용횟수:';
+        if (searchContainerText) searchContainerText.style.display = 'none';
+        if (searchContainerDate) searchContainerDate.style.display = 'none';
+        // 다른 탭으로 전환 시 날짜 검색 초기화
+        currentSearchDate = null;
+        loadUsageStats();
     }
 }
 
@@ -1409,6 +1437,85 @@ function updateSynthesisStatsCount(count) {
 }
 
 // 날짜별 조회수 통계 로드
+// 기능별 사용횟수 통계 로드
+async function loadUsageStats() {
+    try {
+        const url = `/api/admin/usage-stats`;
+
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        const response = await fetch(url, {
+            headers: headers
+        });
+
+        // 401 오류 처리
+        if (response.status === 401) {
+            // 인증 오류 시 조용히 로그인 페이지로 이동
+            window.location.href = '/';
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            renderUsageStats(data.data);
+            updateUsageStatsCount(data.data.total);
+        } else {
+            showError(data.message || '사용횟수 통계를 불러오는 중 오류가 발생했습니다.');
+        }
+    } catch (error) {
+        console.error('사용횟수 통계 로드 오류:', error);
+        const tbody = document.getElementById('usage-stats-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="2" class="loading" style="color: #ef4444;">통계를 불러오는 중 오류가 발생했습니다.</td></tr>';
+        }
+    }
+}
+
+// 기능별 사용횟수 통계 갯수 업데이트
+function updateUsageStatsCount(count) {
+    const logsCountElement = document.getElementById('logs-count');
+    if (logsCountElement) {
+        logsCountElement.textContent = count;
+    }
+}
+
+// 기능별 사용횟수 통계 테이블 렌더링
+function renderUsageStats(stats) {
+    const tbody = document.getElementById('usage-stats-tbody');
+
+    if (!tbody) return;
+
+    const statsData = [
+        { name: '일반피팅', count: stats.general_fitting || 0 },
+        { name: '커스텀피팅', count: stats.custom_fitting || 0 },
+        { name: '체형분석', count: stats.body_analysis || 0 },
+        { name: '전체', count: stats.total || 0, isTotal: true }
+    ];
+
+    let html = statsData.map(stat => {
+        const rowClass = stat.isTotal ? 'style="font-weight: bold; background-color: #f0f0f0;"' : '';
+        return `
+        <tr ${rowClass}>
+            <td>${stat.name}</td>
+            <td>${stat.count.toLocaleString()}회</td>
+        </tr>
+        `;
+    }).join('');
+
+    // 카운팅 시작 날짜 정보 추가
+    if (stats.start_date) {
+        html += `
+        <tr style="font-style: italic; color: #666; font-size: 0.9em;">
+            <td colspan="2" style="text-align: center; padding-top: 15px;">
+                * ${stats.start_date} 이후부터 카운팅됩니다
+            </td>
+        </tr>
+        `;
+    }
+
+    tbody.innerHTML = html;
+}
+
 async function loadDailyVisitorStats(page, date = null) {
     try {
         let url = `/api/admin/daily-visitor-stats?page=${page}&limit=${itemsPerPage}`;
