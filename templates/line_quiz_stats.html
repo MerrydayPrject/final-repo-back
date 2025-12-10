@@ -257,19 +257,40 @@
     <script>
         const LINE_TYPES = ['A라인', 'H라인', 'O라인', 'X라인'];
 
-        // 통계 데이터 로드 및 분석
-        function loadAndAnalyzeStats() {
-            const answers = JSON.parse(localStorage.getItem('lineQuizAnswers') || '[]');
-            
-            if (answers.length === 0) {
-                document.getElementById('overallStats').innerHTML = 
-                    '<div class="no-data" style="grid-column: 1/-1;">아직 퀴즈를 풀지 않았습니다.</div>';
-                document.getElementById('lineStatsContainer').innerHTML = 
-                    '<div class="no-data">통계 데이터가 없습니다.</div>';
-                document.getElementById('participantStats').innerHTML = 
-                    '<div class="no-data">참여자 데이터가 없습니다.</div>';
-                return;
-            }
+        // 통계 데이터 로드 및 분석 (DB에서 가져오기)
+        async function loadAndAnalyzeStats() {
+            try {
+                // DB에서 모든 결과 가져오기
+                const response = await fetch('/api/line-quiz/results?limit=10000');
+                const data = await response.json();
+                
+                let answers = [];
+                
+                if (data.success && data.results && data.results.length > 0) {
+                    // DB 데이터를 localStorage 형식으로 변환
+                    answers = data.results.map(result => ({
+                        user_id: result.user_id || 'unknown',
+                        image_path: result.image_path || '',
+                        image_url: result.image_url || '',
+                        user_answer: result.user_answer || '',
+                        correct_answer: result.correct_answer || '',
+                        is_correct: result.is_correct === 1 || result.is_correct === true,
+                        timestamp: result.created_at || new Date().toISOString()
+                    }));
+                } else {
+                    // DB에 데이터가 없으면 localStorage에서 가져오기 (대체)
+                    answers = JSON.parse(localStorage.getItem('lineQuizAnswers') || '[]');
+                }
+                
+                if (answers.length === 0) {
+                    document.getElementById('overallStats').innerHTML = 
+                        '<div class="no-data" style="grid-column: 1/-1;">아직 퀴즈를 풀지 않았습니다.</div>';
+                    document.getElementById('lineStatsContainer').innerHTML = 
+                        '<div class="no-data">통계 데이터가 없습니다.</div>';
+                    document.getElementById('participantStats').innerHTML = 
+                        '<div class="no-data">참여자 데이터가 없습니다.</div>';
+                    return;
+                }
 
             // 전체 통계 계산 (모든 참여자 누적)
             const totalAnswered = answers.length;
@@ -301,10 +322,15 @@
                     if (answer.is_correct) {
                         lineStats[correctLine].correct++;
                     } else {
-                        // 이미지 URL 생성
-                        const imagePathParts = answer.image_path.split('/');
-                        const filename = imagePathParts[imagePathParts.length - 1];
-                        const imageUrl = `/test_images/${correctLine}/${filename}`;
+                        // 이미지 URL 생성 (S3 URL 우선, 없으면 로컬 경로)
+                        let imageUrl = answer.image_url || '';
+                        if (!imageUrl) {
+                            const imagePathParts = answer.image_path.split('/');
+                            const filename = imagePathParts[imagePathParts.length - 1];
+                            imageUrl = `/test_images/${correctLine}/${filename}`;
+                        }
+                        
+                        const filename = answer.image_path.split('/').pop() || '';
                         
                         lineStats[correctLine].wrong.push({
                             image_path: answer.image_path,
@@ -330,6 +356,65 @@
             
             // 참여자별 통계 표시
             displayParticipantStats(answers);
+            } catch (error) {
+                console.error('통계 로드 오류:', error);
+                // 오류 발생 시 localStorage에서 가져오기
+                const answers = JSON.parse(localStorage.getItem('lineQuizAnswers') || '[]');
+                if (answers.length === 0) {
+                    document.getElementById('overallStats').innerHTML = 
+                        '<div class="no-data" style="grid-column: 1/-1;">통계를 불러올 수 없습니다.</div>';
+                    return;
+                }
+                // localStorage 데이터로 통계 표시
+                const totalAnswered = answers.length;
+                const totalCorrect = answers.filter(a => a.is_correct).length;
+                const totalWrong = totalAnswered - totalCorrect;
+                const overallAccuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+                
+                document.getElementById('totalAnswered').textContent = totalAnswered;
+                document.getElementById('totalCorrect').textContent = totalCorrect;
+                document.getElementById('totalWrong').textContent = totalWrong;
+                document.getElementById('overallAccuracy').textContent = overallAccuracy + '%';
+                
+                // 라인별 통계 계산
+                const lineStats = {};
+                LINE_TYPES.forEach(line => {
+                    lineStats[line] = {
+                        total: 0,
+                        correct: 0,
+                        wrong: [],
+                        accuracy: 0
+                    };
+                });
+                
+                answers.forEach(answer => {
+                    const correctLine = answer.correct_answer;
+                    if (lineStats[correctLine]) {
+                        lineStats[correctLine].total++;
+                        if (answer.is_correct) {
+                            lineStats[correctLine].correct++;
+                        } else {
+                            lineStats[correctLine].wrong.push({
+                                image_path: answer.image_path,
+                                image_url: answer.image_url || '',
+                                filename: answer.image_path.split('/').pop() || '',
+                                user_answer: answer.user_answer,
+                                correct_answer: answer.correct_answer,
+                                user_id: answer.user_id || 'unknown'
+                            });
+                        }
+                    }
+                });
+                
+                LINE_TYPES.forEach(line => {
+                    if (lineStats[line].total > 0) {
+                        lineStats[line].accuracy = Math.round((lineStats[line].correct / lineStats[line].total) * 100);
+                    }
+                });
+                
+                displayLineStats(lineStats);
+                displayParticipantStats(answers);
+            }
         }
 
         // 라인별 통계 표시

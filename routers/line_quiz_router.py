@@ -231,8 +231,10 @@ async def submit_quiz_answer(data: dict):
     """
     try:
         image_path = data.get("image_path")
+        image_url = data.get("image_url")
         user_answer = data.get("user_answer")
         correct_answer = data.get("correct_answer")
+        user_id = data.get("user_id")
         user_name = data.get("user_name", "익명")
         
         if not image_path or not user_answer:
@@ -267,22 +269,26 @@ async def submit_quiz_answer(data: dict):
                         CREATE TABLE IF NOT EXISTS line_quiz_results (
                             idx INT AUTO_INCREMENT PRIMARY KEY,
                             image_path VARCHAR(500) NOT NULL,
+                            image_url VARCHAR(1000),
                             user_answer VARCHAR(50) NOT NULL,
                             correct_answer VARCHAR(50) NOT NULL,
                             is_correct BOOLEAN NOT NULL,
+                            user_id VARCHAR(100),
                             user_name VARCHAR(100),
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             INDEX idx_image_path (image_path),
-                            INDEX idx_created_at (created_at)
+                            INDEX idx_user_id (user_id),
+                            INDEX idx_created_at (created_at),
+                            INDEX idx_is_correct (is_correct)
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """)
                     
                     # 결과 저장
                     cursor.execute("""
                         INSERT INTO line_quiz_results 
-                        (image_path, user_answer, correct_answer, is_correct, user_name)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (image_path, user_answer, correct_answer, is_correct, user_name))
+                        (image_path, image_url, user_answer, correct_answer, is_correct, user_id, user_name)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (image_path, image_url, user_answer, correct_answer, is_correct, user_id, user_name))
                     
                     connection.commit()
                     result_id = cursor.lastrowid
@@ -335,9 +341,11 @@ async def get_quiz_results(limit: int = 50, offset: int = 0):
                     SELECT 
                         idx,
                         image_path,
+                        image_url,
                         user_answer,
                         correct_answer,
                         is_correct,
+                        user_id,
                         user_name,
                         created_at
                     FROM line_quiz_results
