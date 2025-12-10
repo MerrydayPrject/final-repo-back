@@ -1492,7 +1492,7 @@ function renderUsageStats(stats) {
         { name: '전체', count: stats.total || 0, isTotal: true }
     ];
 
-    tbody.innerHTML = statsData.map(stat => {
+    let html = statsData.map(stat => {
         const rowClass = stat.isTotal ? 'style="font-weight: bold; background-color: #f0f0f0;"' : '';
         return `
         <tr ${rowClass}>
@@ -1501,6 +1501,19 @@ function renderUsageStats(stats) {
         </tr>
         `;
     }).join('');
+
+    // 카운팅 시작 날짜 정보 추가
+    if (stats.start_date) {
+        html += `
+        <tr style="font-style: italic; color: #666; font-size: 0.9em;">
+            <td colspan="2" style="text-align: center; padding-top: 15px;">
+                * ${stats.start_date} 이후부터 카운팅됩니다
+            </td>
+        </tr>
+        `;
+    }
+
+    tbody.innerHTML = html;
 }
 
 async function loadDailyVisitorStats(page, date = null) {

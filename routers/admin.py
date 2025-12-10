@@ -108,6 +108,7 @@ async def get_usage_stats(request: Request):
     기능별 사용횟수 통계 조회
     
     일반피팅, 커스텀피팅, 체형분석의 사용횟수를 조회합니다.
+    특정 날짜(COUNTING_START_DATE) 이후부터만 카운팅합니다.
     """
     # 인증 확인
     await require_admin(request)
@@ -121,7 +122,8 @@ async def get_usage_stats(request: Request):
                 "general_fitting": counts["general_fitting"],
                 "custom_fitting": counts["custom_fitting"],
                 "body_analysis": counts["body_analysis"],
-                "total": counts["total"]
+                "total": counts["total"],
+                "start_date": counts["start_date"]
             }
         })
     except Exception as e:
