@@ -784,9 +784,39 @@
                 
                 if (data.success) {
                     if (data.images && data.images.length > 0) {
-                        images = shuffleArray(data.images); // 랜덤 셔플
+                        images = data.images; // 셔플하지 않음 (랜덤 인덱스로 선택)
                         console.log('[DEBUG] 이미지 로드 성공:', images.length, '개');
-                        loadCurrentImage();
+                        
+                        // 초기 이미지도 랜덤으로 선택 (중복 없이)
+                        const usedIndices = JSON.parse(sessionStorage.getItem('usedIndices') || '[]');
+                        
+                        // 모든 이미지를 다 봤으면 테스트 완료 표시
+                        if (usedIndices.length >= images.length) {
+                            document.getElementById('imageContainer').innerHTML = `
+                                <div style="text-align: center; padding: 40px;">
+                                    <h2 style="color: #4CAF50; margin-bottom: 20px;">🎉 테스트 완료!</h2>
+                                    <p style="font-size: 18px; margin-bottom: 10px;">모든 ${images.length}개의 문제를 완료하셨습니다.</p>
+                                    <p style="font-size: 16px; color: #666; margin-bottom: 30px;">통계 페이지에서 결과를 확인하세요.</p>
+                                    <button onclick="window.location.href='/line-quiz-stats'" style="padding: 12px 24px; font-size: 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                        통계 보기
+                                    </button>
+                                </div>
+                            `;
+                            document.getElementById('submitBtn').style.display = 'none';
+                            document.querySelectorAll('.line-btn').forEach(btn => btn.style.display = 'none');
+                        } else {
+                            // 아직 안 본 이미지 중에서 랜덤 선택
+                            let initialIndex;
+                            do {
+                                initialIndex = Math.floor(Math.random() * images.length);
+                            } while (usedIndices.includes(initialIndex));
+                            
+                            usedIndices.push(initialIndex);
+                            sessionStorage.setItem('usedIndices', JSON.stringify(usedIndices));
+                            
+                            currentImageIndex = initialIndex;
+                            loadCurrentImage();
+                        }
                     } else {
                         console.warn('[DEBUG] 이미지가 없습니다.');
                         document.getElementById('imageContainer').innerHTML = 
@@ -856,6 +886,12 @@
             document.getElementById('submitBtn').disabled = true;
             document.getElementById('nextBtn').style.display = 'none';
             document.getElementById('resultMessage').style.display = 'none';
+            
+            // 테스트 완료 여부 확인
+            const usedIndices = JSON.parse(sessionStorage.getItem('usedIndices') || '[]');
+            if (usedIndices.length >= images.length) {
+                document.getElementById('nextBtn').style.display = 'none';
+            }
             
             updateStats();
         }
@@ -963,17 +999,31 @@
             }
         };
 
-        // 다음 문제 (랜덤)
+        // 다음 문제 (랜덤, 중복 없이)
         document.getElementById('nextBtn').onclick = () => {
             // 이미 본 이미지 제외하고 랜덤 선택
             const usedIndices = JSON.parse(sessionStorage.getItem('usedIndices') || '[]');
             
+            // 모든 이미지를 다 봤으면 (80번 완료) 테스트 종료
             if (usedIndices.length >= images.length) {
-                // 모든 이미지를 봤으면 초기화
-                sessionStorage.setItem('usedIndices', JSON.stringify([]));
-                usedIndices.length = 0;
+                // 테스트 완료 메시지 표시
+                document.getElementById('imageContainer').innerHTML = `
+                    <div style="text-align: center; padding: 40px;">
+                        <h2 style="color: #4CAF50; margin-bottom: 20px;">🎉 테스트 완료!</h2>
+                        <p style="font-size: 18px; margin-bottom: 10px;">모든 ${images.length}개의 문제를 완료하셨습니다.</p>
+                        <p style="font-size: 16px; color: #666; margin-bottom: 30px;">통계 페이지에서 결과를 확인하세요.</p>
+                        <button onclick="window.location.href='/line-quiz-stats'" style="padding: 12px 24px; font-size: 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            통계 보기
+                        </button>
+                    </div>
+                `;
+                document.getElementById('nextBtn').style.display = 'none';
+                document.getElementById('submitBtn').style.display = 'none';
+                document.querySelectorAll('.line-btn').forEach(btn => btn.style.display = 'none');
+                return;
             }
             
+            // 아직 안 본 이미지 중에서 랜덤 선택
             let nextIndex;
             do {
                 nextIndex = Math.floor(Math.random() * images.length);
@@ -988,8 +1038,11 @@
 
         // 통계 업데이트
         function updateStats() {
+            const usedIndices = JSON.parse(sessionStorage.getItem('usedIndices') || '[]');
+            const completedCount = usedIndices.length;
+            
             document.getElementById('totalCount').textContent = images.length;
-            document.getElementById('currentIndex').textContent = currentImageIndex + 1;
+            document.getElementById('currentIndex').textContent = `${completedCount}/${images.length}`;
             document.getElementById('correctCount').textContent = correctCount;
             const accuracy = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
             document.getElementById('accuracy').textContent = accuracy + '%';
