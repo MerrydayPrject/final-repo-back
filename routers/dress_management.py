@@ -4,6 +4,8 @@ import os
 import json
 import csv
 import io
+import zipfile
+import tempfile
 import pymysql
 from pathlib import Path
 from typing import List, Optional
@@ -14,7 +16,7 @@ from PIL import Image
 from services.database import get_db_connection
 from services.category_service import detect_style_from_filename
 from services.dress_check_service import get_dress_check_service
-from core.s3_client import upload_to_s3, delete_from_s3
+from core.s3_client import upload_to_s3, delete_from_s3, check_file_exists_in_s3, list_files_in_s3_folder
 from config.settings import AWS_S3_BUCKET_NAME, AWS_REGION
 
 router = APIRouter()
@@ -249,9 +251,9 @@ async def upload_dresses(
                             fail_count += 1
                             continue
                     
-                    # S3 업로드
+                    # S3 업로드 (dresses 폴더)
                     content_type = file.content_type or "image/png"
-                    s3_url = upload_to_s3(file_content, file_name, content_type)
+                    s3_url = upload_to_s3(file_content, file_name, content_type, folder="dresses")
                     
                     if not s3_url:
                         results.append({
@@ -330,6 +332,236 @@ async def upload_dresses(
             "success": False,
             "error": str(e),
             "message": f"드레스 업로드 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.post("/api/admin/dresses/upload-line-quiz", tags=["드레스 관리"])
+async def upload_line_quiz_images(
+    files: List[UploadFile] = File(...),
+    folder_name: str = Form("line-quiz-images", description="S3 폴더명 (기본값: line-quiz-images)"),
+    line_type: Optional[str] = Form(None, description="라인 타입 (A라인, H라인, O라인, X라인) - 선택사항")
+):
+    """
+    라인 퀴즈용 이미지를 S3에 업로드 (ZIP 파일 또는 이미지 파일 지원)
+    
+    - ZIP 파일 업로드: ZIP 파일 내부의 이미지들을 자동 추출하여 업로드
+    - 이미지 파일 업로드: 개별 이미지 파일 업로드
+    
+    Args:
+        files: 업로드할 파일 리스트 (ZIP 파일 또는 이미지 파일, 최대 100개)
+        folder_name: S3 폴더명 (기본값: "line-quiz-images")
+        line_type: 라인 타입 (A라인, H라인, O라인, X라인) - 지정하면 해당 폴더로 업로드
+    
+    Returns:
+        업로드 결과 리스트
+    """
+    LINE_TYPES = ["A라인", "H라인", "O라인", "X라인"]
+    IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
+    
+    try:
+        results = []
+        success_count = 0
+        fail_count = 0
+        extracted_images = []  # ZIP에서 추출한 이미지들
+        
+        # 1단계: ZIP 파일 처리 및 이미지 추출
+        for file in files:
+            try:
+                file_content = await file.read()
+                file_name = file.filename
+                
+                if not file_name:
+                    continue
+                
+                # ZIP 파일인지 확인
+                file_ext = Path(file_name).suffix.lower()
+                if file_ext == '.zip':
+                    # ZIP 파일 처리
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_zip:
+                            tmp_zip.write(file_content)
+                            tmp_zip_path = tmp_zip.name
+                        
+                        with zipfile.ZipFile(tmp_zip_path, 'r') as zip_ref:
+                            # ZIP 내부 파일 목록
+                            file_list = zip_ref.namelist()
+                            
+                            for zip_file_name in file_list:
+                                # 디렉토리는 스킵
+                                if zip_file_name.endswith('/'):
+                                    continue
+                                
+                                # 이미지 파일만 추출
+                                zip_file_ext = Path(zip_file_name).suffix.lower()
+                                if zip_file_ext in IMAGE_EXTENSIONS:
+                                    try:
+                                        # ZIP에서 이미지 추출
+                                        image_data = zip_ref.read(zip_file_name)
+                                        
+                                        # 파일명에서 라인 타입 추출
+                                        detected_line_type = line_type
+                                        if not detected_line_type:
+                                            for lt in LINE_TYPES:
+                                                if lt in zip_file_name:
+                                                    detected_line_type = lt
+                                                    break
+                                        
+                                        # 실제 파일명만 추출 (경로 제거)
+                                        actual_file_name = Path(zip_file_name).name
+                                        
+                                        extracted_images.append({
+                                            "file_name": actual_file_name,
+                                            "content": image_data,
+                                            "line_type": detected_line_type,
+                                            "source": f"ZIP: {file_name}"
+                                        })
+                                    except Exception as e:
+                                        print(f"[WARN] ZIP 내부 파일 추출 실패: {zip_file_name}, 오류: {e}")
+                        
+                        # 임시 파일 삭제
+                        os.unlink(tmp_zip_path)
+                        
+                    except zipfile.BadZipFile:
+                        results.append({
+                            "file_name": file_name,
+                            "success": False,
+                            "error": "올바르지 않은 ZIP 파일입니다."
+                        })
+                        fail_count += 1
+                    except Exception as e:
+                        results.append({
+                            "file_name": file_name,
+                            "success": False,
+                            "error": f"ZIP 파일 처리 오류: {str(e)}"
+                        })
+                        fail_count += 1
+                else:
+                    # 일반 이미지 파일 처리
+                    image_ext = Path(file_name).suffix.lower()
+                    if image_ext in IMAGE_EXTENSIONS:
+                        extracted_images.append({
+                            "file_name": file_name,
+                            "content": file_content,
+                            "line_type": line_type,
+                            "source": "direct"
+                        })
+                    else:
+                        results.append({
+                            "file_name": file_name,
+                            "success": False,
+                            "error": f"지원하지 않는 파일 형식입니다. (ZIP 또는 이미지 파일만 가능)"
+                        })
+                        fail_count += 1
+                        
+            except Exception as e:
+                results.append({
+                    "file_name": file.filename or "unknown",
+                    "success": False,
+                    "error": f"파일 처리 오류: {str(e)}"
+                })
+                fail_count += 1
+        
+        # 2단계: 추출된 이미지들을 S3에 업로드
+        for img_info in extracted_images:
+            try:
+                img_file_name = img_info["file_name"]
+                img_content = img_info["content"]
+                detected_line_type = img_info["line_type"]
+                
+                # 라인 타입별 폴더 경로 생성
+                if detected_line_type and detected_line_type in LINE_TYPES:
+                    s3_folder_path = f"{folder_name}/{detected_line_type}"
+                else:
+                    # 라인 타입을 찾을 수 없으면 루트 폴더에 업로드
+                    s3_folder_path = folder_name
+                
+                # S3 업로드
+                content_type = "image/png"  # 기본값
+                if img_file_name.lower().endswith('.jpg') or img_file_name.lower().endswith('.jpeg'):
+                    content_type = "image/jpeg"
+                elif img_file_name.lower().endswith('.png'):
+                    content_type = "image/png"
+                elif img_file_name.lower().endswith('.gif'):
+                    content_type = "image/gif"
+                elif img_file_name.lower().endswith('.webp'):
+                    content_type = "image/webp"
+                
+                s3_url = upload_to_s3(img_content, img_file_name, content_type, folder=s3_folder_path)
+                
+                if not s3_url:
+                    results.append({
+                        "file_name": img_file_name,
+                        "success": False,
+                        "error": "S3 업로드 실패",
+                        "source": img_info.get("source", "")
+                    })
+                    fail_count += 1
+                    continue
+                
+                results.append({
+                    "file_name": img_file_name,
+                    "success": True,
+                    "url": s3_url,
+                    "folder": s3_folder_path,
+                    "line_type": detected_line_type,
+                    "source": img_info.get("source", "")
+                })
+                success_count += 1
+                
+            except Exception as e:
+                results.append({
+                    "file_name": img_info.get("file_name", "unknown"),
+                    "success": False,
+                    "error": f"이미지 업로드 오류: {str(e)}",
+                    "source": img_info.get("source", "")
+                })
+                fail_count += 1
+        
+        return JSONResponse({
+            "success": True,
+            "message": f"{success_count}개 파일 업로드 성공, {fail_count}개 파일 실패",
+            "results": results,
+            "success_count": success_count,
+            "fail_count": fail_count,
+            "folder": folder_name
+        })
+        
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"이미지 업로드 중 오류 발생: {str(e)}"
+        }, status_code=500)
+
+
+@router.get("/api/admin/dresses/s3-list", tags=["드레스 관리"])
+async def list_s3_files(
+    folder: str = Query("line-quiz-images", description="S3 폴더명")
+):
+    """
+    S3 폴더에 있는 파일 목록 조회
+    
+    Args:
+        folder: S3 폴더명 (기본값: "line-quiz-images")
+    
+    Returns:
+        파일 목록 및 통계
+    """
+    try:
+        files = list_files_in_s3_folder(folder=folder, max_keys=10000)
+        
+        return JSONResponse({
+            "success": True,
+            "folder": folder,
+            "files": files,
+            "total": len(files),
+            "total_size": sum(f.get("size", 0) for f in files)
+        })
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "message": f"S3 파일 목록 조회 중 오류 발생: {str(e)}"
         }, status_code=500)
 
 
