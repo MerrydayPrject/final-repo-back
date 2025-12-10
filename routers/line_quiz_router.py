@@ -1,7 +1,7 @@
 """라인 퀴즈 테스트 라우터"""
 import os
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import List, Dict, Optional
@@ -9,6 +9,8 @@ import json
 
 from services.body_service import load_body_line_definitions
 from services.database import get_db_connection
+from core.s3_client import list_files_in_s3_folder
+from config.settings import AWS_S3_BUCKET_NAME, AWS_REGION
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -32,51 +34,143 @@ async def line_quiz_stats_page(request: Request):
 
 
 @router.get("/api/line-quiz/images", tags=["라인 퀴즈"])
-async def get_line_images():
+async def get_line_images(
+    folder: str = Query("line-quiz-images", description="S3 폴더명 (기본값: line-quiz-images)")
+):
     """
-    라인별 사진 리스트 조회
+    라인별 사진 리스트 조회 (S3 우선, 없으면 로컬)
+    
+    Args:
+        folder: S3 폴더명 (기본값: "line-quiz-images")
     
     Returns:
         List[Dict]: 라인별 이미지 리스트
-        [
-            {
-                "line_type": "A라인",
-                "image_path": "test_images/A라인/image1.jpg",
-                "image_url": "/static/test_images/A라인/image1.jpg",
-                "filename": "image1.jpg"
-            },
-            ...
-        ]
     """
     try:
         images = []
+        bucket_name = os.getenv("AWS_S3_BUCKET_NAME") or AWS_S3_BUCKET_NAME or "marryday1"
+        region = os.getenv("AWS_REGION") or AWS_REGION or "ap-northeast-2"
         
-        for line_type in LINE_TYPES:
-            line_dir = TEST_IMAGES_DIR / line_type
-            
-            if not line_dir.exists():
-                continue
-            
-            # 이미지 파일만 필터링
-            image_extensions = {'.jpg', '.jpeg', '.png', '.gif'}
-            for image_file in line_dir.iterdir():
-                if image_file.is_file() and image_file.suffix.lower() in image_extensions:
-                    # 상대 경로로 변환
-                    relative_path = image_file.relative_to(BASE_DIR)
-                    images.append({
-                        "line_type": line_type,
-                        "image_path": str(relative_path).replace("\\", "/"),
-                        "image_url": f"/test_images/{line_type}/{image_file.name}",
-                        "filename": image_file.name
-                    })
+        # S3에서 파일 목록 가져오기
+        s3_files = list_files_in_s3_folder(folder=folder, max_keys=10000)
+        
+        print(f"[DEBUG] S3 파일 개수: {len(s3_files) if s3_files else 0}, 폴더: {folder}")
+        if s3_files:
+            print(f"[DEBUG] 첫 번째 파일 예시: {s3_files[0] if len(s3_files) > 0 else 'None'}")
+        
+        if not s3_files:
+            # S3에 파일이 없으면 로컬 폴더에서 가져오기 (대체)
+            for line_type in LINE_TYPES:
+                line_dir = TEST_IMAGES_DIR / line_type
+                
+                if not line_dir.exists():
+                    continue
+                
+                image_extensions = {'.jpg', '.jpeg', '.png', '.gif'}
+                for image_file in line_dir.iterdir():
+                    if image_file.is_file() and image_file.suffix.lower() in image_extensions:
+                        relative_path = image_file.relative_to(BASE_DIR)
+                        images.append({
+                            "line_type": line_type,
+                            "image_path": str(relative_path).replace("\\", "/"),
+                            "image_url": f"/test_images/{line_type}/{image_file.name}",
+                            "filename": image_file.name,
+                            "source": "local"
+                        })
+        else:
+            # S3 파일들을 라인별로 분류
+            for s3_file in s3_files:
+                s3_key = s3_file.get("key", "")
+                s3_url = s3_file.get("url", "")
+                
+                if not s3_key:
+                    continue
+                
+                # S3 키에서 실제 파일명 추출
+                actual_file_name = s3_key.split("/")[-1] if "/" in s3_key else s3_key
+                
+                # 이미지 파일 확장자 체크
+                image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+                if not any(actual_file_name.lower().endswith(ext) for ext in image_extensions):
+                    continue
+                
+                # 라인 타입 추출 (S3 경로 또는 파일명에서)
+                line_type = None
+                
+                # 방법 1: S3 키 경로에서 라인 타입 추출 (하위 폴더 구조)
+                # 예: "line-quiz-images/A라인/image.jpg" 또는 "line-quiz-images/A/.../image.jpg"
+                for lt in LINE_TYPES:
+                    if f"/{lt}/" in s3_key:
+                        line_type = lt
+                        break
+                
+                # 방법 1-2: 단일 문자 경로에서 라인 타입 추출 (A/, H/, O/, X/)
+                if not line_type:
+                    line_char_map = {"A": "A라인", "H": "H라인", "O": "O라인", "X": "X라인"}
+                    for char, lt in line_char_map.items():
+                        # "line-quiz-images/A/" 또는 "line-quiz-images/A/" 패턴 확인
+                        if f"/{char}/" in s3_key or s3_key.startswith(f"line-quiz-images/{char}/"):
+                            line_type = lt
+                            break
+                
+                # 방법 2: 파일명에서 라인 타입 추출
+                if not line_type:
+                    for lt in LINE_TYPES:
+                        if lt in actual_file_name:
+                            line_type = lt
+                            break
+                
+                # 방법 2-2: 파일명에서 단일 문자로 라인 타입 추출
+                if not line_type:
+                    line_char_map = {"A": "A라인", "H": "H라인", "O": "O라인", "X": "X라인"}
+                    for char, lt in line_char_map.items():
+                        if actual_file_name.startswith(f"{char}/") or f"/{char}/" in actual_file_name:
+                            line_type = lt
+                            break
+                
+                # 방법 3: 상대 경로에서 라인 타입 추출
+                if not line_type:
+                    file_name_path = s3_file.get("file_name", "")
+                    for lt in LINE_TYPES:
+                        if file_name_path.startswith(f"{lt}/"):
+                            line_type = lt
+                            break
+                    
+                    # 방법 3-2: 상대 경로에서 단일 문자로 라인 타입 추출
+                    if not line_type:
+                        line_char_map = {"A": "A라인", "H": "H라인", "O": "O라인", "X": "X라인"}
+                        for char, lt in line_char_map.items():
+                            if file_name_path.startswith(f"{char}/"):
+                                line_type = lt
+                                break
+                
+                # 라인 타입을 찾지 못한 경우 스킵
+                if not line_type:
+                    print(f"[DEBUG] 라인 타입을 찾을 수 없음: s3_key={s3_key}, file_name={actual_file_name}, file_name_path={s3_file.get('file_name', '')}")
+                    continue
+                
+                images.append({
+                    "line_type": line_type,
+                    "image_path": s3_key,
+                    "image_url": s3_url,
+                    "filename": actual_file_name,
+                    "source": "s3"
+                })
+        
+        print(f"[DEBUG] 최종 이미지 개수: {len(images)}")
         
         return JSONResponse({
             "success": True,
             "images": images,
-            "total": len(images)
+            "total": len(images),
+            "folder": folder,
+            "source": "s3" if s3_files else "local",
+            "images_count": len(images)
         })
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JSONResponse({
             "success": False,
             "error": str(e)
