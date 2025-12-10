@@ -372,9 +372,11 @@ async def get_quiz_results(limit: int = 50, offset: int = 0):
                     formatted_results.append({
                         "idx": result.get("idx"),
                         "image_path": result.get("image_path"),
+                        "image_url": result.get("image_url"),
                         "user_answer": result.get("user_answer"),
                         "correct_answer": result.get("correct_answer"),
                         "is_correct": bool(result.get("is_correct")),
+                        "user_id": result.get("user_id"),
                         "user_name": result.get("user_name"),
                         "created_at": result.get("created_at").isoformat() if result.get("created_at") else None
                     })
