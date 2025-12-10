@@ -46,9 +46,13 @@
                             style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
                             ⏱️ 피팅 프로파일링
                         </button>
-                        <button id="tabDressFitting" class="tab-button"
+                            <button id="tabDressFitting" class="tab-button"
                             style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
                             👗 드레스 피팅 로그
+                        </button>
+                        <button id="tabUsageStats" class="tab-button"
+                            style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                            📊 기능별 사용횟수
                         </button>
                         </div>
                         <div class="logs-header-right" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
@@ -287,6 +291,25 @@
                 <!-- 페이지네이션 -->
                 <div class="pagination" id="profile-logs-pagination">
                     <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+
+            <!-- 기능별 사용횟수 통계 -->
+            <div id="usage-stats-section" style="display: none;">
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>기능</th>
+                                <th>사용횟수</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usage-stats-tbody">
+                            <tr>
+                                <td colspan="2" class="loading">데이터를 불러오는 중...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

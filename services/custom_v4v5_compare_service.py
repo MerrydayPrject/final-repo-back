@@ -95,8 +95,15 @@ class V4V5CustomOrchestrator:
             gemini_call_ms = v4_result.get("gemini_call_ms")
             resize_ms = v4_result.get("resize_ms")
         
-        # 커스텀 피팅 로그 저장 (created_at, run_time, dress_url만 저장)
-        if enable_logging and garment_s3_url:
+        # 성공 여부 확인 (v5_result 또는 v4_result 중 하나라도 성공하면 성공으로 간주)
+        is_success = False
+        if isinstance(v5_result, dict) and not isinstance(v5_result, Exception):
+            is_success = v5_result.get("success", False)
+        elif isinstance(v4_result, dict) and not isinstance(v4_result, Exception):
+            is_success = v4_result.get("success", False)
+        
+        # 커스텀 피팅 로그 저장 (성공한 경우에만 저장)
+        if enable_logging and garment_s3_url and is_success:
             try:
                 save_custom_fitting_log(
                     dress_url=garment_s3_url,
