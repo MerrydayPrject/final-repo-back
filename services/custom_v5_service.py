@@ -452,10 +452,37 @@ async def generate_unified_tryon_custom_v5(
         final_img.save(img_buffer, format="PNG")
         result_image_base64 = base64.b64encode(img_buffer.getvalue()).decode()
         
-        # S3 업로드 (현재 비활성화)
-        result_s3_url = ""
-        
         run_time = time.time() - start_time
+        
+        # ============================================================
+        # S3 업로드 및 로그 저장
+        # ============================================================
+        print("\n[CustomV5] S3 업로드 및 로그 저장")
+        
+        person_buffered = io.BytesIO()
+        person_img.save(person_buffered, format="PNG")
+        person_s3_url = upload_log_to_s3(person_buffered.getvalue(), "custom-v5", "person") or ""
+        
+        garment_buffered = io.BytesIO()
+        garment_img.save(garment_buffered, format="PNG")
+        garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), "custom-v5", "garment") or ""
+        
+        garment_nukki_buffered = io.BytesIO()
+        garment_nukki_rgb.save(garment_nukki_buffered, format="PNG")
+        garment_nukki_s3_url = upload_log_to_s3(garment_nukki_buffered.getvalue(), "custom-v5", "garment-nukki") or ""
+        
+        result_s3_url = upload_log_to_s3(img_buffer.getvalue(), "custom-v5", "result") or ""
+        
+        # 로그 저장
+        save_test_log(
+            person_url=person_s3_url,
+            dress_url=garment_s3_url,
+            result_url=result_s3_url,
+            model="custom-v5",
+            prompt=used_prompt[:2000] if used_prompt else "",
+            success=True,
+            run_time=run_time
+        )
         
         print("\n" + "="*80)
         print("[CustomV5] 파이프라인 완료")

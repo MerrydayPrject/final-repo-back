@@ -68,6 +68,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     loadLogs(currentPage);
+    
+    // 처리시간 통계 초기 상태 설정
+    handleProcessingTimeFilterChange();
+    
+    // 처리시간 통계 날짜 필드 초기화 (비워두면 전체 데이터 조회)
+    // 기본값은 비워두어서 전체 데이터를 조회하도록 함
+    // 필요하면 아래 주석을 해제하여 최근 30일로 설정할 수 있음
+    /*
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    const startDateInput = document.getElementById('processing-time-start-date');
+    const endDateInput = document.getElementById('processing-time-end-date');
+    
+    if (startDateInput && !startDateInput.value) {
+        startDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+    }
+    if (endDateInput && !endDateInput.value) {
+        endDateInput.value = today.toISOString().split('T')[0];
+    }
+    */
 
     // 탭 버튼 이벤트 리스너
     const tabSynthesis = document.getElementById('tabSynthesis');
@@ -79,6 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabProfileLogs = document.getElementById('tabProfileLogs');
     const tabDressFitting = document.getElementById('tabDressFitting');
     const tabUsageStats = document.getElementById('tabUsageStats');
+    const tabProcessingTimeStats = document.getElementById('tabProcessingTimeStats');
 
     if (tabSynthesis) {
         tabSynthesis.addEventListener('click', () => switchTab('synthesis'));
@@ -107,8 +130,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (tabUsageStats) {
         tabUsageStats.addEventListener('click', () => switchTab('usage-stats'));
     }
-    if (tabUsageStats) {
-        tabUsageStats.addEventListener('click', () => switchTab('usage-stats'));
+    if (tabProcessingTimeStats) {
+        tabProcessingTimeStats.addEventListener('click', () => switchTab('processing-time-stats'));
     }
 
     // 검색 입력 필드에 Enter 키 이벤트 추가
@@ -145,6 +168,7 @@ function switchTab(tab) {
     const profileLogsSection = document.getElementById('profile-logs-section');
     const dressFittingSection = document.getElementById('dress-fitting-logs-section');
     const usageStatsSection = document.getElementById('usage-stats-section');
+    const processingTimeStatsSection = document.getElementById('processing-time-stats-section');
     const tabSynthesis = document.getElementById('tabSynthesis');
     const tabBodyAnalysis = document.getElementById('tabBodyAnalysis');
     const tabReviews = document.getElementById('tabReviews');
@@ -168,6 +192,7 @@ function switchTab(tab) {
     if (profileLogsSection) profileLogsSection.style.display = 'none';
     if (dressFittingSection) dressFittingSection.style.display = 'none';
     if (usageStatsSection) usageStatsSection.style.display = 'none';
+    if (processingTimeStatsSection) processingTimeStatsSection.style.display = 'none';
 
     // 모든 탭 버튼 초기화
     if (tabSynthesis) {
@@ -214,6 +239,12 @@ function switchTab(tab) {
         tabUsageStats.classList.remove('active');
         tabUsageStats.style.background = '#fff';
         tabUsageStats.style.color = '#333';
+    }
+    const tabProcessingTimeStats = document.getElementById('tabProcessingTimeStats');
+    if (tabProcessingTimeStats) {
+        tabProcessingTimeStats.classList.remove('active');
+        tabProcessingTimeStats.style.background = '#fff';
+        tabProcessingTimeStats.style.color = '#333';
     }
 
     if (tab === 'synthesis') {
@@ -371,6 +402,20 @@ function switchTab(tab) {
         // 다른 탭으로 전환 시 날짜 검색 초기화
         currentSearchDate = null;
         loadUsageStats();
+    } else if (tab === 'processing-time-stats') {
+        if (processingTimeStatsSection) processingTimeStatsSection.style.display = 'block';
+        if (tabProcessingTimeStats) {
+            tabProcessingTimeStats.classList.add('active');
+            tabProcessingTimeStats.style.background = '#007bff';
+            tabProcessingTimeStats.style.color = '#fff';
+        }
+        if (sectionTitle) sectionTitle.textContent = '⏱️ 처리시간 추이';
+        if (logsCountLabel) logsCountLabel.textContent = '';
+        if (searchContainerText) searchContainerText.style.display = 'none';
+        if (searchContainerDate) searchContainerDate.style.display = 'none';
+        // 다른 탭으로 전환 시 날짜 검색 초기화
+        currentSearchDate = null;
+        loadProcessingTimeStats();
     }
 }
 
@@ -2668,6 +2713,290 @@ function renderDressFittingCountsPagination(pagination) {
     html += `<span class="pagination-info">총 ${pagination.total}개 항목 (${pagination.page}/${pagination.total_pages} 페이지)</span>`;
 
     paginationDiv.innerHTML = html;
+}
+
+// 처리시간 추이 통계 관련 변수
+let processingTimeChart = null;
+
+// 처리시간 통계 로드
+async function loadProcessingTimeStats() {
+    try {
+        const headers = window.getAuthHeaders ? window.getAuthHeaders() : {};
+        
+        // 필터 값 가져오기
+        const dataSource = document.querySelector('input[name="data-source"]:checked')?.value || 'result_logs';
+        const groupBy = document.querySelector('input[name="group-by"]:checked')?.value || (dataSource === 'result_logs' ? 'model' : 'date');
+        const startDate = document.getElementById('processing-time-start-date')?.value || null;
+        const endDate = document.getElementById('processing-time-end-date')?.value || null;
+        const model = document.getElementById('model-filter')?.value || null;
+        const endpoint = document.getElementById('endpoint-filter')?.value || null;
+        
+        // URL 파라미터 구성
+        const params = new URLSearchParams();
+        params.append('data_source', dataSource);
+        // result_logs는 항상 model로, tryon_profile은 선택값 사용
+        if (dataSource === 'result_logs') {
+            params.append('group_by', 'model');
+        } else {
+            params.append('group_by', groupBy);
+        }
+        if (startDate && dataSource !== 'result_logs') params.append('start_date', startDate);
+        if (endDate && dataSource !== 'result_logs') params.append('end_date', endDate);
+        // result_logs는 모델별로만 표시하므로 모델 필터 제거
+        if (endpoint && dataSource === 'tryon_profile' && groupBy !== 'model') params.append('endpoint', endpoint);
+        
+        const response = await fetch(`/api/admin/processing-time-stats?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+                ...headers,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+            console.error('처리시간 통계 조회 실패:', result.message || result.error);
+            document.getElementById('processing-time-no-data').style.display = 'block';
+            document.getElementById('processing-time-summary').style.display = 'none';
+            return;
+        }
+        
+        const data = result.data || [];
+        const summary = result.summary || {};
+        const debug = result.debug || {};
+        
+        // 디버깅 정보 콘솔 출력
+        if (debug.total_count !== undefined) {
+            console.log(`[처리시간 통계] 전체 데이터 건수: ${debug.total_count}`);
+            if (debug.filtered_count !== undefined) {
+                console.log(`[처리시간 통계] 필터링된 데이터 건수: ${debug.filtered_count}`);
+            }
+        }
+        
+        // 데이터 없음 처리
+        if (data.length === 0) {
+            document.getElementById('processing-time-no-data').style.display = 'block';
+            document.getElementById('processing-time-no-data').innerHTML = `
+                <p>데이터가 없습니다.</p>
+                ${debug.total_count !== undefined ? `<p style="font-size: 0.9em; color: #6c757d; margin-top: 10px;">전체 데이터 건수: ${debug.total_count}개</p>` : ''}
+                <p style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">날짜 범위를 조정하거나 필터를 변경해보세요.</p>
+            `;
+            document.getElementById('processing-time-summary').style.display = 'none';
+            if (processingTimeChart) {
+                processingTimeChart.destroy();
+                processingTimeChart = null;
+            }
+            return;
+        }
+        
+        document.getElementById('processing-time-no-data').style.display = 'none';
+        
+        // 요약 정보 표시
+        const summaryDiv = document.getElementById('processing-time-summary');
+        if (summaryDiv && summary.min !== null) {
+            document.getElementById('summary-min').textContent = summary.min;
+            document.getElementById('summary-max').textContent = summary.max;
+            document.getElementById('summary-avg').textContent = summary.avg;
+            summaryDiv.style.display = 'block';
+        }
+        
+        // 차트 렌더링
+        console.log('[처리시간 통계] 차트 렌더링 시작, 데이터 개수:', data.length);
+        console.log('[처리시간 통계] 데이터 샘플:', data.slice(0, 3));
+        
+        renderProcessingTimeChart(data);
+        
+    } catch (error) {
+        console.error('처리시간 통계 로드 오류:', error);
+        document.getElementById('processing-time-no-data').style.display = 'block';
+        document.getElementById('processing-time-summary').style.display = 'none';
+    }
+}
+
+// 처리시간 차트 렌더링
+function renderProcessingTimeChart(data) {
+    try {
+        const ctx = document.getElementById('processing-time-chart');
+        if (!ctx) {
+            console.error('[처리시간 통계] 차트 캔버스 요소를 찾을 수 없습니다.');
+            return;
+        }
+        
+        // 기존 차트가 있으면 제거
+        if (processingTimeChart) {
+            processingTimeChart.destroy();
+            processingTimeChart = null;
+        }
+        
+        // 데이터 유효성 검사
+        if (!data || data.length === 0) {
+            console.warn('[처리시간 통계] 렌더링할 데이터가 없습니다.');
+            return;
+        }
+        
+        // 날짜/모델과 시간 데이터 추출
+        const labels = data.map(item => item.date);
+        const times = data.map(item => item.average_time);
+        
+        // 모델별 그룹화일 경우 모델명을 더 읽기 쉽게 표시
+        const dataSource = document.querySelector('input[name="data-source"]:checked')?.value || 'result_logs';
+        const groupBy = document.querySelector('input[name="group-by"]:checked')?.value || (dataSource === 'result_logs' ? 'model' : 'date');
+        const formattedLabels = labels.map(label => {
+            if (groupBy === 'model' || dataSource === 'result_logs') {
+                // 모델명을 더 읽기 쉽게 변환
+                if (label === 'general-fitting') return '일반 피팅';
+                if (label === 'custom-fitting') return '커스텀 피팅';
+                if (label === '/tryon/compare') return '일반 피팅';
+                if (label === '/tryon/compare/custom') return '커스텀 피팅';
+                return label;
+            }
+            return label;
+        });
+        
+        console.log('[처리시간 통계] 추출된 레이블 개수:', labels.length);
+        console.log('[처리시간 통계] 추출된 시간 데이터 개수:', times.length);
+        console.log('[처리시간 통계] 레이블 샘플:', labels.slice(0, 3));
+        console.log('[처리시간 통계] 시간 데이터 샘플:', times.slice(0, 3));
+        
+        // Chart.js가 로드되었는지 확인
+        if (typeof Chart === 'undefined') {
+            console.error('[처리시간 통계] Chart.js가 로드되지 않았습니다.');
+            return;
+        }
+        
+        // Chart.js 차트 생성
+        processingTimeChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: formattedLabels,
+            datasets: [{
+                label: '평균 처리시간 (초)',
+                data: times,
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                tension: 0.1,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            aspectRatio: 2,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        afterLabel: function(context) {
+                            const index = context.dataIndex;
+                            const count = data[index].count;
+                            return `건수: ${count}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: (() => {
+                            try {
+                                const dataSource = document.querySelector('input[name="data-source"]:checked')?.value || 'result_logs';
+                                const groupBy = document.querySelector('input[name="group-by"]:checked')?.value || 'date';
+                                if (dataSource === 'result_logs') {
+                                    return '모델';
+                                }
+                                return groupBy === 'model' ? '모델' : '날짜';
+                            } catch (e) {
+                                return '날짜';
+                            }
+                        })()
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: '처리시간 (초)'
+                    },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    console.log('[처리시간 통계] 차트 생성 완료');
+    } catch (error) {
+        console.error('[처리시간 통계] 차트 렌더링 오류:', error);
+        console.error('[처리시간 통계] 오류 스택:', error.stack);
+    }
+}
+
+// 처리시간 필터 변경 핸들러
+function handleProcessingTimeFilterChange() {
+    const dataSource = document.querySelector('input[name="data-source"]:checked')?.value || 'result_logs';
+    const groupBy = document.querySelector('input[name="group-by"]:checked')?.value || 'date';
+    
+    // result_logs는 모델별만 표시, tryon_profile은 날짜별/모델별 선택 가능
+    const tryonProfileGroupBy = document.getElementById('tryon-profile-group-by');
+    const modelFilterContainer = document.getElementById('model-filter-container');
+    const endpointFilterContainer = document.getElementById('endpoint-filter-container');
+    const dateFilterContainer = document.querySelector('.date-filter-container') || 
+        document.getElementById('processing-time-start-date')?.parentElement?.parentElement;
+    
+    if (dataSource === 'result_logs') {
+        // result_logs는 모델별만, 필터 숨김
+        if (tryonProfileGroupBy) tryonProfileGroupBy.style.display = 'none';
+        if (modelFilterContainer) modelFilterContainer.style.display = 'none';
+        if (endpointFilterContainer) endpointFilterContainer.style.display = 'none';
+        if (dateFilterContainer) dateFilterContainer.style.display = 'none';
+    } else {
+        // tryon_profile은 그룹화 옵션 표시
+        if (tryonProfileGroupBy) tryonProfileGroupBy.style.display = 'block';
+        if (dateFilterContainer) dateFilterContainer.style.display = 'flex';
+        
+        if (groupBy === 'model') {
+            // 모델별 그룹화 시 필터 숨김
+            if (modelFilterContainer) modelFilterContainer.style.display = 'none';
+            if (endpointFilterContainer) endpointFilterContainer.style.display = 'none';
+        } else {
+            // 날짜별 그룹화 시 엔드포인트 필터 표시
+            if (modelFilterContainer) modelFilterContainer.style.display = 'none';
+            if (endpointFilterContainer) endpointFilterContainer.style.display = 'block';
+        }
+    }
+    
+    // 차트 다시 로드
+    loadProcessingTimeStats();
+}
+
+// 처리시간 필터 초기화
+function resetProcessingTimeFilters() {
+    // 날짜 필드를 비워서 전체 데이터 조회
+    const startDateInput = document.getElementById('processing-time-start-date');
+    const endDateInput = document.getElementById('processing-time-end-date');
+    
+    if (startDateInput) {
+        startDateInput.value = '';
+    }
+    if (endDateInput) {
+        endDateInput.value = '';
+    }
+    
+    // 모델/엔드포인트 필터 초기화
+    const modelFilter = document.getElementById('model-filter');
+    const endpointFilter = document.getElementById('endpoint-filter');
+    if (modelFilter) modelFilter.value = '';
+    if (endpointFilter) endpointFilter.value = '';
+    
+    // 차트 다시 로드
+    loadProcessingTimeStats();
 }
 
 

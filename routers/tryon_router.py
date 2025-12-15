@@ -290,10 +290,10 @@ async def compose_v5v5(
         garment_img = Image.open(io.BytesIO(garment_bytes)).convert("RGB")
         background_img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
         
-        # V4V5일반 비교 실행 (로깅 비활성화 - 프론트엔드 일반 피팅용)
-        # enable_logging=False: S3 업로드 및 DB 로그 저장 비활성화
-        print("[DEBUG 라우터] /fit/v5v5/compose - enable_logging=False로 호출")
-        result = await run_v4v5_compare(person_img, garment_img, background_img, enable_logging=False)
+        # V4V5일반 비교 실행 (로깅 활성화 - 문서용 로그에 기록)
+        # enable_logging=True: S3 업로드 및 DB 로그 저장 활성화
+        print("[DEBUG 라우터] /fit/v5v5/compose - enable_logging=True로 호출 (문서용 로그 활성화)")
+        result = await run_v4v5_compare(person_img, garment_img, background_img, enable_logging=True)
         
         # v5_result만 반환
         if result.get("success") and result.get("v5_result"):

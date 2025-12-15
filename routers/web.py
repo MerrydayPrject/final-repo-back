@@ -195,6 +195,16 @@ async def prompt_test_page(request: Request):
     return templates.TemplateResponse("prompt_test.html", {"request": request})
 
 
+@router.get("/synthesis-quality", response_class=HTMLResponse, tags=["Web Interface"])
+async def synthesis_quality_page(request: Request):
+    """
+    합성 품질 분석 페이지
+    
+    로깅된 합성 결과 이미지를 Gemini3로 평가하고 성공률을 확인하는 페이지
+    """
+    return templates.TemplateResponse("synthesis_quality.html", {"request": request})
+
+
 @router.get("/favicon.ico")
 async def favicon():
     """파비콘 제공"""

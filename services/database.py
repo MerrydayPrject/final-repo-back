@@ -329,6 +329,25 @@ def init_database():
             connection.commit()
             print("DB 테이블 생성 완료: tryon_profile_summary")
             
+            # synthesis_quality_evaluations 테이블 생성
+            create_synthesis_quality_evaluations_table = """
+            CREATE TABLE IF NOT EXISTS synthesis_quality_evaluations (
+                idx INT AUTO_INCREMENT PRIMARY KEY,
+                result_log_idx INT NOT NULL COMMENT 'result_logs.idx 참조',
+                quality_score INT NOT NULL COMMENT '평가 점수 (0-100)',
+                quality_comment TEXT COMMENT '평가 상세 내용',
+                is_success BOOLEAN NOT NULL COMMENT '성공 여부 (점수 70점 이상)',
+                evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '평가 시간',
+                INDEX idx_result_log_idx (result_log_idx),
+                INDEX idx_is_success (is_success),
+                INDEX idx_evaluated_at (evaluated_at),
+                FOREIGN KEY (result_log_idx) REFERENCES result_logs(idx) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='합성 품질 평가 결과';
+            """
+            cursor.execute(create_synthesis_quality_evaluations_table)
+            connection.commit()
+            print("DB 테이블 생성 완료: synthesis_quality_evaluations")
+            
             # dress_fitting_logs 테이블 생성
             create_dress_fitting_logs_table = """
             CREATE TABLE IF NOT EXISTS dress_fitting_logs (

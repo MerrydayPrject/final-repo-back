@@ -2780,6 +2780,32 @@ async def generate_unified_tryon_v5(
         
         run_time = time.time() - start_time
         
+        # ============================================================
+        # S3 업로드 및 로그 저장
+        # ============================================================
+        print("\n[V5] S3 업로드 및 로그 저장")
+        
+        person_buffered = io.BytesIO()
+        person_img.save(person_buffered, format="PNG")
+        person_s3_url = upload_log_to_s3(person_buffered.getvalue(), "v5", "person") or ""
+        
+        garment_buffered = io.BytesIO()
+        garment_img.save(garment_buffered, format="PNG")
+        garment_s3_url = upload_log_to_s3(garment_buffered.getvalue(), "v5", "garment") or ""
+        
+        result_s3_url = upload_log_to_s3(img_buffer.getvalue(), "v5", "result") or ""
+        
+        # 로그 저장
+        save_test_log(
+            person_url=person_s3_url,
+            dress_url=garment_s3_url,
+            result_url=result_s3_url,
+            model="v5",
+            prompt=used_prompt[:2000] if used_prompt else "",
+            success=True,
+            run_time=run_time
+        )
+        
         print("\n" + "="*80)
         print("[V5] 파이프라인 완료")
         print("="*80)

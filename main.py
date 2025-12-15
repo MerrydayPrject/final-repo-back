@@ -55,7 +55,7 @@ from routers import (
     proxy, models, tryon_router, body_generation, fitting_router,
     custom_v3_router, custom_v4_router, custom_v5_router, custom_v4v5_router,
     review, auth, visitor_router, nukki_v2_router, prompt_test_router,
-    line_quiz_router
+    line_quiz_router, synthesis_quality_router
 )
 
 app.include_router(info.router)
@@ -82,6 +82,7 @@ app.include_router(visitor_router.router)
 app.include_router(nukki_v2_router.router)
 app.include_router(prompt_test_router.router)
 app.include_router(line_quiz_router.router)
+app.include_router(synthesis_quality_router.router)
 
 # Startup 이벤트
 @app.on_event("startup")

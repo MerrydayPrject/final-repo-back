@@ -1518,3 +1518,291 @@ async def get_dress_fitting_counts(request: Request, page: int = Query(1, ge=1),
             "message": f"드레스별 카운트 조회 중 오류가 발생했습니다: {str(e)}"
         }, status_code=500)
 
+
+@router.get("/api/admin/processing-time-stats", tags=["관리자"])
+async def get_processing_time_stats(
+    request: Request,
+    data_source: str = Query("result_logs", description="데이터 소스 (result_logs 또는 tryon_profile)"),
+    start_date: Optional[str] = Query(None, description="시작 날짜 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="종료 날짜 (YYYY-MM-DD)"),
+    model: Optional[str] = Query(None, description="모델 필터 (result_logs용: general-fitting, custom-fitting)"),
+    endpoint: Optional[str] = Query(None, description="엔드포인트 필터 (tryon_profile용: /tryon/compare, /tryon/compare/custom)"),
+    group_by: str = Query("date", description="그룹화 방식 (date 또는 model)")
+):
+    """
+    처리시간 추이 통계 조회
+    
+    result_logs 또는 tryon_profile_summary 테이블에서 날짜별 평균 처리시간을 조회합니다.
+    """
+    # 인증 확인
+    await require_admin(request)
+    
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return JSONResponse({
+                "success": False,
+                "error": "Database connection failed",
+                "message": "데이터베이스 연결에 실패했습니다."
+            }, status_code=500)
+        
+        try:
+            with connection.cursor() as cursor:
+                # 날짜 범위 설정: 둘 다 없으면 전체 데이터 조회, 둘 다 있으면 그대로 사용
+                use_date_filter = start_date and end_date
+                
+                if not start_date and not end_date:
+                    # 둘 다 없으면 전체 데이터 조회 (날짜 필터 없음)
+                    pass
+                elif not start_date:
+                    # start_date만 없으면 end_date 이전 30일로 설정
+                    cursor.execute("SELECT DATE_SUB(%s, INTERVAL 30 DAY) as start_date", (end_date,))
+                    date_range = cursor.fetchone()
+                    start_date = date_range['start_date'].isoformat() if hasattr(date_range['start_date'], 'isoformat') else str(date_range['start_date'])
+                    use_date_filter = True
+                elif not end_date:
+                    # end_date만 없으면 start_date부터 오늘까지
+                    cursor.execute("SELECT CURDATE() as end_date")
+                    date_range = cursor.fetchone()
+                    end_date = date_range['end_date'].isoformat() if hasattr(date_range['end_date'], 'isoformat') else str(date_range['end_date'])
+                    use_date_filter = True
+                
+                data = []
+                summary = {"min": None, "max": None, "avg": None}
+                
+                if data_source == "result_logs":
+                    # result_logs 테이블에서 날짜별 평균 run_time 조회
+                    where_clauses = []
+                    params = []
+                    
+                    if use_date_filter:
+                        # created_at이 NULL인 경우도 처리하기 위해 COALESCE 사용
+                        where_clauses.append("COALESCE(DATE(created_at), DATE('1970-01-01')) BETWEEN %s AND %s")
+                        params.extend([start_date, end_date])
+                    
+                    # result_logs는 모델별만 지원하므로 model 필터 제거
+                    # 모든 모델을 표시하기 위해 필터 제거
+                    
+                    where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+                    
+                    # 디버깅: created_at이 NULL인 레코드 확인
+                    debug_query = f"SELECT COUNT(*) as null_count FROM result_logs WHERE created_at IS NULL"
+                    cursor.execute(debug_query)
+                    null_count = cursor.fetchone()['null_count']
+                    print(f"[처리시간 통계] created_at이 NULL인 레코드 개수: {null_count}")
+                    
+                    # created_at이 있는 레코드 샘플 확인
+                    sample_query = f"SELECT created_at, run_time FROM result_logs WHERE created_at IS NOT NULL LIMIT 3"
+                    cursor.execute(sample_query)
+                    samples = cursor.fetchall()
+                    print(f"[처리시간 통계] created_at 샘플: {samples}")
+                    
+                    # result_logs는 항상 모델별로 그룹화 (성공한 데이터만)
+                    where_clauses.append("success = TRUE")
+                    where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+                    
+                    # 모델별로 그룹화 (성공한 데이터만)
+                    query = f"""
+                        SELECT 
+                            model as date,
+                            AVG(run_time) as average_time,
+                            COUNT(*) as count
+                        FROM result_logs
+                        {where_clause}
+                        GROUP BY model
+                        ORDER BY model ASC
+                    """
+                    
+                    print(f"[처리시간 통계] 실행 쿼리: {query}")
+                    print(f"[처리시간 통계] 쿼리 파라미터: {params}")
+                    
+                    try:
+                        cursor.execute(query, tuple(params))
+                        results = cursor.fetchall() or []
+                        
+                        # 디버깅: 쿼리 결과 개수 출력
+                        print(f"[처리시간 통계] result_logs 쿼리 결과 개수: {len(results)}")
+                        if results:
+                            print(f"[처리시간 통계] 첫 번째 결과 샘플: {results[0]}")
+                        
+                        for row in results:
+                            date_val = row.get('date')
+                            # DATE_FORMAT 결과가 None이거나 빈 문자열인 경우
+                            if not date_val or date_val == '' or date_val == 'None':
+                                print(f"[처리시간 통계] 날짜가 None 또는 빈 문자열인 행 건너뜀: {row}")
+                                print(f"[처리시간 통계] 디버깅: date_val 타입={type(date_val)}, 값={repr(date_val)}")
+                                continue
+                            
+                            # 문자열로 변환 (이미 문자열이어야 하지만 안전하게)
+                            date_str = str(date_val).strip()
+                            if not date_str or date_str == 'None':
+                                print(f"[처리시간 통계] 날짜 변환 후에도 None인 행 건너뜀: {row}")
+                                continue
+                            
+                            avg_time = float(row.get('average_time', 0)) if row.get('average_time') else 0.0
+                            
+                            data.append({
+                                "date": date_str,
+                                "average_time": round(avg_time, 2),
+                                "count": row.get('count', 0)
+                            })
+                        
+                        print(f"[처리시간 통계] 최종 data 배열 길이: {len(data)}")
+                        
+                        # 요약 통계 계산
+                        if data:
+                            times = [item["average_time"] for item in data]
+                            summary["min"] = round(min(times), 2)
+                            summary["max"] = round(max(times), 2)
+                            summary["avg"] = round(sum(times) / len(times), 2)
+                    
+                    except Exception as query_error:
+                        print(f"[처리시간 통계] 쿼리 오류: {query_error}")
+                        error_str = str(query_error).lower()
+                        if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                            data = []
+                        else:
+                            raise
+                
+                elif data_source == "tryon_profile":
+                    # tryon_profile_summary 테이블에서 날짜별 평균 server_total_ms 조회 (밀리초를 초로 변환)
+                    where_clauses = []
+                    params = []
+                    
+                    if use_date_filter:
+                        where_clauses.append("DATE(created_at) BETWEEN %s AND %s")
+                        params.extend([start_date, end_date])
+                    
+                    if endpoint:
+                        where_clauses.append("endpoint = %s")
+                        params.append(endpoint)
+                    
+                    # created_at IS NOT NULL 조건 추가
+                    where_clauses.append("created_at IS NOT NULL")
+                    
+                    where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+                    
+                    if group_by == "model":
+                        # 엔드포인트별로 그룹화 (tryon_profile의 경우 endpoint가 모델 역할)
+                        query = f"""
+                            SELECT 
+                                endpoint as date,
+                                AVG(server_total_ms) / 1000.0 as average_time,
+                                COUNT(*) as count
+                            FROM tryon_profile_summary
+                            {where_clause}
+                            GROUP BY endpoint
+                            ORDER BY endpoint ASC
+                        """
+                    else:
+                        # 날짜별로 그룹화 (기존 방식)
+                        query = f"""
+                            SELECT 
+                                DATE_FORMAT(created_at, '%%Y-%%m-%%d') as date,
+                                AVG(server_total_ms) / 1000.0 as average_time,
+                                COUNT(*) as count
+                            FROM tryon_profile_summary
+                            {where_clause}
+                            GROUP BY DATE_FORMAT(created_at, '%%Y-%%m-%%d')
+                            ORDER BY DATE_FORMAT(created_at, '%%Y-%%m-%%d') ASC
+                        """
+                    
+                    try:
+                        cursor.execute(query, tuple(params))
+                        results = cursor.fetchall() or []
+                        
+                        # 디버깅: 쿼리 결과 개수 출력
+                        print(f"[처리시간 통계] tryon_profile 쿼리 결과 개수: {len(results)}")
+                        if results:
+                            print(f"[처리시간 통계] 첫 번째 결과 샘플: {results[0]}")
+                        
+                        for row in results:
+                            date_val = row.get('date')
+                            # DATE_FORMAT 결과가 None이거나 빈 문자열인 경우
+                            if not date_val or date_val == '' or date_val == 'None':
+                                print(f"[처리시간 통계] 날짜가 None 또는 빈 문자열인 행 건너뜀: {row}")
+                                print(f"[처리시간 통계] 디버깅: date_val 타입={type(date_val)}, 값={repr(date_val)}")
+                                continue
+                            
+                            # 문자열로 변환 (이미 문자열이어야 하지만 안전하게)
+                            date_str = str(date_val).strip()
+                            if not date_str or date_str == 'None':
+                                print(f"[처리시간 통계] 날짜 변환 후에도 None인 행 건너뜀: {row}")
+                                continue
+                            
+                            avg_time = float(row.get('average_time', 0)) if row.get('average_time') else 0.0
+                            
+                            data.append({
+                                "date": date_str,
+                                "average_time": round(avg_time, 2),
+                                "count": row.get('count', 0)
+                            })
+                        
+                        print(f"[처리시간 통계] 최종 data 배열 길이: {len(data)}")
+                        
+                        # 요약 통계 계산
+                        if data:
+                            times = [item["average_time"] for item in data]
+                            summary["min"] = round(min(times), 2)
+                            summary["max"] = round(max(times), 2)
+                            summary["avg"] = round(sum(times) / len(times), 2)
+                    
+                    except Exception as query_error:
+                        print(f"[처리시간 통계] tryon_profile 쿼리 오류: {query_error}")
+                        error_str = str(query_error).lower()
+                        if any(keyword in error_str for keyword in ["table", "doesn't exist", "unknown table", "1146"]):
+                            data = []
+                        else:
+                            raise
+                
+                else:
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Invalid data_source",
+                        "message": "data_source는 'result_logs' 또는 'tryon_profile'이어야 합니다."
+                    }, status_code=400)
+                
+                # 디버깅 정보 추가: 전체 데이터 건수 확인
+                debug_info = {}
+                try:
+                    if data_source == "result_logs":
+                        cursor.execute("SELECT COUNT(*) as total FROM result_logs")
+                        debug_info["total_count"] = cursor.fetchone()['total']
+                        if model:
+                            cursor.execute("SELECT COUNT(*) as filtered_count FROM result_logs WHERE model = %s", (model,))
+                            debug_info["filtered_count"] = cursor.fetchone()['filtered_count']
+                    elif data_source == "tryon_profile":
+                        cursor.execute("SELECT COUNT(*) as total FROM tryon_profile_summary")
+                        debug_info["total_count"] = cursor.fetchone()['total']
+                        if endpoint:
+                            cursor.execute("SELECT COUNT(*) as filtered_count FROM tryon_profile_summary WHERE endpoint = %s", (endpoint,))
+                            debug_info["filtered_count"] = cursor.fetchone()['filtered_count']
+                except Exception as e:
+                    debug_info["error"] = str(e)
+                
+                # 디버깅: 반환되는 데이터 개수 확인
+                print(f"[처리시간 통계] 최종 반환 data 개수: {len(data)}")
+                
+                return JSONResponse({
+                    "success": True,
+                    "data": data,
+                    "summary": summary,
+                    "debug": debug_info,
+                    "date_filter_used": use_date_filter
+                })
+        
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"처리시간 통계 조회 오류: {error_detail}")
+        
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "error_detail": error_detail,
+            "message": f"처리시간 통계 조회 중 오류 발생: {str(e)}"
+        }, status_code=500)
+

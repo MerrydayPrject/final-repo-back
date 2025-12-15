@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>옷 합성 시스템 관리자 페이지</title>
     <link rel="stylesheet" href="/static/admin.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 
 <body>
@@ -53,6 +54,10 @@
                         <button id="tabUsageStats" class="tab-button"
                             style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
                             📊 기능별 사용횟수
+                        </button>
+                        <button id="tabProcessingTimeStats" class="tab-button"
+                            style="padding: 10px 20px; border: 1px solid #ddd; background: #fff; color: #333; cursor: pointer; border-radius: 5px;">
+                            ⏱️ 처리시간 추이
                         </button>
                         </div>
                         <div class="logs-header-right" style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
@@ -310,6 +315,96 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- 처리시간 추이 통계 -->
+            <div id="processing-time-stats-section" style="display: none;">
+                <!-- 필터 컨트롤 -->
+                <div style="margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin-bottom: 15px;">
+                        <div>
+                            <label style="font-weight: bold; margin-right: 10px;">데이터 소스:</label>
+                            <label style="margin-right: 15px;">
+                                <input type="radio" name="data-source" value="result_logs" checked onchange="handleProcessingTimeFilterChange()">
+                                result_logs (모델별)
+                            </label>
+                            <label style="margin-right: 15px;">
+                                <input type="radio" name="data-source" value="tryon_profile" onchange="handleProcessingTimeFilterChange()">
+                                tryon_profile
+                            </label>
+                        </div>
+                        <div id="tryon-profile-group-by" style="display: none;">
+                            <label style="font-weight: bold; margin-right: 10px;">그룹화:</label>
+                            <label style="margin-right: 15px;">
+                                <input type="radio" name="group-by" value="date" checked onchange="handleProcessingTimeFilterChange()">
+                                날짜별
+                            </label>
+                            <label>
+                                <input type="radio" name="group-by" value="model" onchange="handleProcessingTimeFilterChange()">
+                                모델별
+                            </label>
+                        </div>
+                        <div id="model-filter-container" style="display: block;">
+                            <label style="font-weight: bold; margin-right: 10px;">모델:</label>
+                            <select id="model-filter" onchange="handleProcessingTimeFilterChange()" style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">전체</option>
+                                <option value="general-fitting">일반 피팅</option>
+                                <option value="custom-fitting">커스텀 피팅</option>
+                            </select>
+                        </div>
+                        <div id="endpoint-filter-container" style="display: none;">
+                            <label style="font-weight: bold; margin-right: 10px;">엔드포인트:</label>
+                            <select id="endpoint-filter" onchange="handleProcessingTimeFilterChange()" style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">전체</option>
+                                <option value="/tryon/compare">일반 피팅</option>
+                                <option value="/tryon/compare/custom">커스텀 피팅</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
+                        <div>
+                            <label style="font-weight: bold; margin-right: 10px;">시작 날짜:</label>
+                            <input type="date" id="processing-time-start-date" onchange="handleProcessingTimeFilterChange()" 
+                                style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div>
+                            <label style="font-weight: bold; margin-right: 10px;">종료 날짜:</label>
+                            <input type="date" id="processing-time-end-date" onchange="handleProcessingTimeFilterChange()" 
+                                style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <button onclick="resetProcessingTimeFilters()" style="padding: 5px 15px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            초기화
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 통계 요약 -->
+                <div id="processing-time-summary" style="margin-bottom: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px; display: none;">
+                    <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                        <div>
+                            <span style="font-weight: bold; margin-right: 10px;">최소:</span>
+                            <span id="summary-min">-</span>초
+                        </div>
+                        <div>
+                            <span style="font-weight: bold; margin-right: 10px;">최대:</span>
+                            <span id="summary-max">-</span>초
+                        </div>
+                        <div>
+                            <span style="font-weight: bold; margin-right: 10px;">평균:</span>
+                            <span id="summary-avg">-</span>초
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 차트 컨테이너 -->
+                <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <canvas id="processing-time-chart" style="max-height: 500px;"></canvas>
+                </div>
+
+                <!-- 데이터 없음 메시지 -->
+                <div id="processing-time-no-data" style="display: none; text-align: center; padding: 40px; color: #6c757d;">
+                    <p>데이터가 없습니다.</p>
                 </div>
             </div>
 
