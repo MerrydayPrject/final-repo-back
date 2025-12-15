@@ -205,6 +205,16 @@ async def synthesis_quality_page(request: Request):
     return templates.TemplateResponse("synthesis_quality.html", {"request": request})
 
 
+@router.get("/admin/line-quiz-upload", response_class=HTMLResponse, tags=["관리자"])
+async def line_quiz_upload_page(request: Request):
+    """
+    라인 퀴즈 이미지 업로드 페이지
+    
+    라인 퀴즈용 이미지를 S3에 업로드하는 페이지
+    """
+    return templates.TemplateResponse("line_quiz_upload.html", {"request": request})
+
+
 @router.get("/favicon.ico")
 async def favicon():
     """파비콘 제공"""

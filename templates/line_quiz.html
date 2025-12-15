@@ -379,6 +379,168 @@
             100% { transform: rotate(360deg); }
         }
 
+        .upload-section {
+            background: #f9f9f9;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: none;
+        }
+
+        .upload-section.active {
+            display: block;
+        }
+
+        .upload-toggle {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .upload-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px 20px;
+            text-align: center;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover {
+            background: #f0f0ff;
+            border-color: #764ba2;
+        }
+
+        .upload-area.dragover {
+            background: #e8e8ff;
+            border-color: #4caf50;
+        }
+
+        .upload-images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .upload-image-item {
+            position: relative;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+        }
+
+        .upload-image-item img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+        }
+
+        .upload-image-item .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            cursor: pointer;
+            font-size: 0.8em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .upload-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn-upload-small {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 8px;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-upload-small:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-upload-small:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-clear-small {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 8px;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-clear-small:hover {
+            background: #d32f2f;
+            transform: translateY(-2px);
+        }
+
+        .upload-progress {
+            margin-top: 15px;
+            display: none;
+        }
+
+        .upload-progress.active {
+            display: block;
+        }
+
+        .upload-result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .upload-result.success {
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+            color: #2e7d32;
+        }
+
+        .upload-result.error {
+            background: #ffebee;
+            border: 2px solid #f44336;
+            color: #c62828;
+        }
+
         @media (max-width: 768px) {
             .quiz-section {
                 grid-template-columns: 1fr;
@@ -495,19 +657,45 @@
         let correctCount = 0;
         let totalAnswered = 0;
 
-        // 로컬 스토리지에서 통계 로드
-        function loadStats() {
-            const savedStats = localStorage.getItem('lineQuizStats');
-            if (savedStats) {
-                const stats = JSON.parse(savedStats);
-                correctCount = stats.correctCount || 0;
-                totalAnswered = stats.totalAnswered || 0;
-            }
-            
-            // 상세 답변 기록 로드
-            const savedAnswers = localStorage.getItem('lineQuizAnswers');
-            if (!savedAnswers) {
-                localStorage.setItem('lineQuizAnswers', JSON.stringify([]));
+        // DB에서 전체 통계 로드 (모든 사용자 누적)
+        async function loadStats() {
+            try {
+                // DB에서 전체 통계 가져오기
+                const response = await fetch('/api/line-quiz/results?limit=1');
+                const data = await response.json();
+                
+                if (data.success && data.statistics) {
+                    // DB 통계 사용 (모든 사용자 누적)
+                    totalAnswered = data.statistics.total || 0;
+                    correctCount = data.statistics.correct || 0;
+                } else {
+                    // DB에 데이터가 없으면 localStorage에서 가져오기 (대체)
+                    const savedStats = localStorage.getItem('lineQuizStats');
+                    if (savedStats) {
+                        const stats = JSON.parse(savedStats);
+                        correctCount = stats.correctCount || 0;
+                        totalAnswered = stats.totalAnswered || 0;
+                    }
+                }
+                
+                // 상세 답변 기록 로드 (localStorage는 백업용)
+                const savedAnswers = localStorage.getItem('lineQuizAnswers');
+                if (!savedAnswers) {
+                    localStorage.setItem('lineQuizAnswers', JSON.stringify([]));
+                }
+                
+                // 통계 업데이트
+                updateStats();
+            } catch (error) {
+                console.error('통계 로드 오류:', error);
+                // 오류 발생 시 localStorage에서 가져오기
+                const savedStats = localStorage.getItem('lineQuizStats');
+                if (savedStats) {
+                    const stats = JSON.parse(savedStats);
+                    correctCount = stats.correctCount || 0;
+                    totalAnswered = stats.totalAnswered || 0;
+                }
+                updateStats();
             }
         }
 
@@ -555,25 +743,94 @@
             return shuffled;
         }
 
+        // 이미지 로드 성공 핸들러
+        function handleImageLoad(img, filename) {
+            console.log(`[DEBUG] 이미지 로드 성공: ${filename}`);
+        }
+
+        // 이미지 로드 실패 핸들러
+        function handleImageError(img, imageUrl, filename) {
+            console.error(`[ERROR] 이미지 로드 실패:`, {
+                filename: filename,
+                image_url: imageUrl,
+                error: '이미지를 불러올 수 없습니다.'
+            });
+            
+            // 에러 메시지 표시
+            const container = document.getElementById('imageContainer');
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #f44336;">
+                    <p style="font-size: 1.2em; margin-bottom: 10px;">⚠️ 이미지를 불러올 수 없습니다</p>
+                    <p style="font-size: 0.9em; color: #666; margin-bottom: 5px;">파일명: ${filename}</p>
+                    <p style="font-size: 0.8em; color: #999; word-break: break-all;">URL: ${imageUrl}</p>
+                    <p style="font-size: 0.9em; color: #666; margin-top: 20px;">다음 이미지로 넘어가거나 페이지를 새로고침해주세요.</p>
+                </div>
+            `;
+        }
+
         // 이미지 리스트 로드
         async function loadImages() {
             try {
+                console.log('[DEBUG] 이미지 로드 시작...');
                 const response = await fetch('/api/line-quiz/images');
                 const data = await response.json();
                 
+                console.log('[DEBUG] API 응답:', {
+                    success: data.success,
+                    total: data.total,
+                    source: data.source,
+                    images_count: data.images ? data.images.length : 0
+                });
+                
                 if (data.success) {
-                    images = shuffleArray(data.images); // 랜덤 셔플
-                    if (images.length > 0) {
-                        loadCurrentImage();
+                    if (data.images && data.images.length > 0) {
+                        images = data.images; // 셔플하지 않음 (랜덤 인덱스로 선택)
+                        console.log('[DEBUG] 이미지 로드 성공:', images.length, '개');
+                        
+                        // 초기 이미지도 랜덤으로 선택 (중복 없이)
+                        const usedIndices = JSON.parse(sessionStorage.getItem('usedIndices') || '[]');
+                        
+                        // 모든 이미지를 다 봤으면 테스트 완료 표시
+                        if (usedIndices.length >= images.length) {
+                            document.getElementById('imageContainer').innerHTML = `
+                                <div style="text-align: center; padding: 40px;">
+                                    <h2 style="color: #4CAF50; margin-bottom: 20px;">🎉 테스트 완료!</h2>
+                                    <p style="font-size: 18px; margin-bottom: 10px;">모든 ${images.length}개의 문제를 완료하셨습니다.</p>
+                                    <p style="font-size: 16px; color: #666; margin-bottom: 30px;">통계 페이지에서 결과를 확인하세요.</p>
+                                    <button onclick="window.location.href='/line-quiz-stats'" style="padding: 12px 24px; font-size: 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                        통계 보기
+                                    </button>
+                                </div>
+                            `;
+                            document.getElementById('submitBtn').style.display = 'none';
+                            document.querySelectorAll('.line-btn').forEach(btn => btn.style.display = 'none');
+                        } else {
+                            // 아직 안 본 이미지 중에서 랜덤 선택
+                            let initialIndex;
+                            do {
+                                initialIndex = Math.floor(Math.random() * images.length);
+                            } while (usedIndices.includes(initialIndex));
+                            
+                            usedIndices.push(initialIndex);
+                            sessionStorage.setItem('usedIndices', JSON.stringify(usedIndices));
+                            
+                            currentImageIndex = initialIndex;
+                            loadCurrentImage();
+                        }
+                    } else {
+                        console.warn('[DEBUG] 이미지가 없습니다.');
+                        document.getElementById('imageContainer').innerHTML = 
+                            '<p style="text-align: center; color: #f44336;">이미지가 없습니다. S3에 이미지를 업로드해주세요.</p>';
                     }
                 } else {
+                    console.error('[DEBUG] API 오류:', data.error);
                     document.getElementById('imageContainer').innerHTML = 
-                        '<p style="text-align: center; color: #f44336;">이미지를 불러올 수 없습니다.</p>';
+                        `<p style="text-align: center; color: #f44336;">이미지를 불러올 수 없습니다: ${data.error || '알 수 없는 오류'}</p>`;
                 }
             } catch (error) {
-                console.error('이미지 로드 오류:', error);
+                console.error('[DEBUG] 이미지 로드 오류:', error);
                 document.getElementById('imageContainer').innerHTML = 
-                    '<p style="text-align: center; color: #f44336;">오류가 발생했습니다.</p>';
+                    `<p style="text-align: center; color: #f44336;">오류가 발생했습니다: ${error.message}</p>`;
             }
         }
 
@@ -604,8 +861,21 @@
             
             const currentImage = images[currentImageIndex];
             const container = document.getElementById('imageContainer');
+            
+            // 이미지 URL 디버깅
+            console.log(`[DEBUG] 이미지 로드 시도:`, {
+                filename: currentImage.filename,
+                image_url: currentImage.image_url,
+                image_path: currentImage.image_path,
+                line_type: currentImage.line_type
+            });
+            
             container.innerHTML = `
-                <img src="${currentImage.image_url}" alt="${currentImage.filename}" class="quiz-image">
+                <img src="${currentImage.image_url}" 
+                     alt="${currentImage.filename}" 
+                     class="quiz-image"
+                     onerror="handleImageError(this, '${currentImage.image_url}', '${currentImage.filename}')"
+                     onload="handleImageLoad(this, '${currentImage.filename}')">
             `;
             
             // 상태 초기화
@@ -616,6 +886,12 @@
             document.getElementById('submitBtn').disabled = true;
             document.getElementById('nextBtn').style.display = 'none';
             document.getElementById('resultMessage').style.display = 'none';
+            
+            // 테스트 완료 여부 확인
+            const usedIndices = JSON.parse(sessionStorage.getItem('usedIndices') || '[]');
+            if (usedIndices.length >= images.length) {
+                document.getElementById('nextBtn').style.display = 'none';
+            }
             
             updateStats();
         }
@@ -657,8 +933,8 @@
             };
         });
 
-        // 정답 제출 (DB 저장 없이 로컬에서만 처리)
-        document.getElementById('submitBtn').onclick = () => {
+        // 정답 제출 (로컬 스토리지 + DB 저장)
+        document.getElementById('submitBtn').onclick = async () => {
             if (!selectedAnswer || images.length === 0) return;
             
             const currentImage = images[currentImageIndex];
@@ -683,25 +959,71 @@
             document.getElementById('submitBtn').disabled = true;
             document.getElementById('nextBtn').style.display = 'block';
             
-            // 통계 업데이트
-            totalAnswered++;
-            if (isCorrect) correctCount++;
-            updateStats();
+            // localStorage는 백업용으로만 저장
             saveStats();
             saveAnswer(currentImage.image_path, selectedAnswer, currentImage.line_type, isCorrect);
+            
+            // DB에 저장
+            try {
+                const userId = getUserId();
+                const response = await fetch('/api/line-quiz/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image_path: currentImage.image_path,
+                        image_url: currentImage.image_url,
+                        user_answer: selectedAnswer,
+                        correct_answer: currentImage.line_type,
+                        user_id: userId,
+                        user_name: userId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // DB 저장 후 전체 통계 다시 로드 (모든 사용자 누적)
+                if (response.ok && data.success) {
+                    await loadStats(); // DB에서 최신 통계 가져오기 (모든 사용자 누적)
+                } else {
+                    console.warn('DB 저장 실패:', data.error || '알 수 없는 오류');
+                    // DB 저장 실패 시에도 로컬 통계 업데이트 (임시)
+                    totalAnswered++;
+                    if (isCorrect) correctCount++;
+                    updateStats();
+                }
+            } catch (error) {
+                console.error('DB 저장 오류:', error);
+                // DB 저장 실패해도 로컬 스토리지는 저장되므로 계속 진행
+            }
         };
 
-        // 다음 문제 (랜덤)
+        // 다음 문제 (랜덤, 중복 없이)
         document.getElementById('nextBtn').onclick = () => {
             // 이미 본 이미지 제외하고 랜덤 선택
             const usedIndices = JSON.parse(sessionStorage.getItem('usedIndices') || '[]');
             
+            // 모든 이미지를 다 봤으면 (80번 완료) 테스트 종료
             if (usedIndices.length >= images.length) {
-                // 모든 이미지를 봤으면 초기화
-                sessionStorage.setItem('usedIndices', JSON.stringify([]));
-                usedIndices.length = 0;
+                // 테스트 완료 메시지 표시
+                document.getElementById('imageContainer').innerHTML = `
+                    <div style="text-align: center; padding: 40px;">
+                        <h2 style="color: #4CAF50; margin-bottom: 20px;">🎉 테스트 완료!</h2>
+                        <p style="font-size: 18px; margin-bottom: 10px;">모든 ${images.length}개의 문제를 완료하셨습니다.</p>
+                        <p style="font-size: 16px; color: #666; margin-bottom: 30px;">통계 페이지에서 결과를 확인하세요.</p>
+                        <button onclick="window.location.href='/line-quiz-stats'" style="padding: 12px 24px; font-size: 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            통계 보기
+                        </button>
+                    </div>
+                `;
+                document.getElementById('nextBtn').style.display = 'none';
+                document.getElementById('submitBtn').style.display = 'none';
+                document.querySelectorAll('.line-btn').forEach(btn => btn.style.display = 'none');
+                return;
             }
             
+            // 아직 안 본 이미지 중에서 랜덤 선택
             let nextIndex;
             do {
                 nextIndex = Math.floor(Math.random() * images.length);
@@ -716,8 +1038,11 @@
 
         // 통계 업데이트
         function updateStats() {
+            const usedIndices = JSON.parse(sessionStorage.getItem('usedIndices') || '[]');
+            const completedCount = usedIndices.length;
+            
             document.getElementById('totalCount').textContent = images.length;
-            document.getElementById('currentIndex').textContent = currentImageIndex + 1;
+            document.getElementById('currentIndex').textContent = `${completedCount}/${images.length}`;
             document.getElementById('correctCount').textContent = correctCount;
             const accuracy = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
             document.getElementById('accuracy').textContent = accuracy + '%';
@@ -729,10 +1054,14 @@
         }
 
         // 초기화
-        loadStats();
-        loadImages();
-        loadDefinitions();
+        (async () => {
+            await loadStats();
+            loadImages();
+            loadDefinitions();
+        })();
     </script>
 </body>
 
 </html>
+
+
